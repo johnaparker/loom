@@ -104,6 +104,9 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
             "Unregister sesh session '{}'",
             session_name.cyan()
         ));
+        if let Some(ref branch) = worktree.branch {
+            dry_run_action(&format!("Offer to delete branch '{}'", branch.green()));
+        }
         dry_run_footer();
         return Ok(());
     }
@@ -126,6 +129,22 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     // Unregister from sesh
     if sesh::unregister_worktree(&project_name, &worktree.name)? {
         println!("{} Unregistered sesh session", "✓".green());
+    }
+
+    // Offer to delete the branch
+    if let Some(ref branch) = worktree.branch {
+        print!("Delete branch '{}'? [y/N] ", branch.yellow());
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim().eq_ignore_ascii_case("y") {
+            manager.delete_branch(branch, force)?;
+            println!("{} Branch '{}' deleted", "✓".green(), branch);
+        } else {
+            println!("{} Branch '{}' kept", "→".blue(), branch);
+        }
     }
 
     Ok(())

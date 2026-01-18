@@ -1,5 +1,6 @@
 use anyhow::Result;
 use colored::Colorize;
+use std::io::{self, Write};
 
 use crate::config::Config;
 use crate::error::GwtError;
@@ -45,7 +46,7 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
             "Remove worktree at {}",
             worktree.path.display().to_string().dimmed()
         ));
-        dry_run_action(&format!("Delete branch '{}'", branch.green()));
+        dry_run_action(&format!("Offer to delete branch '{}'", branch.green()));
         dry_run_action(&format!("Unregister sesh session '{}'", session_name.cyan()));
         dry_run_footer();
         return Ok(());
@@ -67,10 +68,19 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     manager.remove_worktree(&worktree.path, force)?;
     println!("{} Worktree removed", "✓".green());
 
-    // Delete the branch
-    println!("{} Deleting branch '{}'", "→".blue(), branch);
-    manager.delete_branch(&branch, true)?;
-    println!("{} Branch deleted", "✓".green());
+    // Prompt to delete branch
+    print!("Delete branch '{}'? [y/N] ", branch.yellow());
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    if input.trim().eq_ignore_ascii_case("y") {
+        manager.delete_branch(&branch, true)?;
+        println!("{} Branch '{}' deleted", "✓".green(), branch);
+    } else {
+        println!("{} Branch '{}' kept", "→".blue(), branch);
+    }
 
     // Unregister from sesh
     if sesh::unregister_worktree(&project_name, name)? {
