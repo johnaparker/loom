@@ -6,6 +6,7 @@ mod new;
 mod remove;
 mod status;
 mod switch;
+mod sync;
 
 pub use completions::completions;
 pub use list::list;
@@ -15,3 +16,4 @@ pub use new::new;
 pub use remove::remove;
 pub use status::status;
 pub use switch::switch;
+pub use sync::sync;

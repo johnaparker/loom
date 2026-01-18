@@ -181,13 +181,19 @@ impl WorktreeManager {
     }
 
     /// Get the remote main branch ref (origin/main or origin/master)
-    fn remote_main_ref(&self) -> Option<String> {
+    pub fn remote_main_ref(&self) -> Option<String> {
         for name in &["origin/main", "origin/master"] {
             if self.repo.find_branch(name, BranchType::Remote).is_ok() {
                 return Some(name.to_string());
             }
         }
         None
+    }
+
+    /// Get the sync source ref (prefers origin/main, falls back to local main)
+    pub fn get_sync_source_ref(&self) -> Option<String> {
+        self.remote_main_ref()
+            .or_else(|| self.main_branch_name().ok())
     }
 
     /// Get the best start point for a new branch (prefers origin/main over local main)
@@ -668,5 +674,80 @@ impl WorktreeManager {
 
             Ok(Some(conflicted_files))
         }
+    }
+
+    /// Check if syncing a branch with main (merging main INTO branch) would cause conflicts
+    /// Returns None if merge is clean, Some(conflicted_files) if there are conflicts
+    pub fn check_sync_conflicts(&self, branch: &str) -> Result<Option<Vec<String>>> {
+        let source_ref = self
+            .get_sync_source_ref()
+            .ok_or_else(|| anyhow::anyhow!("No main branch found to sync from"))?;
+
+        // Use git merge-tree --write-tree to check for conflicts
+        // Note: order is reversed from merge - we're merging source_ref INTO branch
+        let output = Command::new("git")
+            .args(["merge-tree", "--write-tree", branch, &source_ref])
+            .current_dir(&self.repo_root)
+            .output()
+            .context("Failed to run git merge-tree")?;
+
+        if output.status.success() {
+            // Exit code 0 means clean merge possible
+            Ok(None)
+        } else {
+            // Exit code non-zero means conflicts
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut conflicted_files = Vec::new();
+
+            for line in stdout.lines() {
+                if line.starts_with("CONFLICT") {
+                    if let Some(idx) = line.find(" in ") {
+                        let filename = line[idx + 4..].trim();
+                        conflicted_files.push(filename.to_string());
+                    }
+                }
+            }
+
+            if conflicted_files.is_empty() {
+                for line in stdout.lines() {
+                    if line.contains("100644") || line.contains("100755") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 4 {
+                            let filename = parts.last().unwrap_or(&"unknown");
+                            if !conflicted_files.contains(&filename.to_string()) {
+                                conflicted_files.push(filename.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            if conflicted_files.is_empty() {
+                conflicted_files.push("(unable to determine specific files)".to_string());
+            }
+
+            Ok(Some(conflicted_files))
+        }
+    }
+
+    /// Sync a branch with main by merging the sync source ref INTO the branch
+    /// This updates the worktree's branch with the latest changes from main
+    pub fn sync_branch_with_main(&self, worktree_path: &Path, source_ref: &str) -> Result<()> {
+        let output = Command::new("git")
+            .args(["merge", source_ref, "-m", &format!("Sync with {}", source_ref)])
+            .current_dir(worktree_path)
+            .output()
+            .context("Failed to run git merge")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: format!("git merge {}", source_ref),
+                stderr,
+            }
+            .into());
+        }
+
+        Ok(())
     }
 }

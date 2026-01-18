@@ -26,6 +26,12 @@ pub enum GwtError {
 
     #[error("Config error: {message}")]
     ConfigError { message: String, path: String },
+
+    #[error("Not in a worktree")]
+    NotInWorktree,
+
+    #[error("Worktree has uncommitted changes")]
+    UncommittedChanges,
 }
 
 impl GwtError {
@@ -58,6 +64,12 @@ impl GwtError {
                 }
             }
             GwtError::ConfigError { path, .. } => Some(format!("Check config file at: {}", path)),
+            GwtError::NotInWorktree => {
+                Some("Run this command from within a worktree, or provide a worktree name".to_string())
+            }
+            GwtError::UncommittedChanges => {
+                Some("Commit or stash your changes before syncing".to_string())
+            }
         }
     }
 

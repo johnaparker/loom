@@ -68,6 +68,17 @@ pub enum Commands {
     #[command(visible_alias = "st")]
     Status,
 
+    /// Sync worktree with main (merge origin/main into current branch)
+    #[command(visible_alias = "sy")]
+    Sync {
+        /// Name of the worktree to sync (current worktree if omitted)
+        name: Option<String>,
+
+        /// Preview what would happen without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Switch to the main branch tmux session
     #[command(visible_alias = "ma")]
     Main,

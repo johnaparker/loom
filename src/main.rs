@@ -40,6 +40,9 @@ fn run() -> Result<()> {
         Commands::Status => {
             commands::status()?;
         }
+        Commands::Sync { name, dry_run } => {
+            commands::sync(name.as_deref(), dry_run)?;
+        }
         Commands::Main => {
             commands::main_cmd()?;
         }

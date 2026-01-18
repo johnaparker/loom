@@ -147,6 +147,76 @@ fn run_dashboard_loop(
                 let worktrees = manager.list_worktrees_with_stats()?;
                 dashboard.update_worktrees(worktrees);
             }
+            DashboardResult::Sync { worktree } => {
+                let branch = worktree.info.branch.as_deref().unwrap_or(&worktree.info.name);
+
+                // Check if already up to date
+                if worktree.commits_behind == Some(0) {
+                    dashboard.show_result(
+                        true,
+                        format!("'{}' already synced with main", worktree.info.name),
+                    );
+                    let worktrees = manager.list_worktrees_with_stats()?;
+                    dashboard.update_worktrees(worktrees);
+                    continue;
+                }
+
+                // Check for uncommitted changes first
+                if worktree.has_uncommitted_changes() {
+                    dashboard.show_result(
+                        false,
+                        "Cannot sync: uncommitted changes present".to_string(),
+                    );
+                    let worktrees = manager.list_worktrees_with_stats()?;
+                    dashboard.update_worktrees(worktrees);
+                    continue;
+                }
+
+                // Check for conflicts first
+                match manager.check_sync_conflicts(branch) {
+                    Ok(Some(conflicts)) => {
+                        // Has conflicts - show error and refresh
+                        dashboard.show_result(
+                            false,
+                            format!(
+                                "Cannot sync: {} file(s) have conflicts",
+                                conflicts.len()
+                            ),
+                        );
+                        let worktrees = manager.list_worktrees_with_stats()?;
+                        dashboard.update_worktrees(worktrees);
+                        continue;
+                    }
+                    Ok(None) => {
+                        // No conflicts, proceed with sync
+                    }
+                    Err(e) => {
+                        // Error checking conflicts, warn but allow sync attempt
+                        eprintln!("Warning: Could not check for conflicts: {}", e);
+                    }
+                }
+
+                let result = execute_sync(
+                    &manager,
+                    &worktree.info.path,
+                );
+
+                match result {
+                    Ok(()) => {
+                        dashboard.show_result(
+                            true,
+                            format!("Synced '{}' with main", worktree.info.name),
+                        );
+                    }
+                    Err(e) => {
+                        dashboard.show_result(false, format!("Failed to sync: {}", e));
+                    }
+                }
+
+                // Refresh worktrees
+                let worktrees = manager.list_worktrees_with_stats()?;
+                dashboard.update_worktrees(worktrees);
+            }
             DashboardResult::CreateNew { branch, category } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,
@@ -238,6 +308,25 @@ fn execute_merge(
     if delete_branch {
         manager.delete_branch(branch, true)?;
     }
+
+    Ok(())
+}
+
+/// Execute sync with main
+fn execute_sync(
+    manager: &WorktreeManager,
+    path: &std::path::Path,
+) -> Result<()> {
+    // Fetch from origin first
+    let _ = manager.fetch_origin(); // Ignore errors - we can still try sync
+
+    // Get sync source ref
+    let source_ref = manager
+        .get_sync_source_ref()
+        .ok_or_else(|| anyhow::anyhow!("No main branch found to sync from"))?;
+
+    // Perform sync
+    manager.sync_branch_with_main(path, &source_ref)?;
 
     Ok(())
 }

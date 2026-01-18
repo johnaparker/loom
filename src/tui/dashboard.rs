@@ -35,6 +35,8 @@ pub enum DashboardResult {
         worktree: WorktreeStats,
         delete_branch: bool,
     },
+    /// Sync a worktree with main
+    Sync { worktree: WorktreeStats },
     /// Create a new worktree
     CreateNew { branch: String, category: String },
     /// Refresh the dashboard (after an action)
@@ -118,8 +120,23 @@ impl Dashboard {
 
     /// Update worktrees (for refresh)
     pub fn update_worktrees(&mut self, worktrees: Vec<WorktreeStats>) {
+        // Remember currently selected worktree name
+        let selected_name = self.get_selected_worktree().map(|w| w.info.name.clone());
+
         self.worktrees = worktrees;
         self.filter_worktrees();
+
+        // Try to restore selection to the previously selected worktree
+        if let Some(name) = selected_name {
+            if let Some(pos) = self
+                .filtered_indices
+                .iter()
+                .position(|&i| self.worktrees[i].info.name == name)
+            {
+                self.selected = pos;
+                self.list_state.select(Some(pos));
+            }
+        }
 
         // Show pending error modal if any
         if let Some((success, message)) = self.pending_result.take() {
@@ -363,6 +380,15 @@ impl Dashboard {
                             self.main_branch.clone(),
                             None,
                         ));
+                    }
+                }
+                None
+            }
+            KeyCode::Char('s') => {
+                // Sync - for all worktrees with branches (no confirmation needed)
+                if let Some(worktree) = self.get_selected_worktree() {
+                    if worktree.info.branch.is_some() {
+                        return Some(DashboardResult::Sync { worktree });
                     }
                 }
                 None
@@ -822,6 +848,12 @@ impl Dashboard {
                         Span::styled(": merge  ", Style::default().fg(Color::DarkGray)),
                     ]);
                 }
+
+                // Show s: sync for all worktrees (including main)
+                spans.extend(vec![
+                    Span::styled("s", Style::default().fg(Color::Cyan)),
+                    Span::styled(": sync  ", Style::default().fg(Color::DarkGray)),
+                ]);
 
                 spans.extend(vec![
                     Span::styled("q", Style::default().fg(Color::Cyan)),
