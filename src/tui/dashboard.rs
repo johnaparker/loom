@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use nucleo::{Config as NucleoConfig, Matcher, Utf32Str};
 use ratatui::{
@@ -13,8 +13,8 @@ use std::io::{self, stdout};
 
 use crate::git::WorktreeStats;
 use crate::tui::modals::{
-    render_modal_overlay, ActionResultModal, DeleteConfirmModal, MergeConfirmModal,
-    Modal, ModalAction, NewWorktreeModal,
+    ActionResultModal, DeleteConfirmModal, MergeConfirmModal, Modal, ModalAction, NewWorktreeModal,
+    render_modal_overlay,
 };
 
 /// Result of the dashboard interaction
@@ -137,10 +137,8 @@ impl Dashboard {
 
         if let DashboardMode::ConfirmMerge(ref mut modal) = self.mode {
             if let Some(wt) = worktree {
-                let conflict_info = conflicts.map(|files| {
-                    crate::tui::modals::MergeConflictInfo {
-                        conflicted_files: files,
-                    }
+                let conflict_info = conflicts.map(|files| crate::tui::modals::MergeConflictInfo {
+                    conflicted_files: files,
                 });
                 *modal = MergeConfirmModal::new(wt, main_branch, conflict_info);
             }
@@ -218,28 +216,36 @@ impl Dashboard {
             DashboardMode::Normal => self.handle_normal_key(code),
             DashboardMode::Search => self.handle_search_key(code),
             DashboardMode::ConfirmDelete(modal) => {
-                if let Some(action) = modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers)) {
+                if let Some(action) =
+                    modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers))
+                {
                     self.handle_modal_action(action)
                 } else {
                     None
                 }
             }
             DashboardMode::ConfirmMerge(modal) => {
-                if let Some(action) = modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers)) {
+                if let Some(action) =
+                    modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers))
+                {
                     self.handle_modal_action(action)
                 } else {
                     None
                 }
             }
             DashboardMode::NewWorktree(modal) => {
-                if let Some(action) = modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers)) {
+                if let Some(action) =
+                    modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers))
+                {
                     self.handle_modal_action(action)
                 } else {
                     None
                 }
             }
             DashboardMode::ActionResult(modal) => {
-                if let Some(action) = modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers)) {
+                if let Some(action) =
+                    modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers))
+                {
                     self.handle_modal_action(action)
                 } else {
                     None
@@ -254,7 +260,10 @@ impl Dashboard {
                 self.mode = DashboardMode::Normal;
                 None
             }
-            ModalAction::Delete { delete_branch, force } => {
+            ModalAction::Delete {
+                delete_branch,
+                force,
+            } => {
                 if let Some(worktree) = self.get_selected_worktree() {
                     self.mode = DashboardMode::Normal;
                     Some(DashboardResult::Delete {
@@ -614,9 +623,12 @@ impl Dashboard {
             .info
             .branch
             .as_ref()
-            .map(|b| format!(" [{}]", b))
+            .map(|b| format!("   {}", b))
             .unwrap_or_else(|| " (detached)".to_string());
-        line1_spans.push(Span::styled(branch_text.clone(), Style::default().fg(Color::Cyan)));
+        line1_spans.push(Span::styled(
+            branch_text.clone(),
+            Style::default().fg(Color::Cyan),
+        ));
 
         // Category badge - right aligned (use "main" for main worktree)
         let category = if wt.info.is_main {
@@ -638,7 +650,10 @@ impl Dashboard {
             } else {
                 line1_spans.push(Span::raw(" "));
             }
-            line1_spans.push(Span::styled(cat_text, Style::default().fg(cat_color).bold()));
+            line1_spans.push(Span::styled(
+                cat_text,
+                Style::default().fg(cat_color).bold(),
+            ));
         }
 
         lines.push(Line::from(line1_spans));
@@ -716,6 +731,16 @@ impl Dashboard {
             line3_spans.push(Span::styled("  Clean", Style::default().fg(Color::Green)));
         }
 
+        // Commits behind main (purple, after diff stats)
+        if let Some(behind) = wt.commits_behind
+            && behind > 0
+        {
+            line3_spans.push(Span::styled(
+                format!("    \u{2193}{}", behind),
+                Style::default().fg(Color::Magenta),
+            ));
+        }
+
         if !line3_spans.is_empty() {
             lines.push(Line::from(line3_spans));
         }
@@ -752,11 +777,8 @@ impl Dashboard {
             })
             .collect();
 
-        let list = List::new(items).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Commits "),
-        );
+        let list =
+            List::new(items).block(Block::default().borders(Borders::ALL).title(" Commits "));
 
         f.render_widget(list, area);
     }
@@ -768,10 +790,7 @@ impl Dashboard {
                 let is_main = selected.as_ref().map(|w| w.info.is_main).unwrap_or(true);
 
                 let mut spans = vec![
-                    Span::styled(
-                        " \u{2191}/\u{2193}",
-                        Style::default().fg(Color::Cyan),
-                    ),
+                    Span::styled(" \u{2191}/\u{2193}", Style::default().fg(Color::Cyan)),
                     Span::styled(": nav  ", Style::default().fg(Color::DarkGray)),
                     Span::styled("/", Style::default().fg(Color::Cyan)),
                     Span::styled(": search  ", Style::default().fg(Color::DarkGray)),
@@ -798,19 +817,14 @@ impl Dashboard {
 
                 Line::from(spans)
             }
-            DashboardMode::Search => {
-                Line::from(vec![
-                    Span::styled(
-                        " \u{2191}/\u{2193}",
-                        Style::default().fg(Color::Cyan),
-                    ),
-                    Span::styled(": navigate   ", Style::default().fg(Color::DarkGray)),
-                    Span::styled("Enter", Style::default().fg(Color::Cyan)),
-                    Span::styled(": select   ", Style::default().fg(Color::DarkGray)),
-                    Span::styled("Esc", Style::default().fg(Color::Cyan)),
-                    Span::styled(": cancel", Style::default().fg(Color::DarkGray)),
-                ])
-            }
+            DashboardMode::Search => Line::from(vec![
+                Span::styled(" \u{2191}/\u{2193}", Style::default().fg(Color::Cyan)),
+                Span::styled(": navigate   ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Enter", Style::default().fg(Color::Cyan)),
+                Span::styled(": select   ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Esc", Style::default().fg(Color::Cyan)),
+                Span::styled(": cancel", Style::default().fg(Color::DarkGray)),
+            ]),
             _ => Line::from(""),
         };
 

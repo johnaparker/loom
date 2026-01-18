@@ -162,11 +162,22 @@ impl Picker {
             .iter()
             .map(|&i| {
                 let (name, details, _) = &self.items[i];
-                let line = Line::from(vec![
+
+                // Split details to style lag indicator (↓N) differently
+                let mut spans = vec![
                     Span::styled(name, Style::default().fg(Color::Green)),
                     Span::raw(" "),
-                    Span::styled(details, Style::default().fg(Color::Cyan)),
-                ]);
+                ];
+
+                if let Some(lag_start) = details.find(" ↓") {
+                    let (before, lag) = details.split_at(lag_start);
+                    spans.push(Span::styled(before, Style::default().fg(Color::Cyan)));
+                    spans.push(Span::styled(lag, Style::default().fg(Color::Yellow)));
+                } else {
+                    spans.push(Span::styled(details, Style::default().fg(Color::Cyan)));
+                }
+
+                let line = Line::from(spans);
                 ListItem::new(line)
             })
             .collect();

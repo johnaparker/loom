@@ -13,7 +13,25 @@ pub fn switch(name: Option<&str>) -> Result<()> {
     let config = Config::load(Some(manager.repo_root()))?;
     let project_name = config.project_name(&manager.project_name()?);
 
+    // Fetch from origin to ensure we have accurate lag information
+    print!("{} Fetching from origin...", "→".blue());
+    std::io::Write::flush(&mut std::io::stdout())?;
+    let fetch_result = manager.fetch_origin();
+    // Clear the fetching message
+    print!("\r{}\r", " ".repeat(30));
+    std::io::Write::flush(&mut std::io::stdout())?;
+
+    if fetch_result.is_err() {
+        println!(
+            "{} Could not fetch from origin (working offline)",
+            "!".yellow()
+        );
+    }
+
     let worktrees = manager.list_worktrees()?;
+
+    // Pre-calculate commits behind for main worktree
+    let main_behind = manager.main_behind_origin();
 
     if worktrees.is_empty() {
         println!("No worktrees found.");
@@ -35,16 +53,31 @@ pub fn switch(name: Option<&str>) -> Result<()> {
                 wt.name.clone()
             };
 
+            // Calculate commits behind for lag indicator
+            let commits_behind = if wt.is_main {
+                main_behind
+            } else if let Some(ref branch) = wt.branch {
+                manager.commits_behind_remote_main(&wt.path, branch)
+            } else {
+                None
+            };
+
+            let lag_indicator = match commits_behind {
+                Some(n) if n > 0 => format!(" ↓{}", n),
+                _ => String::new(),
+            };
+
             let details = format!(
-                "{} {}",
+                "{}{}{}",
                 wt.branch
                     .as_ref()
                     .map(|b| format!("[{}]", b))
                     .unwrap_or_default(),
                 wt.category
                     .as_ref()
-                    .map(|c| format!("({})", c))
-                    .unwrap_or_default()
+                    .map(|c| format!(" ({})", c))
+                    .unwrap_or_default(),
+                lag_indicator
             );
 
             let path = wt.path.to_string_lossy().to_string();

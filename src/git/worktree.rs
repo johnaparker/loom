@@ -29,6 +29,7 @@ pub struct CommitInfo {
 pub struct WorktreeStats {
     pub info: WorktreeInfo,
     pub commits_ahead: Option<u32>,
+    pub commits_behind: Option<u32>,
     pub diff_added: Option<u32>,
     pub diff_removed: Option<u32>,
     pub uncommitted_added: u32,
@@ -369,6 +370,60 @@ impl WorktreeManager {
         }
     }
 
+    /// Get number of commits a branch is behind origin/main (or local main if no remote)
+    /// For non-main branches: git rev-list --count {branch}..origin/main
+    pub fn commits_behind_remote_main(&self, path: &Path, branch: &str) -> Option<u32> {
+        // Prefer remote main, fall back to local main
+        let target = self
+            .remote_main_ref()
+            .or_else(|| self.main_branch_name().ok())?;
+
+        // Don't compare a branch to itself
+        if branch == target {
+            return Some(0);
+        }
+
+        let output = Command::new("git")
+            .args([
+                "rev-list",
+                "--count",
+                &format!("{}..{}", branch, target),
+            ])
+            .current_dir(path)
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.trim().parse().ok()
+        } else {
+            None
+        }
+    }
+
+    /// Get number of commits local main is behind origin/main
+    pub fn main_behind_origin(&self) -> Option<u32> {
+        let main_branch = self.main_branch_name().ok()?;
+        let remote_main = self.remote_main_ref()?;
+
+        let output = Command::new("git")
+            .args([
+                "rev-list",
+                "--count",
+                &format!("{}..{}", main_branch, remote_main),
+            ])
+            .current_dir(&self.repo_root)
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.trim().parse().ok()
+        } else {
+            None
+        }
+    }
+
     /// Get diff stats vs main (lines added, lines removed)
     fn diff_stats_vs_main(&self, path: &Path, branch: &str) -> Option<(u32, u32)> {
         let main_branch = self.main_branch_name().ok()?;
@@ -507,6 +562,12 @@ impl WorktreeManager {
             None
         };
 
+        let commits_behind = if !branch.is_empty() {
+            self.commits_behind_remote_main(&info.path, branch)
+        } else {
+            None
+        };
+
         let (diff_added, diff_removed) = if !branch.is_empty() {
             self.diff_stats_vs_main(&info.path, branch)
                 .map(|(a, r)| (Some(a), Some(r)))
@@ -522,6 +583,7 @@ impl WorktreeManager {
         WorktreeStats {
             info,
             commits_ahead,
+            commits_behind,
             diff_added,
             diff_removed,
             uncommitted_added,
