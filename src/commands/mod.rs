@@ -1,3 +1,4 @@
+mod completions;
 mod list;
 mod main_cmd;
 mod merge;
@@ -6,6 +7,7 @@ mod remove;
 mod status;
 mod switch;
 
+pub use completions::completions;
 pub use list::list;
 pub use main_cmd::main_cmd;
 pub use merge::merge;

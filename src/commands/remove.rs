@@ -4,12 +4,14 @@ use nucleo::{Config as NucleoConfig, Matcher, Utf32Str};
 use std::io::{self, Write};
 
 use crate::config::Config;
+use crate::error::GwtError;
 use crate::git::{WorktreeInfo, WorktreeManager};
+use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
 use crate::sesh;
 use crate::tmux;
 use crate::tui::Picker;
 
-pub fn remove(name: Option<&str>, force: bool) -> Result<()> {
+pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let manager = WorktreeManager::open(&current_dir)?;
     let config = Config::load(Some(manager.repo_root()))?;
@@ -27,28 +29,36 @@ pub fn remove(name: Option<&str>, force: bool) -> Result<()> {
 
     // Determine which worktree to remove
     let worktree = if let Some(query) = name {
-        // Fuzzy match and confirm
+        // Fuzzy match
         let matched = fuzzy_match_worktree(&removable, query)?;
 
-        // Confirm with user
-        print!(
-            "Remove worktree '{}' at {}? [y/N] ",
-            matched.name.yellow(),
-            matched.path.display().to_string().dimmed()
-        );
-        io::stdout().flush()?;
+        if !dry_run {
+            // Confirm with user (skip confirmation in dry run mode)
+            print!(
+                "Remove worktree '{}' at {}? [y/N] ",
+                matched.name.yellow(),
+                matched.path.display().to_string().dimmed()
+            );
+            io::stdout().flush()?;
 
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
 
-        if !input.trim().eq_ignore_ascii_case("y") {
-            println!("Cancelled.");
-            return Ok(());
+            if !input.trim().eq_ignore_ascii_case("y") {
+                println!("Cancelled.");
+                return Ok(());
+            }
         }
 
         matched
     } else {
-        // Show picker
+        // Show picker (skip in dry run mode - require name for dry run)
+        if dry_run {
+            return Err(anyhow::anyhow!(
+                "Dry run requires a worktree name. Usage: gwt remove <name> --dry-run"
+            ));
+        }
+
         let items: Vec<(String, String, String)> = removable
             .iter()
             .map(|wt| {
@@ -77,6 +87,27 @@ pub fn remove(name: Option<&str>, force: bool) -> Result<()> {
         }
     };
 
+    let session_name = sesh::session_name(&project_name, &worktree.name);
+
+    // Dry run mode - preview actions
+    if dry_run {
+        dry_run_header();
+        dry_run_action(&format!(
+            "Remove worktree '{}' at {}",
+            worktree.name.yellow(),
+            worktree.path.display().to_string().dimmed()
+        ));
+        if tmux::session_exists(&session_name) {
+            dry_run_action(&format!("Kill tmux session '{}'", session_name.cyan()));
+        }
+        dry_run_action(&format!(
+            "Unregister sesh session '{}'",
+            session_name.cyan()
+        ));
+        dry_run_footer();
+        return Ok(());
+    }
+
     println!(
         "{} Removing worktree '{}'",
         "→".blue(),
@@ -88,7 +119,6 @@ pub fn remove(name: Option<&str>, force: bool) -> Result<()> {
     println!("{} Worktree removed", "✓".green());
 
     // Kill tmux session if it exists
-    let session_name = sesh::session_name(&project_name, &worktree.name);
     if tmux::kill_session(&session_name) {
         println!("{} Killed tmux session", "✓".green());
     }
@@ -121,7 +151,10 @@ fn fuzzy_match_worktree(worktrees: &[WorktreeInfo], query: &str) -> Result<Workt
         .collect();
 
     if scored.is_empty() {
-        return Err(anyhow::anyhow!("No worktree matching '{}'", query));
+        return Err(GwtError::NoMatch {
+            query: query.to_string(),
+        }
+        .into());
     }
 
     scored.sort_by(|a, b| b.1.cmp(&a.1));

@@ -4,10 +4,16 @@ use colored::Colorize;
 
 use gwt::cli::{Cli, Commands};
 use gwt::commands;
+use gwt::error::GwtError;
 
 fn main() {
     if let Err(err) = run() {
-        eprintln!("{} {}", "Error:".red().bold(), err);
+        // Check if the error is a GwtError for enhanced display
+        if let Some(gwt_err) = err.downcast_ref::<GwtError>() {
+            eprintln!("{}", gwt_err.display_with_suggestion());
+        } else {
+            eprintln!("{} {}", "Error:".red().bold(), err);
+        }
         std::process::exit(1);
     }
 }
@@ -25,17 +31,20 @@ fn run() -> Result<()> {
         Commands::Switch { name } => {
             commands::switch(name.as_deref())?;
         }
-        Commands::Merge { name, force } => {
-            commands::merge(&name, force)?;
+        Commands::Merge { name, force, dry_run } => {
+            commands::merge(&name, force, dry_run)?;
         }
-        Commands::Remove { name, force } => {
-            commands::remove(name.as_deref(), force)?;
+        Commands::Remove { name, force, dry_run } => {
+            commands::remove(name.as_deref(), force, dry_run)?;
         }
         Commands::Status => {
             commands::status()?;
         }
         Commands::Main => {
             commands::main_cmd()?;
+        }
+        Commands::Completions { shell } => {
+            commands::completions(shell)?;
         }
     }
 

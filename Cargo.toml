@@ -1,12 +1,13 @@
 [package]
 name = "gwt"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Git worktree manager with tmux/sesh integration"
 
 [dependencies]
 # CLI
 clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
 
 # Git operations
 git2 = "0.20"

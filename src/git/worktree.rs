@@ -3,6 +3,8 @@ use git2::{BranchType, Repository};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::error::GwtError;
+
 /// Information about a git worktree
 #[derive(Debug, Clone)]
 pub struct WorktreeInfo {
@@ -22,10 +24,10 @@ pub struct WorktreeManager {
 impl WorktreeManager {
     /// Open a repository and create a worktree manager
     pub fn open(path: &Path) -> Result<Self> {
-        let repo = Repository::discover(path).context("Failed to find git repository")?;
+        let repo = Repository::discover(path).map_err(|_| GwtError::NotGitRepo)?;
         let repo_root = repo
             .workdir()
-            .ok_or_else(|| anyhow::anyhow!("Repository has no working directory"))?
+            .ok_or(GwtError::NotGitRepo)?
             .to_path_buf();
         Ok(Self { repo, repo_root })
     }
@@ -58,7 +60,7 @@ impl WorktreeManager {
                 return Ok(name.strip_prefix("origin/").unwrap().to_string());
             }
         }
-        Err(anyhow::anyhow!("Could not find main or master branch"))
+        Err(GwtError::NoMainBranch.into())
     }
 
     /// List all worktrees for this repository
@@ -158,8 +160,12 @@ impl WorktreeManager {
             .context("Failed to run git worktree add")?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Failed to create worktree: {}", stderr));
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: "git worktree add".to_string(),
+                stderr,
+            }
+            .into());
         }
 
         Ok(())
@@ -180,8 +186,12 @@ impl WorktreeManager {
             .context("Failed to run git worktree remove")?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Failed to remove worktree: {}", stderr));
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: "git worktree remove".to_string(),
+                stderr,
+            }
+            .into());
         }
 
         Ok(())
@@ -205,20 +215,34 @@ impl WorktreeManager {
             .context("Failed to checkout main branch")?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Failed to checkout main: {}", stderr));
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: format!("git checkout {}", main_branch),
+                stderr,
+            }
+            .into());
         }
 
         // Merge the branch
         let output = Command::new("git")
-            .args(["merge", "--no-ff", branch, "-m", &format!("Merge branch '{}'", branch)])
+            .args([
+                "merge",
+                "--no-ff",
+                branch,
+                "-m",
+                &format!("Merge branch '{}'", branch),
+            ])
             .current_dir(&self.repo_root)
             .output()
             .context("Failed to merge branch")?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Failed to merge: {}", stderr));
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: format!("git merge {}", branch),
+                stderr,
+            }
+            .into());
         }
 
         Ok(())
@@ -234,8 +258,12 @@ impl WorktreeManager {
             .context("Failed to delete branch")?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Failed to delete branch: {}", stderr));
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: format!("git branch {} {}", flag, branch),
+                stderr,
+            }
+            .into());
         }
 
         Ok(())

@@ -2,10 +2,12 @@ use anyhow::Result;
 use colored::Colorize;
 
 use crate::config::Config;
+use crate::error::GwtError;
 use crate::git::WorktreeManager;
+use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
 use crate::sesh;
 
-pub fn merge(name: &str, force: bool) -> Result<()> {
+pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let manager = WorktreeManager::open(&current_dir)?;
     let config = Config::load(Some(manager.repo_root()))?;
@@ -14,19 +16,40 @@ pub fn merge(name: &str, force: bool) -> Result<()> {
     // Find the worktree
     let worktree = manager
         .get_worktree(name)?
-        .ok_or_else(|| anyhow::anyhow!("Worktree '{}' not found", name))?;
+        .ok_or_else(|| GwtError::WorktreeNotFound {
+            name: name.to_string(),
+        })?;
 
     if worktree.is_main {
-        return Err(anyhow::anyhow!("Cannot merge the main worktree"));
+        return Err(GwtError::CannotMergeMain.into());
     }
 
     let branch = worktree
         .branch
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Worktree has no associated branch"))?
+        .ok_or(GwtError::NoBranch)?
         .clone();
 
     let main_branch = manager.main_branch_name()?;
+    let session_name = sesh::session_name(&project_name, name);
+
+    // Dry run mode - preview actions
+    if dry_run {
+        dry_run_header();
+        dry_run_action(&format!(
+            "Merge branch '{}' into '{}'",
+            branch.green(),
+            main_branch.yellow()
+        ));
+        dry_run_action(&format!(
+            "Remove worktree at {}",
+            worktree.path.display().to_string().dimmed()
+        ));
+        dry_run_action(&format!("Delete branch '{}'", branch.green()));
+        dry_run_action(&format!("Unregister sesh session '{}'", session_name.cyan()));
+        dry_run_footer();
+        return Ok(());
+    }
 
     println!(
         "{} Merging '{}' into '{}'",

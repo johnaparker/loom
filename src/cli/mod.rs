@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 
 #[derive(Parser)]
 #[command(name = "gwt")]
@@ -42,6 +43,10 @@ pub enum Commands {
         /// Force removal even if there are uncommitted changes
         #[arg(short, long)]
         force: bool,
+
+        /// Preview what would happen without making changes
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Remove a worktree
@@ -53,6 +58,10 @@ pub enum Commands {
         /// Force removal even if there are uncommitted changes
         #[arg(short, long)]
         force: bool,
+
+        /// Preview what would happen without making changes
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Show status of all worktrees
@@ -62,6 +71,13 @@ pub enum Commands {
     /// Switch to the main branch tmux session
     #[command(visible_alias = "ma")]
     Main,
+
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum, Debug)]
