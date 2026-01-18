@@ -15,6 +15,28 @@ pub struct WorktreeInfo {
     pub category: Option<String>,
 }
 
+/// Information about a single commit
+#[derive(Debug, Clone)]
+pub struct CommitInfo {
+    pub hash_short: String,
+    pub message: String,
+    pub author: String,
+    pub relative_time: String,
+}
+
+/// Statistics about a worktree for dashboard display
+#[derive(Debug, Clone)]
+pub struct WorktreeStats {
+    pub info: WorktreeInfo,
+    pub commits_ahead: Option<u32>,
+    pub diff_added: Option<u32>,
+    pub diff_removed: Option<u32>,
+    pub uncommitted_added: u32,
+    pub uncommitted_removed: u32,
+    pub age_days: Option<u32>,
+    pub recent_commits: Vec<CommitInfo>,
+}
+
 /// Manager for git worktree operations
 pub struct WorktreeManager {
     repo: Repository,
@@ -277,5 +299,197 @@ impl WorktreeManager {
         } else {
             Ok(None)
         }
+    }
+
+    /// Get number of commits ahead of main branch
+    fn commits_ahead_of_main(&self, path: &Path, branch: &str) -> Option<u32> {
+        let main_branch = self.main_branch_name().ok()?;
+        if branch == main_branch {
+            return Some(0);
+        }
+
+        let output = Command::new("git")
+            .args(["rev-list", "--count", &format!("{}..{}", main_branch, branch)])
+            .current_dir(path)
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.trim().parse().ok()
+        } else {
+            None
+        }
+    }
+
+    /// Get diff stats vs main (lines added, lines removed)
+    fn diff_stats_vs_main(&self, path: &Path, branch: &str) -> Option<(u32, u32)> {
+        let main_branch = self.main_branch_name().ok()?;
+        if branch == main_branch {
+            return Some((0, 0));
+        }
+
+        let output = Command::new("git")
+            .args(["diff", "--shortstat", &format!("{}...{}", main_branch, branch)])
+            .current_dir(path)
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            Self::parse_shortstat(&stdout)
+        } else {
+            None
+        }
+    }
+
+    /// Parse git diff --shortstat output to extract insertions and deletions
+    fn parse_shortstat(output: &str) -> Option<(u32, u32)> {
+        let output = output.trim();
+        if output.is_empty() {
+            return Some((0, 0));
+        }
+
+        let mut added = 0u32;
+        let mut removed = 0u32;
+
+        // Parse strings like "5 files changed, 100 insertions(+), 20 deletions(-)"
+        for part in output.split(',') {
+            let part = part.trim();
+            if part.contains("insertion")
+                && let Some(num) = part.split_whitespace().next()
+            {
+                added = num.parse().unwrap_or(0);
+            } else if part.contains("deletion")
+                && let Some(num) = part.split_whitespace().next()
+            {
+                removed = num.parse().unwrap_or(0);
+            }
+        }
+
+        Some((added, removed))
+    }
+
+    /// Get uncommitted changes stats (lines added, lines removed)
+    fn uncommitted_stats(&self, path: &Path) -> (u32, u32) {
+        let mut total_added = 0u32;
+        let mut total_removed = 0u32;
+
+        // Unstaged changes
+        if let Ok(output) = Command::new("git")
+            .args(["diff", "--shortstat"])
+            .current_dir(path)
+            .output()
+            && output.status.success()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some((added, removed)) = Self::parse_shortstat(&stdout) {
+                total_added += added;
+                total_removed += removed;
+            }
+        }
+
+        // Staged changes
+        if let Ok(output) = Command::new("git")
+            .args(["diff", "--cached", "--shortstat"])
+            .current_dir(path)
+            .output()
+            && output.status.success()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some((added, removed)) = Self::parse_shortstat(&stdout) {
+                total_added += added;
+                total_removed += removed;
+            }
+        }
+
+        (total_added, total_removed)
+    }
+
+    /// Get worktree age in days
+    fn worktree_age_days(&self, path: &Path) -> Option<u32> {
+        let metadata = std::fs::metadata(path).ok()?;
+        let created = metadata.created().ok()?;
+        let duration = std::time::SystemTime::now().duration_since(created).ok()?;
+        Some((duration.as_secs() / 86400) as u32)
+    }
+
+    /// Get recent commits for a worktree
+    fn recent_commits(&self, path: &Path, limit: usize) -> Vec<CommitInfo> {
+        let output = Command::new("git")
+            .args([
+                "log",
+                "--format=%h|%s|%an|%cr",
+                "-n",
+                &limit.to_string(),
+            ])
+            .current_dir(path)
+            .output();
+
+        match output {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                stdout
+                    .lines()
+                    .filter_map(|line| {
+                        let parts: Vec<&str> = line.splitn(4, '|').collect();
+                        if parts.len() == 4 {
+                            Some(CommitInfo {
+                                hash_short: parts[0].to_string(),
+                                message: parts[1].to_string(),
+                                author: parts[2].to_string(),
+                                relative_time: parts[3].to_string(),
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Get stats for a single worktree
+    fn get_worktree_stats(&self, info: WorktreeInfo) -> WorktreeStats {
+        let branch = info.branch.as_deref().unwrap_or("");
+
+        let commits_ahead = if !branch.is_empty() {
+            self.commits_ahead_of_main(&info.path, branch)
+        } else {
+            None
+        };
+
+        let (diff_added, diff_removed) = if !branch.is_empty() {
+            self.diff_stats_vs_main(&info.path, branch)
+                .map(|(a, r)| (Some(a), Some(r)))
+                .unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
+
+        let (uncommitted_added, uncommitted_removed) = self.uncommitted_stats(&info.path);
+        let age_days = self.worktree_age_days(&info.path);
+        let recent_commits = self.recent_commits(&info.path, 10);
+
+        WorktreeStats {
+            info,
+            commits_ahead,
+            diff_added,
+            diff_removed,
+            uncommitted_added,
+            uncommitted_removed,
+            age_days,
+            recent_commits,
+        }
+    }
+
+    /// List all worktrees with their stats
+    pub fn list_worktrees_with_stats(&self) -> Result<Vec<WorktreeStats>> {
+        let worktrees = self.list_worktrees()?;
+        Ok(worktrees
+            .into_iter()
+            .map(|info| self.get_worktree_stats(info))
+            .collect())
     }
 }

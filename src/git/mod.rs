@@ -1,3 +1,3 @@
 mod worktree;
 
-pub use worktree::{WorktreeInfo, WorktreeManager};
+pub use worktree::{CommitInfo, WorktreeInfo, WorktreeManager, WorktreeStats};
