@@ -87,16 +87,65 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
         }
     };
 
+    // Check for uncommitted changes
+    let (uncommitted_added, uncommitted_removed) = manager.uncommitted_stats(&worktree.path);
+    let has_uncommitted = uncommitted_added > 0 || uncommitted_removed > 0;
+    let needs_force = has_uncommitted && !force;
+
+    // If dirty and not already forced, require stricter confirmation
+    if needs_force && !dry_run {
+        println!();
+        println!(
+            "{} This worktree has uncommitted changes: {} {} lines",
+            "⚠ Warning:".yellow().bold(),
+            format!("+{}", uncommitted_added).green(),
+            format!("-{}", uncommitted_removed).red()
+        );
+        println!(
+            "{}",
+            "These changes will be permanently lost!".yellow()
+        );
+        println!();
+        print!(
+            "Type '{}' to confirm deletion: ",
+            "yes".red().bold()
+        );
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim() != "yes" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
     let session_name = sesh::session_name(&project_name, &worktree.name);
+    let use_force = force || has_uncommitted;
 
     // Dry run mode - preview actions
     if dry_run {
         dry_run_header();
-        dry_run_action(&format!(
-            "Remove worktree '{}' at {}",
-            worktree.name.yellow(),
-            worktree.path.display().to_string().dimmed()
-        ));
+        if has_uncommitted {
+            dry_run_action(&format!(
+                "{} Worktree has uncommitted changes: {} {} lines",
+                "⚠".yellow(),
+                format!("+{}", uncommitted_added).green(),
+                format!("-{}", uncommitted_removed).red()
+            ));
+            dry_run_action(&format!(
+                "Force remove worktree '{}' at {}",
+                worktree.name.yellow(),
+                worktree.path.display().to_string().dimmed()
+            ));
+        } else {
+            dry_run_action(&format!(
+                "Remove worktree '{}' at {}",
+                worktree.name.yellow(),
+                worktree.path.display().to_string().dimmed()
+            ));
+        }
         if tmux::session_exists(&session_name) {
             dry_run_action(&format!("Kill tmux session '{}'", session_name.cyan()));
         }
@@ -112,13 +161,14 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     }
 
     println!(
-        "{} Removing worktree '{}'",
+        "{} Removing worktree '{}'{}",
         "→".blue(),
-        worktree.name.yellow()
+        worktree.name.yellow(),
+        if use_force { " (force)" } else { "" }
     );
 
     // Remove the worktree
-    manager.remove_worktree(&worktree.path, force)?;
+    manager.remove_worktree(&worktree.path, use_force)?;
     println!("{} Worktree removed", "✓".green());
 
     // Kill tmux session if it exists
@@ -140,7 +190,7 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
         io::stdin().read_line(&mut input)?;
 
         if input.trim().eq_ignore_ascii_case("y") {
-            manager.delete_branch(branch, force)?;
+            manager.delete_branch(branch, use_force)?;
             println!("{} Branch '{}' deleted", "✓".green(), branch);
         } else {
             println!("{} Branch '{}' kept", "→".blue(), branch);

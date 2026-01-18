@@ -62,6 +62,7 @@ fn run_dashboard_loop(
             DashboardResult::Delete {
                 worktree,
                 delete_branch,
+                force,
             } => {
                 let result = execute_delete(
                     &manager,
@@ -71,6 +72,7 @@ fn run_dashboard_loop(
                     &worktree.info.path,
                     worktree.info.branch.as_deref(),
                     delete_branch,
+                    force,
                 );
 
                 match result {
@@ -186,9 +188,10 @@ fn execute_delete(
     path: &std::path::Path,
     branch: Option<&str>,
     delete_branch: bool,
+    force: bool,
 ) -> Result<()> {
-    // Remove the worktree
-    manager.remove_worktree(path, false)?;
+    // Remove the worktree (force=true if worktree has uncommitted changes)
+    manager.remove_worktree(path, force)?;
 
     // Kill tmux session if it exists
     let session_name = sesh::session_name(project_name, name);

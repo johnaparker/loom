@@ -28,6 +28,7 @@ pub enum DashboardResult {
     Delete {
         worktree: WorktreeStats,
         delete_branch: bool,
+        force: bool,
     },
     /// Merge a worktree to main
     Merge {
@@ -253,12 +254,13 @@ impl Dashboard {
                 self.mode = DashboardMode::Normal;
                 None
             }
-            ModalAction::Delete { delete_branch } => {
+            ModalAction::Delete { delete_branch, force } => {
                 if let Some(worktree) = self.get_selected_worktree() {
                     self.mode = DashboardMode::Normal;
                     Some(DashboardResult::Delete {
                         worktree,
                         delete_branch,
+                        force,
                     })
                 } else {
                     self.mode = DashboardMode::Normal;

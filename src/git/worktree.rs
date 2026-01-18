@@ -37,6 +37,13 @@ pub struct WorktreeStats {
     pub recent_commits: Vec<CommitInfo>,
 }
 
+impl WorktreeStats {
+    /// Check if this worktree has any uncommitted changes
+    pub fn has_uncommitted_changes(&self) -> bool {
+        self.uncommitted_added > 0 || self.uncommitted_removed > 0
+    }
+}
+
 /// Manager for git worktree operations
 pub struct WorktreeManager {
     repo: Repository,
@@ -411,7 +418,7 @@ impl WorktreeManager {
     }
 
     /// Get uncommitted changes stats (lines added, lines removed)
-    fn uncommitted_stats(&self, path: &Path) -> (u32, u32) {
+    pub fn uncommitted_stats(&self, path: &Path) -> (u32, u32) {
         let mut total_added = 0u32;
         let mut total_removed = 0u32;
 
@@ -531,5 +538,66 @@ impl WorktreeManager {
             .into_iter()
             .map(|info| self.get_worktree_stats(info))
             .collect())
+    }
+
+    /// Check if merging a branch into main would cause conflicts
+    /// Returns None if merge is clean, Some(conflicted_files) if there are conflicts
+    pub fn check_merge_conflicts(&self, branch: &str) -> Result<Option<Vec<String>>> {
+        let main_branch = self.main_branch_name()?;
+
+        // Use git merge-tree --write-tree to check for conflicts
+        // This runs without modifying the working directory or index
+        let output = Command::new("git")
+            .args(["merge-tree", "--write-tree", &main_branch, branch])
+            .current_dir(&self.repo_root)
+            .output()
+            .context("Failed to run git merge-tree")?;
+
+        if output.status.success() {
+            // Exit code 0 means clean merge possible
+            Ok(None)
+        } else {
+            // Exit code non-zero means conflicts
+            // Parse the output to find conflicted files
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut conflicted_files = Vec::new();
+
+            // The output format includes lines like:
+            // CONFLICT (content): Merge conflict in <filename>
+            for line in stdout.lines() {
+                if line.starts_with("CONFLICT") {
+                    // Extract filename from the line
+                    if let Some(idx) = line.find(" in ") {
+                        let filename = line[idx + 4..].trim();
+                        conflicted_files.push(filename.to_string());
+                    }
+                }
+            }
+
+            // If we didn't parse any specific files, try alternative parsing
+            // or just indicate there are conflicts
+            if conflicted_files.is_empty() {
+                // Try parsing from the tree structure
+                for line in stdout.lines() {
+                    // Look for lines that indicate conflicts (e.g., with mode 100644 or similar)
+                    if line.contains("100644") || line.contains("100755") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 4 {
+                            let filename = parts.last().unwrap_or(&"unknown");
+                            if !conflicted_files.contains(&filename.to_string()) {
+                                conflicted_files.push(filename.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If still empty but we know there are conflicts, add a generic message
+            if conflicted_files.is_empty() {
+                conflicted_files.push("(unable to determine specific files)".to_string());
+            }
+
+            Ok(Some(conflicted_files))
+        }
     }
 }
