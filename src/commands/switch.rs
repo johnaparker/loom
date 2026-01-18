@@ -1,0 +1,124 @@
+use anyhow::Result;
+use colored::Colorize;
+use nucleo::{Config as NucleoConfig, Matcher, Utf32Str};
+
+use crate::config::Config;
+use crate::git::{WorktreeInfo, WorktreeManager};
+use crate::tmux;
+use crate::tui::Picker;
+
+pub fn switch(name: Option<&str>) -> Result<()> {
+    let current_dir = std::env::current_dir()?;
+    let manager = WorktreeManager::open(&current_dir)?;
+    let config = Config::load(Some(manager.repo_root()))?;
+    let project_name = config.project_name(&manager.project_name()?);
+
+    let worktrees = manager.list_worktrees()?;
+
+    if worktrees.is_empty() {
+        println!("No worktrees found.");
+        return Ok(());
+    }
+
+    // If name provided, fuzzy match and switch directly
+    if let Some(query) = name {
+        return switch_by_name(&worktrees, &project_name, query);
+    }
+
+    // Create picker items
+    let items: Vec<(String, String, String)> = worktrees
+        .iter()
+        .map(|wt| {
+            let display_name = if wt.is_main {
+                format!("{} (main repo)", wt.name)
+            } else {
+                wt.name.clone()
+            };
+
+            let details = format!(
+                "{} {}",
+                wt.branch
+                    .as_ref()
+                    .map(|b| format!("[{}]", b))
+                    .unwrap_or_default(),
+                wt.category
+                    .as_ref()
+                    .map(|c| format!("({})", c))
+                    .unwrap_or_default()
+            );
+
+            let path = wt.path.to_string_lossy().to_string();
+
+            (display_name, details, path)
+        })
+        .collect();
+
+    // Run the picker
+    let mut picker = Picker::new(items.clone())?;
+    let selected = picker.run()?;
+
+    if let Some(index) = selected {
+        let worktree = &worktrees[index];
+        let session_name = if worktree.is_main {
+            format!("{}/main", project_name)
+        } else {
+            format!("{}/{}", project_name, worktree.name)
+        };
+        let path = &items[index].2;
+
+        tmux::switch_to_session(&session_name, path)?;
+    }
+
+    Ok(())
+}
+
+fn switch_by_name(worktrees: &[WorktreeInfo], project_name: &str, query: &str) -> Result<()> {
+    let mut matcher = Matcher::new(NucleoConfig::DEFAULT);
+
+    // Score all worktrees against the query
+    let mut scored: Vec<(usize, u16)> = worktrees
+        .iter()
+        .enumerate()
+        .filter_map(|(i, wt)| {
+            let haystack = format!(
+                "{} {}",
+                wt.name,
+                wt.branch.as_deref().unwrap_or("")
+            );
+            let mut haystack_buf = Vec::new();
+            let haystack_str = Utf32Str::new(&haystack, &mut haystack_buf);
+            let mut needle_buf = Vec::new();
+            let needle_str = Utf32Str::new(query, &mut needle_buf);
+
+            matcher
+                .fuzzy_match(haystack_str, needle_str)
+                .map(|score| (i, score))
+        })
+        .collect();
+
+    if scored.is_empty() {
+        println!("{} No worktree matching '{}'", "!".yellow(), query);
+        return Ok(());
+    }
+
+    // Sort by score descending and pick the best match
+    scored.sort_by(|a, b| b.1.cmp(&a.1));
+    let best_match = &worktrees[scored[0].0];
+
+    let session_name = if best_match.is_main {
+        format!("{}/main", project_name)
+    } else {
+        format!("{}/{}", project_name, best_match.name)
+    };
+    let path = best_match.path.to_string_lossy().to_string();
+
+    println!(
+        "{} Switching to '{}' (matched '{}')",
+        "→".blue(),
+        session_name.green(),
+        best_match.name
+    );
+
+    tmux::switch_to_session(&session_name, &path)?;
+    Ok(())
+}
