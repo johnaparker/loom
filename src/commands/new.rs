@@ -25,6 +25,11 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
         .join(category.to_string())
         .join(&sanitized_name);
 
+    // Fetch from origin to ensure we have the latest refs
+    println!("{} Fetching from origin...", "→".blue());
+    manager.fetch_origin()?;
+    println!("{} Fetched latest from origin", "✓".green());
+
     println!(
         "{} Creating worktree for branch '{}' at {}",
         "→".blue(),
@@ -32,7 +37,7 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
         worktree_path.display()
     );
 
-    // Create the worktree
+    // Create the worktree (branches from origin/main if available)
     manager.create_worktree(branch, &worktree_path)?;
     println!("{} Worktree created", "✓".green());
 

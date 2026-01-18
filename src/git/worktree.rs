@@ -152,6 +152,47 @@ impl WorktreeManager {
         Ok(worktrees)
     }
 
+    /// Fetch from origin to ensure we have the latest refs
+    pub fn fetch_origin(&self) -> Result<()> {
+        let output = Command::new("git")
+            .args(["fetch", "origin"])
+            .current_dir(&self.repo_root)
+            .output()
+            .context("Failed to run git fetch origin")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: "git fetch origin".to_string(),
+                stderr,
+            }
+            .into());
+        }
+
+        Ok(())
+    }
+
+    /// Get the remote main branch ref (origin/main or origin/master)
+    fn remote_main_ref(&self) -> Option<String> {
+        for name in &["origin/main", "origin/master"] {
+            if self.repo.find_branch(name, BranchType::Remote).is_ok() {
+                return Some(name.to_string());
+            }
+        }
+        None
+    }
+
+    /// Get the best start point for a new branch (prefers origin/main over local main)
+    fn best_start_point(&self) -> Result<String> {
+        // Prefer remote main branch (most up-to-date)
+        if let Some(remote_main) = self.remote_main_ref() {
+            return Ok(remote_main);
+        }
+
+        // Fall back to local main branch
+        self.main_branch_name()
+    }
+
     /// Create a new worktree
     pub fn create_worktree(&self, branch: &str, path: &Path) -> Result<()> {
         // Create parent directories
@@ -161,25 +202,24 @@ impl WorktreeManager {
 
         // Check if branch exists
         let branch_exists = self.repo.find_branch(branch, BranchType::Local).is_ok();
+        let path_str = path.to_str().unwrap();
 
-        let mut args = vec!["worktree", "add"];
-
-        if branch_exists {
+        let output = if branch_exists {
             // Use existing branch
-            args.push(path.to_str().unwrap());
-            args.push(branch);
+            Command::new("git")
+                .args(["worktree", "add", path_str, branch])
+                .current_dir(&self.repo_root)
+                .output()
+                .context("Failed to run git worktree add")?
         } else {
-            // Create new branch from main
-            args.push("-b");
-            args.push(branch);
-            args.push(path.to_str().unwrap());
-        }
-
-        let output = Command::new("git")
-            .args(&args)
-            .current_dir(&self.repo_root)
-            .output()
-            .context("Failed to run git worktree add")?;
+            // Create new branch from origin/main (or fallback to local main)
+            let start_point = self.best_start_point()?;
+            Command::new("git")
+                .args(["worktree", "add", "-b", branch, path_str, &start_point])
+                .current_dir(&self.repo_root)
+                .output()
+                .context("Failed to run git worktree add")?
+        };
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
