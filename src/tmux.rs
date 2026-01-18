@@ -43,6 +43,19 @@ pub fn create_session(session_name: &str, path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Kill a tmux session if it exists
+pub fn kill_session(session_name: &str) -> bool {
+    if !session_exists(session_name) {
+        return false;
+    }
+
+    Command::new("tmux")
+        .args(["kill-session", "-t", session_name])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// Switch to a tmux session (creates if needed)
 pub fn switch_to_session(session_name: &str, path: &str) -> Result<()> {
     if !in_tmux() {

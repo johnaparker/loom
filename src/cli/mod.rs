@@ -42,8 +42,8 @@ pub enum Commands {
 
     /// Remove a worktree
     Remove {
-        /// Name of the worktree to remove
-        name: String,
+        /// Name of the worktree to remove (fuzzy picker if omitted)
+        name: Option<String>,
 
         /// Force removal even if there are uncommitted changes
         #[arg(short, long)]

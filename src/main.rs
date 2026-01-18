@@ -29,7 +29,7 @@ fn run() -> Result<()> {
             commands::merge(&name, force)?;
         }
         Commands::Remove { name, force } => {
-            commands::remove(&name, force)?;
+            commands::remove(name.as_deref(), force)?;
         }
         Commands::Status => {
             commands::status()?;
