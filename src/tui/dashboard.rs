@@ -10,6 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 use std::io::{self, stdout};
+use std::time::Duration;
 
 use crate::git::WorktreeStats;
 use crate::tui::modals::{
@@ -205,17 +206,26 @@ impl Dashboard {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     ) -> Result<DashboardResult> {
+        // Auto-refresh interval
+        const REFRESH_INTERVAL: Duration = Duration::from_secs(5);
+
         loop {
             terminal.draw(|f| self.render(f))?;
 
-            if let Event::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
+            // Poll for events with timeout - returns true if event is available
+            if event::poll(REFRESH_INTERVAL)? {
+                if let Event::Key(key) = event::read()? {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
 
-                if let Some(result) = self.handle_key(key.code, key.modifiers) {
-                    return Ok(result);
+                    if let Some(result) = self.handle_key(key.code, key.modifiers) {
+                        return Ok(result);
+                    }
                 }
+            } else {
+                // Timeout - trigger refresh to update worktree stats
+                return Ok(DashboardResult::Refresh);
             }
         }
     }
