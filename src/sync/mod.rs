@@ -3,6 +3,18 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+/// Check if a file is tracked in git
+fn is_git_tracked(repo_root: &Path, relative_path: &str) -> bool {
+    Command::new("git")
+        .args(["ls-files", "--error-unmatch", relative_path])
+        .current_dir(repo_root)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
 /// Sync files from source to destination based on patterns
 pub fn sync_files(source: &Path, dest: &Path, patterns: &[String]) -> Result<Vec<String>> {
     let mut synced = Vec::new();
@@ -20,11 +32,14 @@ pub fn sync_files(source: &Path, dest: &Path, patterns: &[String]) -> Result<Vec
             }
 
             if source_path.is_dir() {
-                copy_dir_recursive(&source_path, &dest_path)
+                copy_dir_recursive(&source_path, &dest_path, dest, pattern)
                     .with_context(|| format!("Failed to copy directory: {}", pattern))?;
             } else {
-                fs::copy(&source_path, &dest_path)
-                    .with_context(|| format!("Failed to copy file: {}", pattern))?;
+                // Skip git-tracked files - git already placed the correct version
+                if !is_git_tracked(dest, pattern) {
+                    fs::copy(&source_path, &dest_path)
+                        .with_context(|| format!("Failed to copy file: {}", pattern))?;
+                }
             }
             synced.push(pattern.to_string());
         }
@@ -33,8 +48,8 @@ pub fn sync_files(source: &Path, dest: &Path, patterns: &[String]) -> Result<Vec
     Ok(synced)
 }
 
-/// Recursively copy a directory
-fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
+/// Recursively copy a directory, skipping git-tracked files
+fn copy_dir_recursive(source: &Path, dest: &Path, repo_root: &Path, relative_base: &str) -> Result<()> {
     if !dest.exists() {
         fs::create_dir_all(dest)?;
     }
@@ -43,11 +58,16 @@ fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
         let entry = entry?;
         let source_path = entry.path();
         let dest_path = dest.join(entry.file_name());
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        let relative_path = format!("{}/{}", relative_base, file_name);
 
         if source_path.is_dir() {
-            copy_dir_recursive(&source_path, &dest_path)?;
+            copy_dir_recursive(&source_path, &dest_path, repo_root, &relative_path)?;
         } else {
-            fs::copy(&source_path, &dest_path)?;
+            // Skip git-tracked files - git already placed the correct version
+            if !is_git_tracked(repo_root, &relative_path) {
+                fs::copy(&source_path, &dest_path)?;
+            }
         }
     }
 
