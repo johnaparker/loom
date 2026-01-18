@@ -24,11 +24,17 @@ impl DeleteConfirmModal {
     pub fn new(worktree: WorktreeStats) -> Self {
         let has_branch = worktree.info.branch.is_some();
         let is_dirty = worktree.has_uncommitted_changes();
+        // Focus acknowledge checkbox first if dirty (it's at index 1 if branch exists, else 0)
+        let focused_checkbox = if is_dirty {
+            if has_branch { 1 } else { 0 }
+        } else {
+            0
+        };
         Self {
             is_dirty,
             delete_branch_checkbox: Checkbox::new("Also delete branch", true),
             acknowledge_checkbox: Checkbox::new("I understand changes will be lost", false),
-            focused_checkbox: if has_branch { 0 } else if is_dirty { 1 } else { 0 },
+            focused_checkbox,
             worktree,
         }
     }
