@@ -227,18 +227,18 @@ fn run_dashboard_loop(
                 let result = execute_create(&manager, &config, project_name, &branch, cat);
 
                 match result {
-                    Ok(_session_name) => {
-                        // Successfully created - show result
-                        dashboard.show_result(true, format!("Created worktree '{}'", branch));
+                    Ok((session_name, worktree_path)) => {
+                        // Successfully created - switch to the new session and exit
+                        tmux::switch_to_session(&session_name, worktree_path.to_str().unwrap())?;
+                        return Ok(());
                     }
                     Err(e) => {
                         dashboard.show_result(false, format!("Failed to create: {}", e));
+                        // Refresh worktrees and continue
+                        let worktrees = manager.list_worktrees_with_stats()?;
+                        dashboard.update_worktrees(worktrees);
                     }
                 }
-
-                // Refresh worktrees
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
             }
             DashboardResult::Refresh => {
                 // Just refresh worktrees
@@ -338,7 +338,7 @@ fn execute_create(
     project_name: &str,
     branch: &str,
     category: Category,
-) -> Result<String> {
+) -> Result<(String, std::path::PathBuf)> {
     let worktree_root = config.worktree_root()?;
 
     // Sanitize branch name for filesystem
@@ -377,5 +377,5 @@ fn execute_create(
         )?;
     }
 
-    Ok(session_name)
+    Ok((session_name, worktree_path))
 }
