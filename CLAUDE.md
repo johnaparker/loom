@@ -14,11 +14,11 @@ src/
 │   └── mod.rs        # Clap CLI definitions (Commands, Category enum)
 ├── commands/
 │   ├── mod.rs        # Command exports
-│   ├── new.rs        # gwt new - create worktree
-│   ├── list.rs       # gwt list - list worktrees
-│   ├── switch.rs     # gwt switch - TUI picker
+│   ├── new.rs        # gwt new - create worktree + auto-switch
+│   ├── list.rs       # gwt list - list worktrees by category
+│   ├── switch.rs     # gwt switch [name] - TUI picker or fuzzy match
 │   ├── merge.rs      # gwt merge - merge to main
-│   ├── remove.rs     # gwt remove - remove worktree
+│   ├── remove.rs     # gwt remove [name] - TUI picker or fuzzy match + confirm
 │   ├── status.rs     # gwt status - show status
 │   └── main_cmd.rs   # gwt main - switch to main
 ├── config/
@@ -30,9 +30,11 @@ src/
 │   └── worktree.rs   # Git2 + git CLI worktree ops
 ├── sesh/
 │   └── mod.rs        # Sesh.toml integration
+├── tmux/
+│   └── mod.rs        # Tmux session management (create, switch, kill)
 ├── tui/
 │   ├── mod.rs
-│   └── picker.rs     # Ratatui fuzzy picker
+│   └── picker.rs     # Ratatui fuzzy picker (Esc/Ctrl+C to cancel)
 └── sync/
     └── mod.rs        # File sync from main to worktree
 ```
@@ -54,8 +56,11 @@ src/
 
 - Use `anyhow::Result` for error handling in commands
 - Use `colored` for terminal output formatting
-- Commands follow pattern: open repo -> load config -> perform action -> update sesh
+- Commands follow pattern: open repo -> load config -> perform action -> update sesh/tmux
 - Git operations use `git2` where possible, fall back to CLI for complex operations
+- Commands with optional name arg: no arg = TUI picker, with arg = fuzzy match (nucleo)
+- Destructive commands (remove) should confirm with y/N prompt when fuzzy matching
+- Use shared `tmux` module for session operations, `sesh` module for sesh.toml
 
 ## Testing Approach
 
