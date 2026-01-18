@@ -12,6 +12,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Create a new worktree
+    #[command(visible_alias = "n")]
     New {
         /// Branch name for the new worktree
         branch: String,
@@ -22,15 +23,18 @@ pub enum Commands {
     },
 
     /// List all worktrees for the current project
+    #[command(visible_aliases = ["l", "ls"])]
     List,
 
     /// Interactive fuzzy picker to switch worktrees
+    #[command(visible_alias = "s")]
     Switch {
         /// Optional name to fuzzy match (skips TUI if provided)
         name: Option<String>,
     },
 
     /// Merge worktree branch to main and cleanup
+    #[command(visible_alias = "m")]
     Merge {
         /// Name of the worktree to merge
         name: String,
@@ -41,6 +45,7 @@ pub enum Commands {
     },
 
     /// Remove a worktree
+    #[command(visible_aliases = ["r", "rm"])]
     Remove {
         /// Name of the worktree to remove (fuzzy picker if omitted)
         name: Option<String>,
@@ -51,9 +56,11 @@ pub enum Commands {
     },
 
     /// Show status of all worktrees
+    #[command(visible_alias = "st")]
     Status,
 
     /// Switch to the main branch tmux session
+    #[command(visible_alias = "ma")]
     Main,
 }
 
