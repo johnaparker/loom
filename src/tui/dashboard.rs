@@ -752,30 +752,43 @@ impl Dashboard {
     }
 
     fn render_commit_preview(&self, f: &mut Frame, area: Rect) {
-        let commits = if self.filtered_indices.is_empty() {
-            Vec::new()
+        let (commits, is_main) = if self.filtered_indices.is_empty() {
+            (Vec::new(), true)
         } else {
             let actual_idx = self.filtered_indices[self.selected];
-            self.worktrees[actual_idx].recent_commits.clone()
+            let worktree = &self.worktrees[actual_idx];
+            (worktree.recent_commits.clone(), worktree.info.is_main)
         };
 
-        let items: Vec<ListItem> = commits
-            .iter()
-            .map(|commit| {
-                let lines = vec![
-                    Line::from(vec![
-                        Span::styled(&commit.hash_short, Style::default().fg(Color::Yellow)),
-                        Span::raw(" "),
-                        Span::styled(&commit.message, Style::default().fg(Color::White)),
-                    ]),
-                    Line::from(vec![Span::styled(
-                        format!("  {}, {}", commit.author, commit.relative_time),
-                        Style::default().fg(Color::DarkGray),
-                    )]),
-                ];
-                ListItem::new(lines)
-            })
-            .collect();
+        let items: Vec<ListItem> = if commits.is_empty() {
+            let message = if is_main {
+                "No commits yet"
+            } else {
+                "No commits ahead of main"
+            };
+            vec![ListItem::new(Line::from(Span::styled(
+                message,
+                Style::default().fg(Color::DarkGray).italic(),
+            )))]
+        } else {
+            commits
+                .iter()
+                .map(|commit| {
+                    let lines = vec![
+                        Line::from(vec![
+                            Span::styled(&commit.hash_short, Style::default().fg(Color::Yellow)),
+                            Span::raw(" "),
+                            Span::styled(&commit.message, Style::default().fg(Color::White)),
+                        ]),
+                        Line::from(vec![Span::styled(
+                            format!("  {}, {}", commit.author, commit.relative_time),
+                            Style::default().fg(Color::DarkGray),
+                        )]),
+                    ];
+                    ListItem::new(lines)
+                })
+                .collect()
+        };
 
         let list =
             List::new(items).block(Block::default().borders(Borders::ALL).title(" Commits "));

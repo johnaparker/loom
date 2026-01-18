@@ -517,14 +517,21 @@ impl WorktreeManager {
     }
 
     /// Get recent commits for a worktree
-    fn recent_commits(&self, path: &Path, limit: usize) -> Vec<CommitInfo> {
+    /// For main branch, shows full commit history
+    /// For worktrees, shows only commits ahead of main (branch-specific commits)
+    fn recent_commits(&self, path: &Path, limit: usize, is_main: bool) -> Vec<CommitInfo> {
+        let limit_str = limit.to_string();
+        let mut args = vec!["log", "--format=%h|%s|%an|%cr", "-n", &limit_str];
+
+        // For non-main worktrees, only show commits ahead of main
+        let main_branch = self.main_branch_name().unwrap_or_else(|_| "main".to_string());
+        let range = format!("{}..HEAD", main_branch);
+        if !is_main {
+            args.push(&range);
+        }
+
         let output = Command::new("git")
-            .args([
-                "log",
-                "--format=%h|%s|%an|%cr",
-                "-n",
-                &limit.to_string(),
-            ])
+            .args(&args)
             .current_dir(path)
             .output();
 
@@ -578,7 +585,7 @@ impl WorktreeManager {
 
         let (uncommitted_added, uncommitted_removed) = self.uncommitted_stats(&info.path);
         let age_days = self.worktree_age_days(&info.path);
-        let recent_commits = self.recent_commits(&info.path, 10);
+        let recent_commits = self.recent_commits(&info.path, 10, info.is_main);
 
         WorktreeStats {
             info,
