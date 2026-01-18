@@ -21,7 +21,7 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
+    match cli.command.unwrap_or(Commands::Status) {
         Commands::New { branch, category } => {
             commands::new(&branch, category)?;
         }

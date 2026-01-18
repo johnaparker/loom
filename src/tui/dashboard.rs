@@ -176,8 +176,9 @@ impl Dashboard {
             return;
         }
 
+        let len = self.filtered_indices.len() as i32;
         let current = self.selected as i32;
-        let new = (current + delta).clamp(0, self.filtered_indices.len() as i32 - 1) as usize;
+        let new = (current + delta).rem_euclid(len) as usize;
         self.selected = new;
         self.list_state.select(Some(new));
     }
