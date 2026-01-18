@@ -708,7 +708,7 @@ impl Dashboard {
                 ));
             } else {
                 line3_spans.push(Span::styled(
-                    "  Clean vs main",
+                    "  no commits",
                     Style::default().fg(Color::DarkGray),
                 ));
             }

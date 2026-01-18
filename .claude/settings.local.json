@@ -4,7 +4,8 @@
       "WebSearch",
       "WebFetch(domain:crates.io)",
       "Bash(cargo search:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(cargo clippy:*)"
     ]
   }
 }
