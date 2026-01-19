@@ -8,7 +8,7 @@ use crate::git::WorktreeManager;
 use crate::linear;
 
 /// Convert a Linear web URL to the desktop app URL scheme
-/// e.g., https://linear.app/team/issue/JOH-123 -> linear://team/issue/JOH-123
+/// e.g., https://linear.app/team/issue/ABC-123 -> linear://team/issue/ABC-123
 pub fn to_desktop_url(url: &str) -> String {
     url.replace("https://linear.app/", "linear://")
 }

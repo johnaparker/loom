@@ -17,7 +17,7 @@ pub struct LinearIssue {
 /// Result of resolving user input for Linear integration
 #[derive(Debug, Clone)]
 pub struct ResolvedInput {
-    /// Folder name for the worktree (e.g., "JOH-209")
+    /// Folder name for the worktree (e.g., "ABC-123")
     pub worktree_name: String,
     /// Git branch name (e.g., "john/joh-209-feature")
     pub git_branch: String,
@@ -36,7 +36,7 @@ pub fn is_issue_id(name: &str, prefix: &str) -> bool {
     !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
 }
 
-/// Extract Linear issue ID from a branch name (e.g., "john/joh-209-feature" -> "JOH-209")
+/// Extract Linear issue ID from a branch name (e.g., "user/abc-123-feature" -> "ABC-123")
 pub fn extract_issue_id(branch_name: &str, prefix: &str) -> Option<String> {
     let lower_prefix = prefix.to_lowercase();
     let branch_lower = branch_name.to_lowercase();
@@ -281,26 +281,26 @@ mod tests {
 
     #[test]
     fn test_is_issue_id() {
-        assert!(is_issue_id("JOH-209", "JOH"));
-        assert!(is_issue_id("joh-209", "JOH"));
-        assert!(is_issue_id("JOH-1", "JOH"));
-        assert!(!is_issue_id("JOH-", "JOH"));
-        assert!(!is_issue_id("JOH209", "JOH"));
-        assert!(!is_issue_id("feature-branch", "JOH"));
-        assert!(!is_issue_id("ABC-123", "JOH"));
+        assert!(is_issue_id("ABC-209", "ABC"));
+        assert!(is_issue_id("abc-209", "ABC"));
+        assert!(is_issue_id("ABC-1", "ABC"));
+        assert!(!is_issue_id("ABC-", "ABC"));
+        assert!(!is_issue_id("ABC209", "ABC"));
+        assert!(!is_issue_id("feature-branch", "ABC"));
+        assert!(!is_issue_id("XYZ-123", "ABC"));
     }
 
     #[test]
     fn test_extract_issue_id() {
         assert_eq!(
-            extract_issue_id("john/joh-209-feature", "JOH"),
-            Some("JOH-209".to_string())
+            extract_issue_id("user/abc-209-feature", "ABC"),
+            Some("ABC-209".to_string())
         );
         assert_eq!(
-            extract_issue_id("joh-123-some-feature", "JOH"),
-            Some("JOH-123".to_string())
+            extract_issue_id("abc-123-some-feature", "ABC"),
+            Some("ABC-123".to_string())
         );
-        assert_eq!(extract_issue_id("feature-branch", "JOH"), None);
-        assert_eq!(extract_issue_id("abc-123-feature", "JOH"), None);
+        assert_eq!(extract_issue_id("feature-branch", "ABC"), None);
+        assert_eq!(extract_issue_id("xyz-123-feature", "ABC"), None);
     }
 }

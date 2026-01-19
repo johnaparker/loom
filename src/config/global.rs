@@ -49,7 +49,7 @@ pub struct LinearConfig {
     /// API key for Linear API access (optional)
     #[serde(default)]
     pub api_key: Option<String>,
-    /// Team prefix to detect Linear issue patterns (e.g., "JOH")
+    /// Team prefix to detect Linear issue patterns (e.g., "ABC")
     #[serde(default)]
     pub team_prefix: Option<String>,
 }

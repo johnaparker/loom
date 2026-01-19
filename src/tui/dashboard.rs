@@ -294,7 +294,7 @@ impl Dashboard {
     ) -> Result<DashboardResult> {
         // Intervals for polling
         const ANIMATION_INTERVAL: Duration = Duration::from_millis(150);
-        const REFRESH_INTERVAL: Duration = Duration::from_secs(5);
+        const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
         let last_refresh = Instant::now();
 

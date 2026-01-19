@@ -6,8 +6,8 @@ use std::path::PathBuf;
 /// Maximum number of events to keep in the cache
 const MAX_EVENTS: usize = 100;
 
-/// Staleness threshold in seconds (5 minutes)
-const STALE_THRESHOLD_SECS: i64 = 300;
+/// Staleness threshold in seconds (4 hours)
+const STALE_THRESHOLD_SECS: i64 = 14400;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
