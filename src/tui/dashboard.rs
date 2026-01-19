@@ -813,7 +813,7 @@ impl Dashboard {
             )));
         }
 
-        // Line 2: Age (left), commits ahead (↑), commits behind (↓)
+        // Line 2: All git info on one line - age, commits ahead/behind, diff vs main, uncommitted
         let mut line2_spans = Vec::new();
 
         // Age - always far left
@@ -851,32 +851,25 @@ impl Dashboard {
             ));
         }
 
-        if !line2_spans.is_empty() {
-            lines.push(Line::from(line2_spans));
-        }
-
-        // Line 3: Git changes only (+/- vs main and uncommitted)
-        let mut line3_spans = Vec::new();
-
         // Diff vs main (skip for main worktree)
         if !wt.info.is_main
             && let (Some(added), Some(removed)) = (wt.diff_added, wt.diff_removed)
         {
             if added > 0 || removed > 0 {
-                line3_spans.push(Span::styled(
+                line2_spans.push(Span::styled(
                     format!("  +{}", added),
                     Style::default().fg(Color::Green),
                 ));
-                line3_spans.push(Span::styled(
+                line2_spans.push(Span::styled(
                     format!(" -{}", removed),
                     Style::default().fg(Color::Red),
                 ));
-                line3_spans.push(Span::styled(
+                line2_spans.push(Span::styled(
                     " vs main",
                     Style::default().fg(Color::DarkGray),
                 ));
             } else {
-                line3_spans.push(Span::styled(
+                line2_spans.push(Span::styled(
                     "  no commits",
                     Style::default().fg(Color::DarkGray),
                 ));
@@ -885,26 +878,26 @@ impl Dashboard {
 
         // Uncommitted changes (use green/red with ~ prefix)
         if wt.uncommitted_added > 0 || wt.uncommitted_removed > 0 {
-            let padding = if line3_spans.is_empty() { "  " } else { "   " };
-            line3_spans.push(Span::raw(padding));
-            line3_spans.push(Span::styled(
+            let padding = if line2_spans.is_empty() { "  " } else { "  " };
+            line2_spans.push(Span::raw(padding));
+            line2_spans.push(Span::styled(
                 format!("+{}", wt.uncommitted_added),
                 Style::default().fg(Color::Green),
             ));
-            line3_spans.push(Span::styled(
+            line2_spans.push(Span::styled(
                 format!(" -{}", wt.uncommitted_removed),
                 Style::default().fg(Color::Red),
             ));
-            line3_spans.push(Span::styled(
+            line2_spans.push(Span::styled(
                 " uncommitted",
                 Style::default().fg(Color::DarkGray),
             ));
-        } else if line3_spans.is_empty() {
-            line3_spans.push(Span::styled("  Clean", Style::default().fg(Color::Green)));
+        } else if line2_spans.is_empty() {
+            line2_spans.push(Span::styled("  Clean", Style::default().fg(Color::Green)));
         }
 
-        if !line3_spans.is_empty() {
-            lines.push(Line::from(line3_spans));
+        if !line2_spans.is_empty() {
+            lines.push(Line::from(line2_spans));
         }
 
         // Line 4: Claude status (only if active session)
