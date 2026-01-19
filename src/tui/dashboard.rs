@@ -1004,8 +1004,10 @@ impl Dashboard {
                 let mut lines = Vec::new();
 
                 // Show recent events (most recent first, limit to what fits)
-                for event in s.events.iter().rev().take(10) {
+                // Track index to know if notification is "handled" (not the most recent)
+                for (idx, event) in s.events.iter().rev().take(10).enumerate() {
                     let time_str = claude::relative_time(&event.timestamp);
+                    let is_most_recent = idx == 0;
 
                     let event_line = match event.event_type.as_str() {
                         "UserPromptSubmit" => {
@@ -1034,7 +1036,11 @@ impl Dashboard {
                         }
                         "Notification" => {
                             let kind = event.kind.as_deref().unwrap_or("notification");
-                            let (icon, color) = if kind.contains("permission") {
+                            // Show in color if most recent, gray if handled (not most recent)
+                            let (icon, color) = if !is_most_recent {
+                                // Handled - show in gray
+                                ("\u{25CF}", Color::DarkGray) // ●
+                            } else if kind.contains("permission") {
                                 ("!", Color::Red)
                             } else {
                                 ("\u{25CF}", Color::Cyan) // ●
@@ -1046,6 +1052,17 @@ impl Dashboard {
                                 ),
                                 Span::styled(format!("{} ", icon), Style::default().fg(color)),
                                 Span::styled(kind, Style::default().fg(color)),
+                            ]
+                        }
+                        "ToolUse" => {
+                            let tool = event.prompt_preview.as_deref().unwrap_or("tool");
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{2699} ", Style::default().fg(Color::DarkGray)), // ⚙
+                                Span::styled(tool, Style::default().fg(Color::DarkGray)),
                             ]
                         }
                         "SessionStart" => {

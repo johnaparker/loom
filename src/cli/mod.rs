@@ -101,7 +101,7 @@ pub enum Commands {
     /// Handle Claude Code hook events (internal use)
     #[command(hide = true)]
     Hook {
-        /// Event type: user-prompt, stop, notification, session-start, session-end
+        /// Event type: user-prompt, stop, notification, session-start, session-end, tool-use
         event: String,
     },
 }

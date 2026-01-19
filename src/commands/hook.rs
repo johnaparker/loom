@@ -34,6 +34,7 @@ pub fn hook(event: &str) -> Result<()> {
         "notification" => handle_notification(&project, &worktree, session_id, &json)?,
         "session-start" => handle_session_start(&project, &worktree, session_id)?,
         "session-end" => handle_session_end(&project, &worktree, session_id)?,
+        "tool-use" => handle_tool_use(&project, &worktree, session_id, &json)?,
         _ => {
             // Unknown event type, ignore
         }
@@ -48,13 +49,13 @@ fn handle_user_prompt(
     session_id: &str,
     json: &serde_json::Value,
 ) -> Result<()> {
-    // Extract prompt preview (first 50 chars)
+    // Extract prompt preview (first 200 chars - will be truncated to fit display width)
     let prompt_preview = json["prompt"]
         .as_str()
         .map(|p| {
             let trimmed = p.trim();
-            if trimmed.len() > 50 {
-                format!("{}...", &trimmed[..47])
+            if trimmed.len() > 200 {
+                format!("{}...", &trimmed[..197])
             } else {
                 trimmed.to_string()
             }
@@ -145,6 +146,28 @@ fn handle_session_end(project: &str, worktree: &str, session_id: &str) -> Result
     };
 
     crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Inactive)
+}
+
+fn handle_tool_use(
+    project: &str,
+    worktree: &str,
+    session_id: &str,
+    json: &serde_json::Value,
+) -> Result<()> {
+    // Extract tool name if available
+    let tool_name = json["tool_name"].as_str()
+        .or_else(|| json["tool"].as_str())
+        .map(|s| s.to_string());
+
+    let event = ClaudeEvent {
+        event_type: "ToolUse".to_string(),
+        timestamp: now_iso8601(),
+        prompt_preview: tool_name,  // Store tool name in prompt_preview field
+        kind: None,
+        message: None,
+    };
+
+    crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Working)
 }
 
 /// Resolve project name and worktree name from the current working directory
