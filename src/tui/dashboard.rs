@@ -756,19 +756,6 @@ impl Dashboard {
         };
         line1_spans.push(Span::styled(wt.info.name.clone(), name_style));
 
-        // Claude state indicator (after name)
-        if let Some(state) = claude_state {
-            let (icon, color) = match state {
-                ClaudeState::Working => (" \u{2699}", Color::Yellow),         // ⚙
-                ClaudeState::Idle => (" \u{2713}", Color::Green),              // ✓
-                ClaudeState::WaitingPermission => (" !", Color::Red),
-                ClaudeState::Inactive => ("", Color::DarkGray),  // No indicator for inactive
-            };
-            if !icon.is_empty() {
-                line1_spans.push(Span::styled(icon, Style::default().fg(color)));
-            }
-        }
-
         // Branch
         let branch_text = wt
             .info
@@ -916,6 +903,25 @@ impl Dashboard {
 
         if !line3_spans.is_empty() {
             lines.push(Line::from(line3_spans));
+        }
+
+        // Line 4: Claude status (only if active session)
+        if let Some(state) = claude_state {
+            let claude_line = match state {
+                ClaudeState::Working => Some(("\u{2699} Claude working", Color::Yellow)),
+                ClaudeState::Idle => Some(("\u{2713} Claude idle", Color::Green)),
+                ClaudeState::WaitingPermission => {
+                    Some(("! Claude waiting for response", Color::Red))
+                }
+                ClaudeState::Inactive => None, // Don't show line
+            };
+
+            if let Some((text, color)) = claude_line {
+                lines.push(Line::from(Span::styled(
+                    format!("  {}", text),
+                    Style::default().fg(color),
+                )));
+            }
         }
 
         // Empty line for spacing
