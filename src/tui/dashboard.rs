@@ -7,12 +7,18 @@ use crossterm::{
 use nucleo::{Config as NucleoConfig, Matcher, Utf32Str};
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
+use std::collections::HashMap;
 use std::io::{self, stdout};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use crate::claude::{self, ClaudeSession, ClaudeState};
 use crate::git::WorktreeStats;
+use crate::linear::{self, LinearIssue};
+
+/// Braille spinner frames for smooth rotation animation
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 use crate::tui::modals::{
     ActionResultModal, DeleteConfirmModal, MergeConfirmModal, Modal, ModalAction, NewWorktreeModal,
     render_modal_overlay,
@@ -38,8 +44,14 @@ pub enum DashboardResult {
     },
     /// Sync a worktree with main
     Sync { worktree: WorktreeStats },
+    /// Review a worktree's changes vs main
+    Review { worktree: WorktreeStats },
+    /// Open Claude in the worktree
+    Claude { worktree: WorktreeStats },
     /// Create a new worktree
     CreateNew { branch: String, category: String },
+    /// Open Linear issue for a worktree
+    Linear { worktree: WorktreeStats },
     /// Refresh the dashboard (after an action)
     Refresh,
 }
@@ -60,6 +72,14 @@ enum DashboardMode {
     ActionResult(ActionResultModal),
 }
 
+/// Right panel view toggle
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum RightPanelView {
+    #[default]
+    Commits,
+    Linear,
+}
+
 /// Interactive dashboard for worktree status
 pub struct Dashboard {
     worktrees: Vec<WorktreeStats>,
@@ -76,6 +96,16 @@ pub struct Dashboard {
     /// Status message to show in title bar (auto-clears on keypress)
     /// Tuple of (is_success, message)
     status_message: Option<(bool, String)>,
+    /// Cached Linear issues by worktree name
+    linear_issues: HashMap<String, LinearIssue>,
+    /// Cached Claude session states by worktree name
+    claude_states: HashMap<String, ClaudeSession>,
+    /// Animation frame counter (wraps around 0-255)
+    animation_frame: u8,
+    /// Whether any worktree has an active animation state
+    has_active_claude: bool,
+    /// Current view for the right panel (Commits or Linear)
+    right_panel_view: RightPanelView,
 }
 
 impl Dashboard {
@@ -86,7 +116,10 @@ impl Dashboard {
             list_state.select(Some(0));
         }
 
-        Self {
+        // Load Linear issues for all worktrees
+        let linear_issues = Self::load_linear_issues(&project_name, &worktrees);
+
+        let mut dashboard = Self {
             worktrees,
             filtered_indices,
             selected: 0,
@@ -98,7 +131,54 @@ impl Dashboard {
             main_branch: "main".to_string(),
             pending_result: None,
             status_message: None,
+            linear_issues,
+            claude_states: HashMap::new(),
+            animation_frame: 0,
+            has_active_claude: false,
+            right_panel_view: RightPanelView::default(),
+        };
+
+        // Load initial Claude states
+        dashboard.refresh_claude_states();
+
+        dashboard
+    }
+
+    /// Load Linear issues from cache for all worktrees
+    fn load_linear_issues(
+        project_name: &str,
+        worktrees: &[WorktreeStats],
+    ) -> HashMap<String, LinearIssue> {
+        let mut issues = HashMap::new();
+        for wt in worktrees {
+            if let Ok(Some(issue)) = linear::read_metadata(project_name, &wt.info.name) {
+                if !issue.title.is_empty() {
+                    issues.insert(wt.info.name.clone(), issue);
+                }
+            }
         }
+        issues
+    }
+
+    /// Refresh Claude session states for all worktrees
+    fn refresh_claude_states(&mut self) {
+        self.claude_states.clear();
+        for wt in &self.worktrees {
+            if let Some(session) = claude::read_state(&self.project_name, &wt.info.name) {
+                // Only include non-stale sessions (or explicitly inactive ones)
+                if !session.is_stale() || session.state == ClaudeState::Inactive {
+                    self.claude_states.insert(wt.info.name.clone(), session);
+                }
+            }
+        }
+
+        // Track if any worktree has an active animation state
+        self.has_active_claude = self.claude_states.values().any(|s| {
+            matches!(
+                claude::effective_state(s),
+                ClaudeState::Working | ClaudeState::WaitingPermission
+            )
+        });
     }
 
     /// Set the main branch name (for merge modal)
@@ -124,6 +204,9 @@ impl Dashboard {
         // Remember currently selected worktree name
         let selected_name = self.get_selected_worktree().map(|w| w.info.name.clone());
 
+        // Refresh Linear issues
+        self.linear_issues = Self::load_linear_issues(&self.project_name, &worktrees);
+
         self.worktrees = worktrees;
         self.filter_worktrees();
 
@@ -145,6 +228,9 @@ impl Dashboard {
                 self.mode = DashboardMode::ActionResult(ActionResultModal::error(message));
             }
         }
+
+        // Refresh Claude states for all worktrees
+        self.refresh_claude_states();
     }
 
     /// Set conflict info for merge modal
@@ -206,14 +292,30 @@ impl Dashboard {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     ) -> Result<DashboardResult> {
-        // Auto-refresh interval
-        const REFRESH_INTERVAL: Duration = Duration::from_secs(5);
+        // Intervals for polling
+        const ANIMATION_INTERVAL: Duration = Duration::from_millis(150);
+        const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
+
+        let last_refresh = Instant::now();
 
         loop {
             terminal.draw(|f| self.render(f))?;
 
-            // Poll for events with timeout - returns true if event is available
-            if event::poll(REFRESH_INTERVAL)? {
+            // Use short interval when animating, otherwise wait for full refresh
+            let poll_timeout = if self.has_active_claude {
+                ANIMATION_INTERVAL
+            } else {
+                // Calculate remaining time until next refresh
+                let elapsed = last_refresh.elapsed();
+                if elapsed >= REFRESH_INTERVAL {
+                    Duration::ZERO
+                } else {
+                    REFRESH_INTERVAL - elapsed
+                }
+            };
+
+            // Poll for events with timeout
+            if event::poll(poll_timeout)? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind != KeyEventKind::Press {
                         continue;
@@ -223,8 +325,16 @@ impl Dashboard {
                         return Ok(result);
                     }
                 }
+            } else if self.has_active_claude {
+                // Animation tick - increment frame counter
+                self.animation_frame = self.animation_frame.wrapping_add(1);
+
+                // Check if it's also time for a full refresh
+                if last_refresh.elapsed() >= REFRESH_INTERVAL {
+                    return Ok(DashboardResult::Refresh);
+                }
             } else {
-                // Timeout - trigger refresh to update worktree stats
+                // Full refresh interval elapsed
                 return Ok(DashboardResult::Refresh);
             }
         }
@@ -403,6 +513,39 @@ impl Dashboard {
                 }
                 None
             }
+            KeyCode::Char('r') => {
+                // Review - open diff view in neovim for non-main worktrees
+                if let Some(worktree) = self.get_selected_worktree() {
+                    if !worktree.info.is_main {
+                        return Some(DashboardResult::Review { worktree });
+                    }
+                }
+                None
+            }
+            KeyCode::Char('c') => {
+                // Claude - open claude in tmux window for any worktree
+                if let Some(worktree) = self.get_selected_worktree() {
+                    return Some(DashboardResult::Claude { worktree });
+                }
+                None
+            }
+            KeyCode::Char('l') => {
+                // Linear - open Linear issue (only if worktree has one)
+                if let Some(worktree) = self.get_selected_worktree() {
+                    if self.linear_issues.contains_key(&worktree.info.name) {
+                        return Some(DashboardResult::Linear { worktree });
+                    }
+                }
+                None
+            }
+            KeyCode::Tab => {
+                // Toggle right panel between Commits and Linear views
+                self.right_panel_view = match self.right_panel_view {
+                    RightPanelView::Commits => RightPanelView::Linear,
+                    RightPanelView::Linear => RightPanelView::Commits,
+                };
+                None
+            }
             _ => None,
         }
     }
@@ -542,7 +685,19 @@ impl Dashboard {
                 .split(main_area);
 
             self.render_worktree_list(f, main_chunks[0]);
-            self.render_commit_preview(f, main_chunks[1]);
+
+            // Split right panel: commits/linear (top 50%) and claude pane (bottom 50%)
+            let right_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(main_chunks[1]);
+
+            // Render top panel based on toggle state
+            match self.right_panel_view {
+                RightPanelView::Commits => self.render_commit_preview(f, right_chunks[0]),
+                RightPanelView::Linear => self.render_linear_panel(f, right_chunks[0]),
+            }
+            self.render_claude_pane(f, right_chunks[1]);
         }
 
         self.render_help(f, help_area);
@@ -616,13 +771,31 @@ impl Dashboard {
     }
 
     fn render_worktree_list(&mut self, f: &mut Frame, area: Rect) {
-        // Calculate available width for content (subtract borders and highlight symbol)
-        let content_width = area.width.saturating_sub(5) as usize; // 2 borders + "> " symbol
+        // Calculate available width for content (subtract borders, highlight symbol, and bar)
+        let content_width = area.width.saturating_sub(7) as usize; // 2 borders + "> " + "▌ "
 
+        let animation_frame = self.animation_frame;
         let items: Vec<ListItem> = self
             .filtered_indices
             .iter()
-            .map(|&i| Self::format_worktree_item(&self.worktrees[i], content_width))
+            .map(|&i| {
+                let wt = &self.worktrees[i];
+                let linear_title = self
+                    .linear_issues
+                    .get(&wt.info.name)
+                    .map(|issue| issue.title.as_str());
+                let claude_state = self
+                    .claude_states
+                    .get(&wt.info.name)
+                    .map(|s| claude::effective_state(s));
+                Self::format_worktree_item(
+                    wt,
+                    content_width,
+                    linear_title,
+                    claude_state,
+                    animation_frame,
+                )
+            })
             .collect();
 
         let is_search = matches!(self.mode, DashboardMode::Search);
@@ -640,10 +813,25 @@ impl Dashboard {
         f.render_stateful_widget(list, area, &mut self.list_state);
     }
 
-    fn format_worktree_item(wt: &WorktreeStats, width: usize) -> ListItem<'static> {
+    fn format_worktree_item(
+        wt: &WorktreeStats,
+        width: usize,
+        linear_title: Option<&str>,
+        claude_state: Option<ClaudeState>,
+        animation_frame: u8,
+    ) -> ListItem<'static> {
+        // Determine bar color based on Claude state
+        let bar_color = match claude_state {
+            None => Color::Rgb(60, 60, 60),
+            Some(ClaudeState::Inactive) => Color::Rgb(60, 60, 60),
+            Some(ClaudeState::Idle) => Color::Green,
+            Some(ClaudeState::Working) => Color::Yellow,
+            Some(ClaudeState::WaitingPermission) => Color::Red,
+        };
+
         let mut lines = Vec::new();
 
-        // Line 1: Name, branch (left), Category badge (right)
+        // Line 1: Name, Claude state indicator, branch (left), Category badge (right)
         let mut line1_spans = Vec::new();
 
         // Name
@@ -694,18 +882,10 @@ impl Dashboard {
 
         lines.push(Line::from(line1_spans));
 
-        // Line 2: Commits ahead and age
+        // Line 2: All git info on one line - age, commits ahead/behind, diff vs main, uncommitted
         let mut line2_spans = Vec::new();
 
-        if let Some(ahead) = wt.commits_ahead
-            && ahead > 0
-        {
-            line2_spans.push(Span::styled(
-                format!("  \u{2191}{} commits", ahead),
-                Style::default().fg(Color::Yellow),
-            ));
-        }
-
+        // Age - always far left
         if let Some(days) = wt.age_days {
             let age_text = if days == 0 {
                 "today".to_string()
@@ -718,32 +898,47 @@ impl Dashboard {
             line2_spans.push(Span::styled(age_text, Style::default().fg(Color::DarkGray)));
         }
 
-        if !line2_spans.is_empty() {
-            lines.push(Line::from(line2_spans));
+        // Commits ahead (↑)
+        if let Some(ahead) = wt.commits_ahead
+            && ahead > 0
+        {
+            line2_spans.push(Span::raw("  "));
+            line2_spans.push(Span::styled(
+                format!(" \u{2191}{}", ahead),
+                Style::default().fg(Color::Yellow),
+            ));
         }
 
-        // Line 3: Diff stats vs main and uncommitted
-        let mut line3_spans = Vec::new();
+        // Commits behind (↓)
+        if let Some(behind) = wt.commits_behind
+            && behind > 0
+        {
+            line2_spans.push(Span::raw("  "));
+            line2_spans.push(Span::styled(
+                format!(" \u{2193}{}", behind),
+                Style::default().fg(Color::Magenta),
+            ));
+        }
 
         // Diff vs main (skip for main worktree)
         if !wt.info.is_main
             && let (Some(added), Some(removed)) = (wt.diff_added, wt.diff_removed)
         {
             if added > 0 || removed > 0 {
-                line3_spans.push(Span::styled(
+                line2_spans.push(Span::styled(
                     format!("  +{}", added),
                     Style::default().fg(Color::Green),
                 ));
-                line3_spans.push(Span::styled(
+                line2_spans.push(Span::styled(
                     format!(" -{}", removed),
                     Style::default().fg(Color::Red),
                 ));
-                line3_spans.push(Span::styled(
+                line2_spans.push(Span::styled(
                     " vs main",
                     Style::default().fg(Color::DarkGray),
                 ));
             } else {
-                line3_spans.push(Span::styled(
+                line2_spans.push(Span::styled(
                     "  no commits",
                     Style::default().fg(Color::DarkGray),
                 ));
@@ -752,37 +947,77 @@ impl Dashboard {
 
         // Uncommitted changes (use green/red with ~ prefix)
         if wt.uncommitted_added > 0 || wt.uncommitted_removed > 0 {
-            let padding = if line3_spans.is_empty() { "  " } else { "   " };
-            line3_spans.push(Span::raw(padding));
-            line3_spans.push(Span::styled("~", Style::default().fg(Color::DarkGray)));
-            line3_spans.push(Span::styled(
+            let padding = if line2_spans.is_empty() { "  " } else { "  " };
+            line2_spans.push(Span::raw(padding));
+            line2_spans.push(Span::styled(
                 format!("+{}", wt.uncommitted_added),
                 Style::default().fg(Color::Green),
             ));
-            line3_spans.push(Span::styled(
+            line2_spans.push(Span::styled(
                 format!(" -{}", wt.uncommitted_removed),
                 Style::default().fg(Color::Red),
             ));
-        } else if line3_spans.is_empty() {
-            line3_spans.push(Span::styled("  Clean", Style::default().fg(Color::Green)));
-        }
-
-        // Commits behind main (purple, after diff stats)
-        if let Some(behind) = wt.commits_behind
-            && behind > 0
-        {
-            line3_spans.push(Span::styled(
-                format!("    \u{2193}{}", behind),
-                Style::default().fg(Color::Magenta),
+            line2_spans.push(Span::styled(
+                " uncommitted",
+                Style::default().fg(Color::DarkGray),
             ));
+        } else if line2_spans.is_empty() {
+            line2_spans.push(Span::styled("  Clean", Style::default().fg(Color::Green)));
         }
 
-        if !line3_spans.is_empty() {
-            lines.push(Line::from(line3_spans));
+        if !line2_spans.is_empty() {
+            lines.push(Line::from(line2_spans));
+        }
+
+        // Line 3: Linear issue title (if available)
+        if let Some(title) = linear_title {
+            // Truncate if too long (leave room for indent and ellipsis)
+            let max_len = width.saturating_sub(6);
+            let display_title = if title.len() > max_len {
+                format!("  {}...", &title[..max_len.saturating_sub(3)])
+            } else {
+                format!("  {}", title)
+            };
+            lines.push(Line::from(Span::styled(
+                display_title,
+                Style::default().fg(Color::White).italic(),
+            )));
+        }
+
+        // Line 4: Claude status (only if active session)
+        if let Some(ref state) = claude_state {
+            let claude_line = match state {
+                ClaudeState::Working => {
+                    let spinner = SPINNER_FRAMES[(animation_frame as usize) % SPINNER_FRAMES.len()];
+                    Some((format!("{} Claude working", spinner), Color::Yellow))
+                }
+                ClaudeState::Idle => Some(("\u{2713} Claude idle".to_string(), Color::Green)),
+                ClaudeState::WaitingPermission => {
+                    Some(("! Claude waiting for response".to_string(), Color::Red))
+                }
+                ClaudeState::Inactive => None, // Don't show line
+            };
+
+            if let Some((text, color)) = claude_line {
+                lines.push(Line::from(Span::styled(
+                    format!("  {}", text),
+                    Style::default().fg(color),
+                )));
+            }
         }
 
         // Empty line for spacing
         lines.push(Line::from(""));
+
+        // Prepend colored bar to each line
+        let lines: Vec<Line> = lines
+            .into_iter()
+            .map(|line| {
+                let mut spans = vec![Span::styled("▌ ", Style::default().fg(bar_color))];
+                spans.extend(line.spans);
+                Line::from(spans)
+            })
+            .collect();
 
         ListItem::new(lines)
     }
@@ -826,10 +1061,283 @@ impl Dashboard {
                 .collect()
         };
 
-        let list =
-            List::new(items).block(Block::default().borders(Borders::ALL).title(" Commits "));
+        // Build title with tab toggle indicator
+        let title = Line::from(vec![
+            Span::styled(" Commits", Style::default().fg(Color::White)),
+            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Linear ", Style::default().fg(Color::DarkGray)),
+        ]);
+
+        let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
 
         f.render_widget(list, area);
+    }
+
+    fn render_linear_panel(&self, f: &mut Frame, area: Rect) {
+        // Get the selected worktree's Linear issue
+        let issue = self
+            .get_selected_worktree()
+            .and_then(|wt| self.linear_issues.get(&wt.info.name));
+
+        // Build title with tab toggle indicator
+        let title = Line::from(vec![
+            Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
+            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Linear ", Style::default().fg(Color::White)),
+        ]);
+
+        let block = Block::default().borders(Borders::ALL).title(title);
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        let content: Text = match issue {
+            Some(issue) => {
+                let mut lines = Vec::new();
+
+                // Issue title in bold white
+                lines.push(Line::from(Span::styled(
+                    &issue.title,
+                    Style::default().fg(Color::White).bold(),
+                )));
+
+                // Issue ID with hint to open
+                lines.push(Line::from(vec![
+                    Span::styled(&issue.id, Style::default().fg(Color::Cyan)),
+                    Span::styled(" (l to open)", Style::default().fg(Color::DarkGray)),
+                ]));
+
+                // Empty line before description
+                lines.push(Line::from(""));
+
+                // Description or "No description"
+                if let Some(ref desc) = issue.description {
+                    // Word wrap the description
+                    for line in desc.lines() {
+                        if line.is_empty() {
+                            lines.push(Line::from(""));
+                        } else {
+                            lines.push(Line::from(Span::styled(
+                                line,
+                                Style::default().fg(Color::Gray),
+                            )));
+                        }
+                    }
+                } else {
+                    lines.push(Line::from(Span::styled(
+                        "No description",
+                        Style::default().fg(Color::DarkGray).italic(),
+                    )));
+                }
+
+                Text::from(lines)
+            }
+            None => Text::styled(
+                "No Linear issue linked\n\nCreate worktrees with Linear issue IDs\nto see issue details here.",
+                Style::default().fg(Color::DarkGray).italic(),
+            ),
+        };
+
+        let paragraph = Paragraph::new(content).wrap(Wrap { trim: true });
+        f.render_widget(paragraph, inner);
+    }
+
+    fn render_claude_pane(&self, f: &mut Frame, area: Rect) {
+        // Get the selected worktree's Claude session
+        let session = self
+            .get_selected_worktree()
+            .and_then(|wt| self.claude_states.get(&wt.info.name));
+
+        // Build title with state indicator
+        let title = match session {
+            Some(s) => {
+                let effective_state = claude::effective_state(s);
+                let (icon, color) = match effective_state {
+                    ClaudeState::Working => ("\u{2699}", Color::Yellow), // ⚙
+                    ClaudeState::Idle => ("\u{2713}", Color::Green),     // ✓
+                    ClaudeState::WaitingPermission => ("!", Color::Red),
+                    ClaudeState::Inactive => ("-", Color::DarkGray),
+                };
+                Line::from(vec![
+                    Span::styled(" Claude ", Style::default().fg(Color::Rgb(194, 76, 48))),
+                    Span::styled(icon, Style::default().fg(color)),
+                    Span::styled(format!(" {} ", effective_state), Style::default().fg(color)),
+                ])
+            }
+            None => Line::from(Span::styled(
+                " Claude ",
+                Style::default().fg(Color::Rgb(154, 76, 48)),
+            )),
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Rgb(154, 76, 48)))
+            .title(title);
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        let content: Text = match session {
+            Some(s) if !s.events.is_empty() => {
+                let mut lines = Vec::new();
+
+                // Show recent events (most recent first, fill available height)
+                // Track index to know if notification is "handled" (not the most recent)
+                let max_events = inner.height as usize;
+                for (idx, event) in s.events.iter().rev().take(max_events).enumerate() {
+                    let time_str = claude::relative_time(&event.timestamp);
+                    let is_most_recent = idx == 0;
+
+                    let event_line = match event.event_type.as_str() {
+                        "UserPromptSubmit" => {
+                            let preview = event.prompt_preview.as_deref().unwrap_or("");
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{25B6} ", Style::default().fg(Color::Yellow)), // ▶
+                                Span::styled(
+                                    truncate_str(preview, inner.width.saturating_sub(14) as usize),
+                                    Style::default().fg(Color::White),
+                                ),
+                            ]
+                        }
+                        "Stop" => {
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{25A0} ", Style::default().fg(Color::Green)), // ■
+                                Span::styled("Completed", Style::default().fg(Color::Green)),
+                            ]
+                        }
+                        "Notification" => {
+                            let kind = event.kind.as_deref().unwrap_or("notification");
+                            // Show in color if most recent, gray if handled (not most recent)
+                            let (icon, color) = if !is_most_recent {
+                                // Handled - show in gray
+                                ("\u{25CF}", Color::DarkGray) // ●
+                            } else if kind.contains("permission") {
+                                ("!", Color::Red)
+                            } else {
+                                ("\u{25CF}", Color::Cyan) // ●
+                            };
+                            let mut spans = vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled(format!("{} ", icon), Style::default().fg(color)),
+                                Span::styled(kind, Style::default().fg(color)),
+                            ];
+                            // Add message if available
+                            if let Some(ref msg) = event.message {
+                                let max_msg_len =
+                                    inner.width.saturating_sub(14 + kind.len() as u16) as usize;
+                                let truncated = if msg.len() > max_msg_len {
+                                    format!("{}...", &msg[..max_msg_len.saturating_sub(3)])
+                                } else {
+                                    msg.clone()
+                                };
+                                spans.push(Span::styled(
+                                    format!(": {}", truncated),
+                                    Style::default().fg(color),
+                                ));
+                            }
+                            spans
+                        }
+                        "ToolUse" => {
+                            let tool = event.prompt_preview.as_deref().unwrap_or("tool");
+                            let mut spans = vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{2699} ", Style::default().fg(Color::DarkGray)), // ⚙
+                                Span::styled(tool, Style::default().fg(Color::DarkGray)),
+                            ];
+                            // Add detail if available (file path, command, etc.)
+                            if let Some(ref detail) = event.message {
+                                let max_detail_len =
+                                    inner.width.saturating_sub(14 + tool.len() as u16) as usize;
+                                let truncated = if detail.len() > max_detail_len {
+                                    format!("{}...", &detail[..max_detail_len.saturating_sub(3)])
+                                } else {
+                                    detail.clone()
+                                };
+                                spans.push(Span::styled(
+                                    format!(" {}", truncated),
+                                    Style::default().fg(Color::DarkGray),
+                                ));
+                            }
+                            spans
+                        }
+                        "SessionStart" => {
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{25B7} ", Style::default().fg(Color::Cyan)), // ▷
+                                Span::styled("Session started", Style::default().fg(Color::Cyan)),
+                            ]
+                        }
+                        "SessionCleared" => {
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{21BB} ", Style::default().fg(Color::Yellow)), // ↻
+                                Span::styled("Session cleared", Style::default().fg(Color::Yellow)),
+                            ]
+                        }
+                        "SessionEnd" => {
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{25A1} ", Style::default().fg(Color::Red)), // □
+                                Span::styled("Session ended", Style::default().fg(Color::Red)),
+                            ]
+                        }
+                        _ => {
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::raw(&event.event_type),
+                            ]
+                        }
+                    };
+
+                    lines.push(Line::from(event_line));
+                }
+
+                if lines.is_empty() {
+                    Text::styled(
+                        "No events recorded",
+                        Style::default().fg(Color::DarkGray).italic(),
+                    )
+                } else {
+                    Text::from(lines)
+                }
+            }
+            Some(_) => Text::styled(
+                "Session active, no events yet",
+                Style::default().fg(Color::DarkGray).italic(),
+            ),
+            None => Text::styled(
+                "No Claude session\nPress 'c' to open Claude",
+                Style::default().fg(Color::DarkGray).italic(),
+            ),
+        };
+
+        let paragraph = Paragraph::new(content).wrap(Wrap { trim: false });
+        f.render_widget(paragraph, inner);
     }
 
     fn render_help(&self, f: &mut Frame, area: Rect) {
@@ -837,6 +1345,10 @@ impl Dashboard {
             DashboardMode::Normal => {
                 let selected = self.get_selected_worktree();
                 let is_main = selected.as_ref().map(|w| w.info.is_main).unwrap_or(true);
+                let has_linear = selected
+                    .as_ref()
+                    .map(|w| self.linear_issues.contains_key(&w.info.name))
+                    .unwrap_or(false);
 
                 let mut spans = vec![
                     Span::styled(" \u{2191}/\u{2193}", Style::default().fg(Color::Cyan)),
@@ -849,13 +1361,15 @@ impl Dashboard {
                     Span::styled(": new  ", Style::default().fg(Color::DarkGray)),
                 ];
 
-                // Only show d/m for non-main worktrees
+                // Only show d/m/r for non-main worktrees
                 if !is_main {
                     spans.extend(vec![
                         Span::styled("d", Style::default().fg(Color::Cyan)),
                         Span::styled(": delete  ", Style::default().fg(Color::DarkGray)),
                         Span::styled("m", Style::default().fg(Color::Cyan)),
                         Span::styled(": merge  ", Style::default().fg(Color::DarkGray)),
+                        Span::styled("r", Style::default().fg(Color::Cyan)),
+                        Span::styled(": review  ", Style::default().fg(Color::DarkGray)),
                     ]);
                 }
 
@@ -863,6 +1377,26 @@ impl Dashboard {
                 spans.extend(vec![
                     Span::styled("s", Style::default().fg(Color::Cyan)),
                     Span::styled(": sync  ", Style::default().fg(Color::DarkGray)),
+                ]);
+
+                // Show c: claude for all worktrees
+                spans.extend(vec![
+                    Span::styled("c", Style::default().fg(Color::Cyan)),
+                    Span::styled(": claude  ", Style::default().fg(Color::DarkGray)),
+                ]);
+
+                // Show l: linear only if worktree has a Linear issue
+                if has_linear {
+                    spans.extend(vec![
+                        Span::styled("l", Style::default().fg(Color::Cyan)),
+                        Span::styled(": linear  ", Style::default().fg(Color::DarkGray)),
+                    ]);
+                }
+
+                // Tab to toggle panel view
+                spans.extend(vec![
+                    Span::styled("Tab", Style::default().fg(Color::Cyan)),
+                    Span::styled(": panel  ", Style::default().fg(Color::DarkGray)),
                 ]);
 
                 spans.extend(vec![
@@ -886,5 +1420,16 @@ impl Dashboard {
         let paragraph =
             Paragraph::new(help_text).style(Style::default().bg(Color::Rgb(30, 30, 30)));
         f.render_widget(paragraph, area);
+    }
+}
+
+/// Truncate a string to a maximum length, adding "..." if truncated
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else if max_len <= 3 {
+        ".".repeat(max_len)
+    } else {
+        format!("{}...", &s[..max_len - 3])
     }
 }

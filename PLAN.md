@@ -43,7 +43,7 @@
 
 ### Future Ideas
 
-- [ ] Linear integration - Fetch issue info for JOH-XXX branch names
+- [ ] Linear integration - Fetch issue info for Linear issue branch names
 - [ ] GitHub/GitLab PR status in worktree list
 - [ ] Worktree templates (pre-configured files/settings)
 - [ ] Multi-repo support (monorepo worktrees)

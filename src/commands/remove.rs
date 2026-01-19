@@ -6,6 +6,7 @@ use std::io::{self, Write};
 use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::{WorktreeInfo, WorktreeManager};
+use crate::linear;
 use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
 use crate::sesh;
 use crate::tmux;
@@ -210,6 +211,9 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     if sesh::unregister_worktree(&project_name, &worktree.name)? {
         println!("{} Unregistered sesh session", "✓".green());
     }
+
+    // Clean up Linear cache
+    let _ = linear::delete_metadata(&project_name, &worktree.name);
 
     // Offer to delete the branch
     if let Some(ref branch) = worktree.branch {

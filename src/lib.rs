@@ -1,8 +1,10 @@
+pub mod claude;
 pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod error;
 pub mod git;
+pub mod linear;
 pub mod output;
 pub mod sesh;
 pub mod sync;

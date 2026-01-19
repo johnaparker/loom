@@ -6,6 +6,9 @@ pub enum GwtError {
     #[error("Worktree '{name}' not found")]
     WorktreeNotFound { name: String },
 
+    #[error("Worktree '{name}' already exists")]
+    WorktreeAlreadyExists { name: String },
+
     #[error("Cannot merge the main worktree")]
     CannotMergeMain,
 
@@ -32,6 +35,18 @@ pub enum GwtError {
 
     #[error("Worktree has uncommitted changes")]
     UncommittedChanges,
+
+    #[error("Linear issue '{issue_id}' not found")]
+    LinearIssueNotFound { issue_id: String },
+
+    #[error("Linear API key required to fetch issue '{issue_id}'")]
+    LinearApiKeyRequired { issue_id: String },
+
+    #[error("Linear API error: {message}")]
+    LinearApiError { message: String },
+
+    #[error("No Linear issue associated with this worktree")]
+    NoLinearIssue,
 }
 
 impl GwtError {
@@ -39,6 +54,9 @@ impl GwtError {
         match self {
             GwtError::WorktreeNotFound { .. } => {
                 Some("Run 'gwt list' to see available worktrees".to_string())
+            }
+            GwtError::WorktreeAlreadyExists { name } => {
+                Some(format!("Use 'gwt switch {}' to switch to it, or choose a different name", name))
             }
             GwtError::CannotMergeMain => {
                 Some("You can only merge feature branches into main".to_string())
@@ -69,6 +87,18 @@ impl GwtError {
             }
             GwtError::UncommittedChanges => {
                 Some("Commit or stash your changes before syncing".to_string())
+            }
+            GwtError::LinearIssueNotFound { .. } => {
+                Some("Check the issue ID and try again, or provide the full branch name".to_string())
+            }
+            GwtError::LinearApiKeyRequired { .. } => {
+                Some("Configure linear.api_key in ~/.config/gwt/config.toml, or provide the full branch name".to_string())
+            }
+            GwtError::LinearApiError { .. } => {
+                Some("Check your Linear API key and network connection".to_string())
+            }
+            GwtError::NoLinearIssue => {
+                Some("This worktree was not created from a Linear issue ID".to_string())
             }
         }
     }

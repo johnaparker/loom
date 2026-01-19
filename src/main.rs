@@ -43,11 +43,20 @@ fn run() -> Result<()> {
         Commands::Sync { name, dry_run } => {
             commands::sync(name.as_deref(), dry_run)?;
         }
+        Commands::Review => {
+            commands::review()?;
+        }
         Commands::Main => {
             commands::main_cmd()?;
         }
+        Commands::Linear => {
+            commands::linear_cmd()?;
+        }
         Commands::Completions { shell } => {
             commands::completions(shell)?;
+        }
+        Commands::Hook { event } => {
+            commands::hook(&event)?;
         }
     }
 

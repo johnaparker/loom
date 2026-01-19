@@ -67,4 +67,14 @@ impl Config {
     pub fn sesh_auto_register(&self) -> bool {
         self.global.sesh.auto_register
     }
+
+    /// Get the Linear team prefix (e.g., "ABC")
+    pub fn linear_prefix(&self) -> Option<&str> {
+        self.global.linear.team_prefix.as_deref()
+    }
+
+    /// Get the Linear API key
+    pub fn linear_api_key(&self) -> Option<&str> {
+        self.global.linear.api_key.as_deref()
+    }
 }

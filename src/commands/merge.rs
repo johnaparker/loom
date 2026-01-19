@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::WorktreeManager;
+use crate::linear;
 use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
 use crate::sesh;
 
@@ -86,6 +87,9 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     if sesh::unregister_worktree(&project_name, name)? {
         println!("{} Unregistered sesh session", "✓".green());
     }
+
+    // Clean up Linear cache
+    let _ = linear::delete_metadata(&project_name, name);
 
     println!();
     println!(

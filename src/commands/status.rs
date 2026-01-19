@@ -8,7 +8,9 @@ use std::io::{self, stdout};
 
 use crate::cli::Category;
 use crate::config::Config;
+use crate::error::GwtError;
 use crate::git::WorktreeManager;
+use crate::linear;
 use crate::sesh;
 use crate::sync;
 use crate::tmux;
@@ -54,7 +56,9 @@ fn run_dashboard_loop(
             DashboardResult::SwitchTo(wt) => {
                 let session = sesh::session_name(project_name, &wt.info.name);
                 tmux::switch_to_session(&session, wt.info.path.to_str().unwrap())?;
-                return Ok(());
+                dashboard.show_result(true, format!("Switched to '{}'", wt.info.name));
+                let worktrees = manager.list_worktrees_with_stats()?;
+                dashboard.update_worktrees(worktrees);
             }
             DashboardResult::Quit => {
                 return Ok(());
@@ -217,6 +221,90 @@ fn run_dashboard_loop(
                 let worktrees = manager.list_worktrees_with_stats()?;
                 dashboard.update_worktrees(worktrees);
             }
+            DashboardResult::Review { worktree } => {
+                let session = sesh::session_name(project_name, &worktree.info.name);
+                let path_str = worktree.info.path.to_str().unwrap();
+                let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
+
+                // Use merge-base to show only the worktree's changes since branching
+                // This avoids showing changes main has that the worktree doesn't
+                // Wrap in bash -c so command substitution is evaluated
+                // exec $SHELL keeps window open after nvim exits
+                let nvim_command = format!(
+                    "bash -c 'nvim -c \"DiffviewOpen $(git merge-base {} HEAD)\"; exec $SHELL'",
+                    main_branch
+                );
+
+                if tmux::session_exists(&session) {
+                    // Session exists - create new window with diff command
+                    tmux::create_window(&session, "review", path_str, &nvim_command)?;
+                } else {
+                    // Session doesn't exist - create it with diff as first window
+                    tmux::create_session_with_command(&session, path_str, &nvim_command)?;
+                }
+
+                // Switch to the session
+                tmux::switch_to_session(&session, path_str)?;
+                dashboard.show_result(true, format!("Opened review for '{}'", worktree.info.name));
+                let worktrees = manager.list_worktrees_with_stats()?;
+                dashboard.update_worktrees(worktrees);
+            }
+            DashboardResult::Claude { worktree } => {
+                let session = sesh::session_name(project_name, &worktree.info.name);
+                let path_str = worktree.info.path.to_str().unwrap();
+
+                // Run claude, then keep window open with a shell after it exits
+                let claude_command = "bash -c 'claude; exec $SHELL'";
+
+                if tmux::session_exists(&session) {
+                    // Check if Claude is actively running in ANY pane (by checking pane title)
+                    // Try "Claude" first (normal mode), then "✳" (other modes like multi-pane)
+                    let claude_pane = tmux::find_pane_with_title(&session, "Claude")
+                        .or_else(|| tmux::find_pane_with_title(&session, "✳"));
+                    if let Some(location) = claude_pane {
+                        // Claude is running - switch to that specific pane
+                        tmux::switch_to_session(&session, path_str)?;
+                        tmux::switch_to_pane(&session, &location)?;
+                    } else {
+                        // No active Claude anywhere - create new window
+                        tmux::create_window(&session, "claude", path_str, claude_command)?;
+                        tmux::switch_to_session(&session, path_str)?;
+                    }
+                } else {
+                    // Session doesn't exist - create it with claude as first window
+                    tmux::create_session_with_command(&session, path_str, claude_command)?;
+                    tmux::switch_to_session(&session, path_str)?;
+                }
+
+                dashboard.show_result(true, format!("Opened Claude for '{}'", worktree.info.name));
+                let worktrees = manager.list_worktrees_with_stats()?;
+                dashboard.update_worktrees(worktrees);
+            }
+            DashboardResult::Linear { worktree } => {
+                // Read Linear metadata and open URL
+                if let Ok(Some(issue)) = linear::read_metadata(project_name, &worktree.info.name) {
+                    if !issue.url.is_empty() {
+                        // Convert to desktop app URL scheme (linear:// instead of https://linear.app/)
+                        let desktop_url = issue.url.replace("https://linear.app/", "linear://");
+                        #[cfg(target_os = "macos")]
+                        {
+                            std::process::Command::new("open").arg(&desktop_url).spawn()?;
+                        }
+                        #[cfg(target_os = "linux")]
+                        {
+                            std::process::Command::new("xdg-open").arg(&desktop_url).spawn()?;
+                        }
+                        #[cfg(target_os = "windows")]
+                        {
+                            std::process::Command::new("cmd")
+                                .args(["/C", "start", &desktop_url])
+                                .spawn()?;
+                        }
+                        dashboard.show_result(true, format!("Opened {}", issue.id));
+                    }
+                }
+                // Stay in dashboard - don't exit
+            }
             DashboardResult::CreateNew { branch, category } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,
@@ -227,15 +315,15 @@ fn run_dashboard_loop(
                 let result = execute_create(&manager, &config, project_name, &branch, cat);
 
                 match result {
-                    Ok(_session_name) => {
-                        // Successfully created - show result
-                        dashboard.show_result(true, format!("Created worktree '{}'", branch));
+                    Ok((session_name, worktree_path)) => {
+                        // Successfully created - switch to the new session
+                        tmux::switch_to_session(&session_name, worktree_path.to_str().unwrap())?;
+                        dashboard.show_result(true, format!("Created and switched to '{}'", branch));
                     }
                     Err(e) => {
                         dashboard.show_result(false, format!("Failed to create: {}", e));
                     }
                 }
-
                 // Refresh worktrees
                 let worktrees = manager.list_worktrees_with_stats()?;
                 dashboard.update_worktrees(worktrees);
@@ -269,6 +357,9 @@ fn execute_delete(
 
     // Unregister from sesh
     sesh::unregister_worktree(project_name, name)?;
+
+    // Clean up Linear cache
+    let _ = linear::delete_metadata(project_name, name);
 
     // Delete branch if requested
     if delete_branch {
@@ -304,6 +395,9 @@ fn execute_merge(
     // Unregister from sesh
     sesh::unregister_worktree(project_name, name)?;
 
+    // Clean up Linear cache
+    let _ = linear::delete_metadata(project_name, name);
+
     // Delete branch if requested
     if delete_branch {
         manager.delete_branch(branch, true)?;
@@ -338,23 +432,40 @@ fn execute_create(
     project_name: &str,
     branch: &str,
     category: Category,
-) -> Result<String> {
+) -> Result<(String, std::path::PathBuf)> {
     let worktree_root = config.worktree_root()?;
 
-    // Sanitize branch name for filesystem
-    let sanitized_name = branch.replace('/', "-");
+    // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
+    let resolved = linear::resolve_input(
+        branch,
+        config.linear_prefix(),
+        config.linear_api_key(),
+    )?;
+
+    // Check if worktree already exists
+    if let Some(_existing) = manager.get_worktree(&resolved.worktree_name)? {
+        return Err(GwtError::WorktreeAlreadyExists {
+            name: resolved.worktree_name,
+        }
+        .into());
+    }
 
     // Build worktree path: ~/worktrees/{project}/{category}/{name}
     let worktree_path = worktree_root
         .join(project_name)
         .join(category.to_string())
-        .join(&sanitized_name);
+        .join(&resolved.worktree_name);
 
     // Fetch from origin to ensure we have the latest refs
     let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
 
     // Create the worktree
-    manager.create_worktree(branch, &worktree_path)?;
+    manager.create_worktree(&resolved.git_branch, &worktree_path)?;
+
+    // Write Linear metadata if we have issue info
+    if let Some(ref issue) = resolved.issue {
+        linear::write_metadata(project_name, &resolved.worktree_name, issue)?;
+    }
 
     // Sync files from main repo
     let patterns = config.sync_patterns();
@@ -368,14 +479,14 @@ fn execute_create(
     }
 
     // Register with sesh if enabled
-    let session_name = sesh::session_name(project_name, &sanitized_name);
+    let session_name = sesh::session_name(project_name, &resolved.worktree_name);
     if config.sesh_auto_register() {
         sesh::register_worktree(
             project_name,
-            &sanitized_name,
+            &resolved.worktree_name,
             worktree_path.to_str().unwrap(),
         )?;
     }
 
-    Ok(session_name)
+    Ok((session_name, worktree_path))
 }

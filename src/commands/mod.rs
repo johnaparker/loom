@@ -1,19 +1,25 @@
 mod completions;
+mod hook;
+mod linear;
 mod list;
 mod main_cmd;
 mod merge;
 mod new;
 mod remove;
+mod review;
 mod status;
 mod switch;
 mod sync;
 
 pub use completions::completions;
+pub use hook::hook;
+pub use linear::linear_cmd;
 pub use list::list;
 pub use main_cmd::main_cmd;
 pub use merge::merge;
 pub use new::new;
 pub use remove::remove;
+pub use review::review;
 pub use status::status;
 pub use switch::switch;
 pub use sync::sync;

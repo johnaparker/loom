@@ -79,15 +79,30 @@ pub enum Commands {
         dry_run: bool,
     },
 
+    /// Review worktree changes vs main in neovim Diffview
+    #[command(visible_alias = "rev")]
+    Review,
+
     /// Switch to the main branch tmux session
     #[command(visible_alias = "ma")]
     Main,
+
+    /// Open the Linear issue for the current worktree
+    #[command(visible_alias = "li")]
+    Linear,
 
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
+    },
+
+    /// Handle Claude Code hook events (internal use)
+    #[command(hide = true)]
+    Hook {
+        /// Event type: user-prompt, stop, notification, session-start, session-end, tool-use
+        event: String,
     },
 }
 
