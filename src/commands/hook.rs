@@ -98,8 +98,8 @@ fn handle_notification(
     // Check notification type
     let kind = json["type"].as_str().or_else(|| json["kind"].as_str());
     let message = json["message"].as_str().map(|s| {
-        if s.len() > 100 {
-            format!("{}...", &s[..97])
+        if s.len() > 200 {
+            format!("{}...", &s[..197])
         } else {
             s.to_string()
         }
@@ -161,40 +161,36 @@ fn handle_tool_use(
         .map(|s| s.to_string());
 
     // Extract detailed info from tool_input based on tool type
+    // Store up to 200 chars - dashboard will truncate to fit display width
     let tool_input = &json["tool_input"];
     let detail = match tool_name.as_deref() {
         Some("Read") => tool_input["file_path"]
             .as_str()
-            .map(|p| shorten_path(p, 60)),
+            .map(|p| shorten_path(p, 200)),
         Some("Edit") => tool_input["file_path"]
             .as_str()
-            .map(|p| shorten_path(p, 60)),
+            .map(|p| shorten_path(p, 200)),
         Some("Write") => tool_input["file_path"]
             .as_str()
-            .map(|p| shorten_path(p, 60)),
-        Some("Bash") => tool_input["command"].as_str().map(|c| {
-            let trimmed = c.trim();
-            if trimmed.len() > 80 {
-                format!("{}...", &trimmed[..77])
-            } else {
-                trimmed.to_string()
-            }
-        }),
+            .map(|p| shorten_path(p, 200)),
+        Some("Bash") => tool_input["command"]
+            .as_str()
+            .map(|c| truncate_str(c, 200)),
         Some("Grep") => tool_input["pattern"]
             .as_str()
-            .map(|p| truncate_str(p, 40)),
+            .map(|p| truncate_str(p, 200)),
         Some("Glob") => tool_input["pattern"]
             .as_str()
-            .map(|p| truncate_str(p, 40)),
+            .map(|p| truncate_str(p, 200)),
         Some("Task") => tool_input["description"]
             .as_str()
-            .map(|d| truncate_str(d, 60)),
+            .map(|d| truncate_str(d, 200)),
         Some("WebFetch") => tool_input["url"]
             .as_str()
-            .map(|u| truncate_str(u, 60)),
+            .map(|u| truncate_str(u, 200)),
         Some("WebSearch") => tool_input["query"]
             .as_str()
-            .map(|q| truncate_str(q, 60)),
+            .map(|q| truncate_str(q, 200)),
         _ => None,
     };
 
