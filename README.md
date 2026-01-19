@@ -1,4 +1,4 @@
-# gwt - Git Worktree Manager
+# Git Worktree Manager
 
 A Rust CLI/TUI for managing git worktrees with tmux/sesh integration, designed for trunk-based development workflows.
 
