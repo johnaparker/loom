@@ -11,6 +11,9 @@ use ratatui::{
 };
 use std::collections::HashMap;
 use std::io::{self, stdout};
+use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::claude::{self, ClaudeSession, ClaudeState};
@@ -84,6 +87,9 @@ enum RightPanelView {
     GitHub,
 }
 
+/// Result of async GitHub PR fetch
+type GitHubPRResult = (String, Option<GitHubPR>); // (worktree_name, pr)
+
 /// Interactive dashboard for worktree status
 pub struct Dashboard {
     worktrees: Vec<WorktreeStats>,
@@ -91,7 +97,7 @@ pub struct Dashboard {
     selected: usize,
     list_state: ListState,
     project_name: String,
-    repo_root: std::path::PathBuf,
+    repo_root: PathBuf,
     mode: DashboardMode,
     search_input: String,
     matcher: Matcher,
@@ -113,13 +119,19 @@ pub struct Dashboard {
     has_active_claude: bool,
     /// Current view for the right panel (Commits or Linear)
     right_panel_view: RightPanelView,
+    /// Channel for receiving async GitHub PR results
+    github_pr_receiver: Receiver<GitHubPRResult>,
+    /// Sender for spawning async GitHub PR fetches
+    github_pr_sender: Sender<GitHubPRResult>,
+    /// Worktrees currently loading GitHub PR data
+    github_loading: std::collections::HashSet<String>,
 }
 
 impl Dashboard {
     pub fn new(
         worktrees: Vec<WorktreeStats>,
         project_name: String,
-        repo_root: std::path::PathBuf,
+        repo_root: PathBuf,
     ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
         let mut list_state = ListState::default();
@@ -130,8 +142,11 @@ impl Dashboard {
         // Load Linear issues for all worktrees
         let linear_issues = Self::load_linear_issues(&project_name, &worktrees);
 
-        // Load GitHub PRs for all worktrees (fetches from API if not cached)
-        let github_prs = Self::load_github_prs(&project_name, &worktrees, &repo_root);
+        // Load GitHub PRs from cache only (API fetch happens lazily when GitHub panel is viewed)
+        let github_prs = Self::load_github_prs_from_cache(&project_name, &worktrees);
+
+        // Create channel for async GitHub PR fetches
+        let (github_pr_sender, github_pr_receiver) = mpsc::channel();
 
         let mut dashboard = Self {
             worktrees,
@@ -152,6 +167,9 @@ impl Dashboard {
             animation_frame: 0,
             has_active_claude: false,
             right_panel_view: RightPanelView::default(),
+            github_pr_receiver,
+            github_pr_sender,
+            github_loading: std::collections::HashSet::new(),
         };
 
         // Load initial Claude states
@@ -176,35 +194,82 @@ impl Dashboard {
         issues
     }
 
-    /// Load GitHub PRs for all worktrees (from cache or API)
-    fn load_github_prs(
+    /// Load GitHub PRs from cache only (lazy loading - API fetch happens when panel is viewed)
+    fn load_github_prs_from_cache(
         project_name: &str,
         worktrees: &[WorktreeStats],
-        repo_root: &std::path::Path,
     ) -> HashMap<String, GitHubPR> {
         let mut prs = HashMap::new();
         for wt in worktrees {
-            // Skip main worktree
-            if wt.info.is_main {
-                continue;
-            }
-
-            // Try cache first
             if let Ok(Some(pr)) = github::read_pr_cache(project_name, &wt.info.name) {
                 prs.insert(wt.info.name.clone(), pr);
-                continue;
-            }
-
-            // Not in cache - fetch from GitHub API
-            if let Some(branch) = &wt.info.branch {
-                if let Ok(Some(pr)) = github::get_pr_for_branch(repo_root, branch) {
-                    // Cache the result
-                    let _ = github::write_pr_cache(project_name, &wt.info.name, &pr);
-                    prs.insert(wt.info.name.clone(), pr);
-                }
             }
         }
         prs
+    }
+
+    /// Spawn async fetch of GitHub PR for the selected worktree (non-blocking)
+    fn fetch_github_pr_for_selected(&mut self) {
+        let Some(worktree) = self.get_selected_worktree() else {
+            return;
+        };
+
+        // Skip main worktree
+        if worktree.info.is_main {
+            return;
+        }
+
+        let worktree_name = worktree.info.name.clone();
+        let branch = match &worktree.info.branch {
+            Some(b) => b.clone(),
+            None => return,
+        };
+
+        // Skip if already loading this worktree
+        if self.github_loading.contains(&worktree_name) {
+            return;
+        }
+
+        // Mark as loading
+        self.github_loading.insert(worktree_name.clone());
+
+        // Clone data needed for the thread
+        let repo_root = self.repo_root.clone();
+        let project_name = self.project_name.clone();
+        let sender = self.github_pr_sender.clone();
+
+        // Spawn thread to fetch PR
+        thread::spawn(move || {
+            let pr = github::get_pr_for_branch(&repo_root, &branch).ok().flatten();
+
+            // Cache the result
+            if let Some(ref pr) = pr {
+                let _ = github::write_pr_cache(&project_name, &worktree_name, pr);
+            } else {
+                let _ = github::delete_pr_cache(&project_name, &worktree_name);
+            }
+
+            // Send result back (ignore error if receiver is gone)
+            let _ = sender.send((worktree_name, pr));
+        });
+    }
+
+    /// Check for completed async GitHub PR fetches and update state
+    pub fn poll_github_results(&mut self) {
+        // Non-blocking receive of all pending results
+        while let Ok((worktree_name, pr)) = self.github_pr_receiver.try_recv() {
+            self.github_loading.remove(&worktree_name);
+            if let Some(pr) = pr {
+                self.github_prs.insert(worktree_name, pr);
+            } else {
+                self.github_prs.remove(&worktree_name);
+            }
+        }
+    }
+
+    /// Check if a worktree's GitHub PR is currently loading
+    fn is_github_loading(&self, worktree_name: &str) -> bool {
+        self.github_loading.contains(worktree_name)
     }
 
     /// Refresh Claude session states for all worktrees
@@ -254,8 +319,8 @@ impl Dashboard {
         // Refresh Linear issues
         self.linear_issues = Self::load_linear_issues(&self.project_name, &worktrees);
 
-        // Refresh GitHub PRs
-        self.github_prs = Self::load_github_prs(&self.project_name, &worktrees, &self.repo_root);
+        // Refresh GitHub PRs from cache (API fetch happens lazily)
+        self.github_prs = Self::load_github_prs_from_cache(&self.project_name, &worktrees);
 
         self.worktrees = worktrees;
         self.filter_worktrees();
@@ -349,10 +414,14 @@ impl Dashboard {
         let last_refresh = Instant::now();
 
         loop {
+            // Check for completed async GitHub PR fetches
+            self.poll_github_results();
+
             terminal.draw(|f| self.render(f))?;
 
-            // Use short interval when animating, otherwise wait for full refresh
-            let poll_timeout = if self.has_active_claude {
+            // Use short interval when animating or loading GitHub data
+            let has_pending_github = !self.github_loading.is_empty();
+            let poll_timeout = if self.has_active_claude || has_pending_github {
                 ANIMATION_INTERVAL
             } else {
                 // Calculate remaining time until next refresh
@@ -604,6 +673,10 @@ impl Dashboard {
                     RightPanelView::Linear => RightPanelView::GitHub,
                     RightPanelView::GitHub => RightPanelView::Commits,
                 };
+                // Fetch GitHub PR when switching to GitHub panel
+                if matches!(self.right_panel_view, RightPanelView::GitHub) {
+                    self.fetch_github_pr_for_selected();
+                }
                 None
             }
             _ => None,
@@ -658,6 +731,11 @@ impl Dashboard {
         let new = (current + delta).rem_euclid(len) as usize;
         self.selected = new;
         self.list_state.select(Some(new));
+
+        // Fetch GitHub PR when selection changes while on GitHub panel
+        if matches!(self.right_panel_view, RightPanelView::GitHub) {
+            self.fetch_github_pr_for_selected();
+        }
     }
 
     fn filter_worktrees(&mut self) {
@@ -1207,24 +1285,40 @@ impl Dashboard {
     }
 
     fn render_github_panel(&self, f: &mut Frame, area: Rect) {
-        // Get the selected worktree's GitHub PR
-        let pr = self
-            .get_selected_worktree()
+        // Get the selected worktree info
+        let worktree = self.get_selected_worktree();
+        let worktree_name = worktree.as_ref().map(|wt| wt.info.name.as_str());
+        let pr = worktree
+            .as_ref()
             .and_then(|wt| self.github_prs.get(&wt.info.name));
+        let is_loading = worktree_name
+            .map(|name| self.is_github_loading(name))
+            .unwrap_or(false);
 
-        let is_main = self
-            .get_selected_worktree()
+        let is_main = worktree
+            .as_ref()
             .map(|wt| wt.info.is_main)
             .unwrap_or(true);
 
-        // Build title with tab toggle indicator
-        let title = Line::from(vec![
-            Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
-            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("Linear", Style::default().fg(Color::DarkGray)),
-            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("GitHub ", Style::default().fg(Color::White)),
-        ]);
+        // Build title with tab toggle indicator and loading state
+        let title = if is_loading {
+            Line::from(vec![
+                Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
+                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Linear", Style::default().fg(Color::DarkGray)),
+                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+                Span::styled("GitHub ", Style::default().fg(Color::White)),
+                Span::styled("⟳", Style::default().fg(Color::Yellow)),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
+                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Linear", Style::default().fg(Color::DarkGray)),
+                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+                Span::styled("GitHub ", Style::default().fg(Color::White)),
+            ])
+        };
 
         let block = Block::default().borders(Borders::ALL).title(title);
         let inner = block.inner(area);
@@ -1234,6 +1328,11 @@ impl Dashboard {
             Text::styled(
                 "Main branch - no PR",
                 Style::default().fg(Color::DarkGray).italic(),
+            )
+        } else if is_loading && pr.is_none() {
+            Text::styled(
+                "Loading...",
+                Style::default().fg(Color::Yellow).italic(),
             )
         } else {
             match pr {
