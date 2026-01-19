@@ -79,6 +79,10 @@ pub enum Commands {
         dry_run: bool,
     },
 
+    /// Review worktree changes vs main in neovim Diffview
+    #[command(visible_alias = "rev")]
+    Review,
+
     /// Switch to the main branch tmux session
     #[command(visible_alias = "ma")]
     Main,
