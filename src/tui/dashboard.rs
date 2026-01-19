@@ -40,6 +40,8 @@ pub enum DashboardResult {
     Sync { worktree: WorktreeStats },
     /// Review a worktree's changes vs main
     Review { worktree: WorktreeStats },
+    /// Open Claude in the worktree
+    Claude { worktree: WorktreeStats },
     /// Create a new worktree
     CreateNew { branch: String, category: String },
     /// Refresh the dashboard (after an action)
@@ -411,6 +413,13 @@ impl Dashboard {
                     if !worktree.info.is_main {
                         return Some(DashboardResult::Review { worktree });
                     }
+                }
+                None
+            }
+            KeyCode::Char('c') => {
+                // Claude - open claude in tmux window for any worktree
+                if let Some(worktree) = self.get_selected_worktree() {
+                    return Some(DashboardResult::Claude { worktree });
                 }
                 None
             }
@@ -876,6 +885,12 @@ impl Dashboard {
                 spans.extend(vec![
                     Span::styled("s", Style::default().fg(Color::Cyan)),
                     Span::styled(": sync  ", Style::default().fg(Color::DarkGray)),
+                ]);
+
+                // Show c: claude for all worktrees
+                spans.extend(vec![
+                    Span::styled("c", Style::default().fg(Color::Cyan)),
+                    Span::styled(": claude  ", Style::default().fg(Color::DarkGray)),
                 ]);
 
                 spans.extend(vec![

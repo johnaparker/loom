@@ -225,8 +225,9 @@ fn run_dashboard_loop(
                 // Use merge-base to show only the worktree's changes since branching
                 // This avoids showing changes main has that the worktree doesn't
                 // Wrap in bash -c so command substitution is evaluated
+                // exec $SHELL keeps window open after nvim exits
                 let nvim_command = format!(
-                    "bash -c 'nvim -c \"DiffviewOpen $(git merge-base {} HEAD)\"'",
+                    "bash -c 'nvim -c \"DiffviewOpen $(git merge-base {} HEAD)\"; exec $SHELL'",
                     main_branch
                 );
 
@@ -236,6 +237,25 @@ fn run_dashboard_loop(
                 } else {
                     // Session doesn't exist - create it with diff as first window
                     tmux::create_session_with_command(&session, path_str, &nvim_command)?;
+                }
+
+                // Switch to the session
+                tmux::switch_to_session(&session, path_str)?;
+                return Ok(());
+            }
+            DashboardResult::Claude { worktree } => {
+                let session = sesh::session_name(project_name, &worktree.info.name);
+                let path_str = worktree.info.path.to_str().unwrap();
+
+                // Run claude, then keep window open with a shell after it exits
+                let claude_command = "bash -c 'claude; exec $SHELL'";
+
+                if tmux::session_exists(&session) {
+                    // Session exists - create new window running claude
+                    tmux::create_window(&session, "claude", path_str, claude_command)?;
+                } else {
+                    // Session doesn't exist - create it with claude as first window
+                    tmux::create_session_with_command(&session, path_str, claude_command)?;
                 }
 
                 // Switch to the session
