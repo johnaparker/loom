@@ -217,6 +217,31 @@ fn run_dashboard_loop(
                 let worktrees = manager.list_worktrees_with_stats()?;
                 dashboard.update_worktrees(worktrees);
             }
+            DashboardResult::Review { worktree } => {
+                let session = sesh::session_name(project_name, &worktree.info.name);
+                let path_str = worktree.info.path.to_str().unwrap();
+                let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
+
+                // Use merge-base to show only the worktree's changes since branching
+                // This avoids showing changes main has that the worktree doesn't
+                // Wrap in bash -c so command substitution is evaluated
+                let nvim_command = format!(
+                    "bash -c 'nvim -c \"DiffviewOpen $(git merge-base {} HEAD)\"'",
+                    main_branch
+                );
+
+                if tmux::session_exists(&session) {
+                    // Session exists - create new window with diff command
+                    tmux::create_window(&session, "review", path_str, &nvim_command)?;
+                } else {
+                    // Session doesn't exist - create it with diff as first window
+                    tmux::create_session_with_command(&session, path_str, &nvim_command)?;
+                }
+
+                // Switch to the session
+                tmux::switch_to_session(&session, path_str)?;
+                return Ok(());
+            }
             DashboardResult::CreateNew { branch, category } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,

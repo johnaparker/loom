@@ -43,6 +43,49 @@ pub fn create_session(session_name: &str, path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Create a tmux session with a specific command in the first window
+pub fn create_session_with_command(session_name: &str, path: &str, command: &str) -> Result<()> {
+    let output = Command::new("tmux")
+        .args([
+            "new-session",
+            "-d",
+            "-s",
+            session_name,
+            "-c",
+            path,
+            command,
+        ])
+        .output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("Failed to create tmux session: {}", stderr));
+    }
+    Ok(())
+}
+
+/// Create a new window in an existing tmux session
+pub fn create_window(session_name: &str, window_name: &str, path: &str, command: &str) -> Result<()> {
+    let output = Command::new("tmux")
+        .args([
+            "new-window",
+            "-t",
+            session_name,
+            "-n",
+            window_name,
+            "-c",
+            path,
+            command,
+        ])
+        .output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("Failed to create tmux window: {}", stderr));
+    }
+    Ok(())
+}
+
 /// Kill a tmux session if it exists
 pub fn kill_session(session_name: &str) -> bool {
     if !session_exists(session_name) {
