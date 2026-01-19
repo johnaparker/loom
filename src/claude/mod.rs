@@ -164,7 +164,15 @@ pub fn effective_state(session: &ClaudeSession) -> ClaudeState {
             }
             // SessionCleared means the session was reset, Claude is now idle
             "SessionCleared" => ClaudeState::Idle,
-            // UserPromptSubmit, ToolUse, SessionStart all mean working
+            // SessionStart: startup and resume mean Claude is waiting for user input
+            // compact means Claude is doing background work
+            "SessionStart" => {
+                match event.kind.as_deref() {
+                    Some("startup") | Some("resume") => ClaudeState::Idle,
+                    _ => ClaudeState::Working,
+                }
+            }
+            // UserPromptSubmit, ToolUse all mean working
             _ => ClaudeState::Working,
         }
     } else {

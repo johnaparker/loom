@@ -111,13 +111,19 @@ fn handle_notification(
         Some("permission_prompt") | Some("permission") => {
             (ClaudeState::WaitingPermission, Some("permission".to_string()))
         }
+        Some("elicitation_dialog") => {
+            // MCP tool elicitation - Claude is waiting for user input
+            (ClaudeState::WaitingPermission, Some("elicitation".to_string()))
+        }
         Some("idle_prompt") | Some("idle") => {
             (ClaudeState::Idle, Some("idle".to_string()))
         }
         _ => {
             // Fallback: infer notification type from message content
             if let Some(msg) = message_raw {
-                if msg.contains("permission") || msg.contains("Permission") {
+                if msg.contains("permission") || msg.contains("Permission")
+                    || msg.contains("approval") || msg.contains("Approval")
+                {
                     (ClaudeState::WaitingPermission, Some("permission".to_string()))
                 } else if msg.contains("waiting for your input") {
                     (ClaudeState::Idle, Some("idle".to_string()))
