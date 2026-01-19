@@ -9,10 +9,12 @@ use ratatui::{
     prelude::*,
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
+use std::collections::HashMap;
 use std::io::{self, stdout};
 use std::time::Duration;
 
 use crate::git::WorktreeStats;
+use crate::linear;
 use crate::tui::modals::{
     ActionResultModal, DeleteConfirmModal, MergeConfirmModal, Modal, ModalAction, NewWorktreeModal,
     render_modal_overlay,
@@ -80,6 +82,8 @@ pub struct Dashboard {
     /// Status message to show in title bar (auto-clears on keypress)
     /// Tuple of (is_success, message)
     status_message: Option<(bool, String)>,
+    /// Cached Linear issue titles by worktree name
+    linear_titles: HashMap<String, String>,
 }
 
 impl Dashboard {
@@ -89,6 +93,9 @@ impl Dashboard {
         if !worktrees.is_empty() {
             list_state.select(Some(0));
         }
+
+        // Load Linear titles for all worktrees
+        let linear_titles = Self::load_linear_titles(&project_name, &worktrees);
 
         Self {
             worktrees,
@@ -102,7 +109,24 @@ impl Dashboard {
             main_branch: "main".to_string(),
             pending_result: None,
             status_message: None,
+            linear_titles,
         }
+    }
+
+    /// Load Linear issue titles from cache for all worktrees
+    fn load_linear_titles(
+        project_name: &str,
+        worktrees: &[WorktreeStats],
+    ) -> HashMap<String, String> {
+        let mut titles = HashMap::new();
+        for wt in worktrees {
+            if let Ok(Some(issue)) = linear::read_metadata(project_name, &wt.info.name) {
+                if !issue.title.is_empty() {
+                    titles.insert(wt.info.name.clone(), issue.title);
+                }
+            }
+        }
+        titles
     }
 
     /// Set the main branch name (for merge modal)
@@ -127,6 +151,9 @@ impl Dashboard {
     pub fn update_worktrees(&mut self, worktrees: Vec<WorktreeStats>) {
         // Remember currently selected worktree name
         let selected_name = self.get_selected_worktree().map(|w| w.info.name.clone());
+
+        // Refresh Linear titles
+        self.linear_titles = Self::load_linear_titles(&self.project_name, &worktrees);
 
         self.worktrees = worktrees;
         self.filter_worktrees();
@@ -642,7 +669,11 @@ impl Dashboard {
         let items: Vec<ListItem> = self
             .filtered_indices
             .iter()
-            .map(|&i| Self::format_worktree_item(&self.worktrees[i], content_width))
+            .map(|&i| {
+                let wt = &self.worktrees[i];
+                let linear_title = self.linear_titles.get(&wt.info.name).map(|s| s.as_str());
+                Self::format_worktree_item(wt, content_width, linear_title)
+            })
             .collect();
 
         let is_search = matches!(self.mode, DashboardMode::Search);
@@ -660,7 +691,11 @@ impl Dashboard {
         f.render_stateful_widget(list, area, &mut self.list_state);
     }
 
-    fn format_worktree_item(wt: &WorktreeStats, width: usize) -> ListItem<'static> {
+    fn format_worktree_item(
+        wt: &WorktreeStats,
+        width: usize,
+        linear_title: Option<&str>,
+    ) -> ListItem<'static> {
         let mut lines = Vec::new();
 
         // Line 1: Name, branch (left), Category badge (right)
@@ -713,6 +748,21 @@ impl Dashboard {
         }
 
         lines.push(Line::from(line1_spans));
+
+        // Line 1.5: Linear issue title (if available)
+        if let Some(title) = linear_title {
+            // Truncate if too long (leave room for indent, bullet and ellipsis)
+            let max_len = width.saturating_sub(6);
+            let display_title = if title.len() > max_len {
+                format!("    {}...", &title[..max_len.saturating_sub(3)])
+            } else {
+                format!("    {}", title)
+            };
+            lines.push(Line::from(Span::styled(
+                display_title,
+                Style::default().fg(Color::White).italic(),
+            )));
+        }
 
         // Line 2: Age (left), commits ahead (↑), commits behind (↓)
         let mut line2_spans = Vec::new();
