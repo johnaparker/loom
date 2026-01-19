@@ -162,7 +162,7 @@ pub fn effective_state(session: &ClaudeSession) -> ClaudeState {
                     _ => ClaudeState::Working,
                 }
             }
-            // UserPromptSubmit, ToolUse, SessionStart all mean working
+            // UserPromptSubmit, ToolUse, SessionStart, SessionCleared all mean working
             _ => ClaudeState::Working,
         }
     } else {

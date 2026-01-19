@@ -1119,6 +1119,16 @@ impl Dashboard {
                                 Span::styled("Session started", Style::default().fg(Color::Cyan)),
                             ]
                         }
+                        "SessionCleared" => {
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{21BB} ", Style::default().fg(Color::Yellow)), // ↻
+                                Span::styled("Session cleared", Style::default().fg(Color::Yellow)),
+                            ]
+                        }
                         "SessionEnd" => {
                             vec![
                                 Span::styled(

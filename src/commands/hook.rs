@@ -32,8 +32,8 @@ pub fn hook(event: &str) -> Result<()> {
         "user-prompt" => handle_user_prompt(&project, &worktree, session_id, &json)?,
         "stop" => handle_stop(&project, &worktree, session_id, &json)?,
         "notification" => handle_notification(&project, &worktree, session_id, &json)?,
-        "session-start" => handle_session_start(&project, &worktree, session_id)?,
-        "session-end" => handle_session_end(&project, &worktree, session_id)?,
+        "session-start" => handle_session_start(&project, &worktree, session_id, &json)?,
+        "session-end" => handle_session_end(&project, &worktree, session_id, &json)?,
         "tool-use" => handle_tool_use(&project, &worktree, session_id, &json)?,
         _ => {
             // Unknown event type, ignore
@@ -123,25 +123,66 @@ fn handle_notification(
     crate::claude::update_state_from_event(project, worktree, event, session_id, new_state)
 }
 
-fn handle_session_start(project: &str, worktree: &str, session_id: &str) -> Result<()> {
-    // Add session start event, preserving existing events
+fn handle_session_start(
+    project: &str,
+    worktree: &str,
+    session_id: &str,
+    json: &serde_json::Value,
+) -> Result<()> {
+    // Extract source: startup, resume, clear, compact
+    let source = json["source"].as_str();
+
+    // Check if this is a clear operation - combine with previous SessionEnd
+    if source == Some("clear") {
+        if let Some(mut session) = crate::claude::read_state(project, worktree) {
+            // Check if last event was SessionEnd with reason "clear"
+            if let Some(last_event) = session.events.last() {
+                if last_event.event_type == "SessionEnd"
+                    && last_event.kind.as_deref() == Some("clear")
+                {
+                    // Replace the SessionEnd with a SessionCleared event
+                    session.events.pop();
+                    session.events.push(ClaudeEvent {
+                        event_type: "SessionCleared".to_string(),
+                        timestamp: now_iso8601(),
+                        prompt_preview: None,
+                        kind: None,
+                        message: None,
+                    });
+                    session.session_id = session_id.to_string();
+                    session.state = ClaudeState::Working;
+                    return crate::claude::write_state(project, worktree, &session);
+                }
+            }
+        }
+    }
+
+    // Normal session start
     let event = ClaudeEvent {
         event_type: "SessionStart".to_string(),
         timestamp: now_iso8601(),
         prompt_preview: None,
-        kind: None,
+        kind: source.map(|s| s.to_string()),
         message: None,
     };
 
     crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Working)
 }
 
-fn handle_session_end(project: &str, worktree: &str, session_id: &str) -> Result<()> {
+fn handle_session_end(
+    project: &str,
+    worktree: &str,
+    session_id: &str,
+    json: &serde_json::Value,
+) -> Result<()> {
+    // Extract reason: clear, logout, prompt_input_exit, other
+    let reason = json["reason"].as_str().map(|s| s.to_string());
+
     let event = ClaudeEvent {
         event_type: "SessionEnd".to_string(),
         timestamp: now_iso8601(),
         prompt_preview: None,
-        kind: None,
+        kind: reason, // Store reason in kind field
         message: None,
     };
 
