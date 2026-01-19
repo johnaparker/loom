@@ -132,10 +132,8 @@ pub fn update_state_from_event(
         ClaudeSession::new(session_id.to_string(), ClaudeState::Inactive)
     });
 
-    // If session ID changed, clear old events
-    if session.session_id != session_id {
-        session = ClaudeSession::new(session_id.to_string(), new_state.clone());
-    }
+    // Update session ID if changed (preserve events for continuous log)
+    session.session_id = session_id.to_string();
 
     // Update state and add event
     session.state = new_state;

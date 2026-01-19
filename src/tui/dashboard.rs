@@ -1048,14 +1048,24 @@ impl Dashboard {
                                 Span::styled(kind, Style::default().fg(color)),
                             ]
                         }
+                        "SessionStart" => {
+                            vec![
+                                Span::styled(
+                                    format!("{:>8} ", time_str),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                                Span::styled("\u{25B7} ", Style::default().fg(Color::Cyan)), // ▷
+                                Span::styled("Session started", Style::default().fg(Color::Cyan)),
+                            ]
+                        }
                         "SessionEnd" => {
                             vec![
                                 Span::styled(
                                     format!("{:>8} ", time_str),
                                     Style::default().fg(Color::DarkGray),
                                 ),
-                                Span::styled("\u{25CB} ", Style::default().fg(Color::DarkGray)), // ○
-                                Span::styled("Session ended", Style::default().fg(Color::DarkGray)),
+                                Span::styled("\u{25A1} ", Style::default().fg(Color::Red)), // □
+                                Span::styled("Session ended", Style::default().fg(Color::Red)),
                             ]
                         }
                         _ => {

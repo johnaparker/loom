@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::io::{self, Read};
 use std::path::Path;
 
-use crate::claude::{ClaudeEvent, ClaudeSession, ClaudeState};
+use crate::claude::{ClaudeEvent, ClaudeState};
 
 /// Handle hook events from Claude Code
 /// Reads JSON from stdin, updates cache file
@@ -123,9 +123,16 @@ fn handle_notification(
 }
 
 fn handle_session_start(project: &str, worktree: &str, session_id: &str) -> Result<()> {
-    // Create a fresh session
-    let session = ClaudeSession::new(session_id.to_string(), ClaudeState::Working);
-    crate::claude::write_state(project, worktree, &session)
+    // Add session start event, preserving existing events
+    let event = ClaudeEvent {
+        event_type: "SessionStart".to_string(),
+        timestamp: now_iso8601(),
+        prompt_preview: None,
+        kind: None,
+        message: None,
+    };
+
+    crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Working)
 }
 
 fn handle_session_end(project: &str, worktree: &str, session_id: &str) -> Result<()> {
