@@ -257,15 +257,25 @@ fn run_dashboard_loop(
                 let claude_command = "bash -c 'claude; exec $SHELL'";
 
                 if tmux::session_exists(&session) {
-                    // Session exists - create new window running claude
-                    tmux::create_window(&session, "claude", path_str, claude_command)?;
+                    // Check if Claude is actively running in ANY pane (by checking pane title)
+                    // Try "Claude" first (normal mode), then "✳" (other modes like multi-pane)
+                    let claude_pane = tmux::find_pane_with_title(&session, "Claude")
+                        .or_else(|| tmux::find_pane_with_title(&session, "✳"));
+                    if let Some(location) = claude_pane {
+                        // Claude is running - switch to that specific pane
+                        tmux::switch_to_session(&session, path_str)?;
+                        tmux::switch_to_pane(&session, &location)?;
+                    } else {
+                        // No active Claude anywhere - create new window
+                        tmux::create_window(&session, "claude", path_str, claude_command)?;
+                        tmux::switch_to_session(&session, path_str)?;
+                    }
                 } else {
                     // Session doesn't exist - create it with claude as first window
                     tmux::create_session_with_command(&session, path_str, claude_command)?;
+                    tmux::switch_to_session(&session, path_str)?;
                 }
 
-                // Switch to the session
-                tmux::switch_to_session(&session, path_str)?;
                 dashboard.show_result(true, format!("Opened Claude for '{}'", worktree.info.name));
                 let worktrees = manager.list_worktrees_with_stats()?;
                 dashboard.update_worktrees(worktrees);
