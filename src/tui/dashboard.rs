@@ -780,12 +780,21 @@ impl Dashboard {
             .iter()
             .map(|&i| {
                 let wt = &self.worktrees[i];
-                let linear_title = self.linear_issues.get(&wt.info.name).map(|issue| issue.title.as_str());
+                let linear_title = self
+                    .linear_issues
+                    .get(&wt.info.name)
+                    .map(|issue| issue.title.as_str());
                 let claude_state = self
                     .claude_states
                     .get(&wt.info.name)
                     .map(|s| claude::effective_state(s));
-                Self::format_worktree_item(wt, content_width, linear_title, claude_state, animation_frame)
+                Self::format_worktree_item(
+                    wt,
+                    content_width,
+                    linear_title,
+                    claude_state,
+                    animation_frame,
+                )
             })
             .collect();
 
@@ -873,21 +882,6 @@ impl Dashboard {
 
         lines.push(Line::from(line1_spans));
 
-        // Line 1.5: Linear issue title (if available)
-        if let Some(title) = linear_title {
-            // Truncate if too long (leave room for indent, bullet and ellipsis)
-            let max_len = width.saturating_sub(6);
-            let display_title = if title.len() > max_len {
-                format!("    {}...", &title[..max_len.saturating_sub(3)])
-            } else {
-                format!("    {}", title)
-            };
-            lines.push(Line::from(Span::styled(
-                display_title,
-                Style::default().fg(Color::White).italic(),
-            )));
-        }
-
         // Line 2: All git info on one line - age, commits ahead/behind, diff vs main, uncommitted
         let mut line2_spans = Vec::new();
 
@@ -973,6 +967,21 @@ impl Dashboard {
 
         if !line2_spans.is_empty() {
             lines.push(Line::from(line2_spans));
+        }
+
+        // Line 3: Linear issue title (if available)
+        if let Some(title) = linear_title {
+            // Truncate if too long (leave room for indent and ellipsis)
+            let max_len = width.saturating_sub(6);
+            let display_title = if title.len() > max_len {
+                format!("  {}...", &title[..max_len.saturating_sub(3)])
+            } else {
+                format!("  {}", title)
+            };
+            lines.push(Line::from(Span::styled(
+                display_title,
+                Style::default().fg(Color::White).italic(),
+            )));
         }
 
         // Line 4: Claude status (only if active session)
