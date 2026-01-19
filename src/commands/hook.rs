@@ -95,9 +95,10 @@ fn handle_notification(
     session_id: &str,
     json: &serde_json::Value,
 ) -> Result<()> {
-    // Check notification type
+    // Check notification type from explicit field
     let kind = json["type"].as_str().or_else(|| json["kind"].as_str());
-    let message = json["message"].as_str().map(|s| {
+    let message_raw = json["message"].as_str();
+    let message = message_raw.map(|s| {
         if s.len() > 200 {
             format!("{}...", &s[..197])
         } else {
@@ -105,18 +106,35 @@ fn handle_notification(
         }
     });
 
-    // Determine state based on notification kind
-    let new_state = match kind {
-        Some("permission_prompt") | Some("permission") => ClaudeState::WaitingPermission,
-        Some("idle_prompt") | Some("idle") => ClaudeState::Idle,
-        _ => ClaudeState::Working, // Default to working for unknown notifications
+    // Determine state based on notification kind, or infer from message content
+    let (new_state, effective_kind) = match kind {
+        Some("permission_prompt") | Some("permission") => {
+            (ClaudeState::WaitingPermission, Some("permission".to_string()))
+        }
+        Some("idle_prompt") | Some("idle") => {
+            (ClaudeState::Idle, Some("idle".to_string()))
+        }
+        _ => {
+            // Fallback: infer notification type from message content
+            if let Some(msg) = message_raw {
+                if msg.contains("permission") || msg.contains("Permission") {
+                    (ClaudeState::WaitingPermission, Some("permission".to_string()))
+                } else if msg.contains("waiting for your input") {
+                    (ClaudeState::Idle, Some("idle".to_string()))
+                } else {
+                    (ClaudeState::Working, kind.map(|s| s.to_string()))
+                }
+            } else {
+                (ClaudeState::Working, kind.map(|s| s.to_string()))
+            }
+        }
     };
 
     let event = ClaudeEvent {
         event_type: "Notification".to_string(),
         timestamp: now_iso8601(),
         prompt_preview: None,
-        kind: kind.map(|s| s.to_string()),
+        kind: effective_kind,
         message,
     };
 
