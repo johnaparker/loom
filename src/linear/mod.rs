@@ -169,8 +169,20 @@ pub fn resolve_input(
             }
             .into())
         }
-        // Case 3: Have prefix, input contains issue ID in branch name
-        (Some(prefix), _) if extract_issue_id(name, prefix).is_some() => {
+        // Case 3: Have prefix and API key, input contains issue ID in branch name
+        // Fetch issue metadata so we can cache it
+        (Some(prefix), Some(key)) if extract_issue_id(name, prefix).is_some() => {
+            let id = extract_issue_id(name, prefix).unwrap();
+            // Try to fetch issue metadata (don't fail if API call fails)
+            let issue = get_issue(key, &id).ok();
+            Ok(ResolvedInput {
+                worktree_name: id,
+                git_branch: name.to_string(),
+                issue,
+            })
+        }
+        // Case 4: Have prefix but no API key, input contains issue ID in branch name
+        (Some(prefix), None) if extract_issue_id(name, prefix).is_some() => {
             let id = extract_issue_id(name, prefix).unwrap();
             Ok(ResolvedInput {
                 worktree_name: id,
@@ -178,7 +190,7 @@ pub fn resolve_input(
                 issue: None,
             })
         }
-        // Case 4: Regular branch (no Linear pattern detected)
+        // Case 5: Regular branch (no Linear pattern detected)
         _ => Ok(ResolvedInput {
             worktree_name: sanitize_for_filesystem(name),
             git_branch: name.to_string(),
