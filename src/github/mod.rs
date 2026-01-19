@@ -253,7 +253,8 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
                     failing += 1;
                     failing_names.push(name);
                 }
-                Some("PENDING") | None => pending += 1,
+                // Empty string means in progress, None or "PENDING" also means pending
+                Some("PENDING") | Some("") | None => pending += 1,
                 _ => {}
             }
         }
