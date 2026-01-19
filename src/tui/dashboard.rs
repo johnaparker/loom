@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use crate::claude::{self, ClaudeSession, ClaudeState};
 use crate::git::WorktreeStats;
-use crate::linear;
+use crate::linear::{self, LinearIssue};
 
 /// Braille spinner frames for smooth rotation animation
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -72,6 +72,14 @@ enum DashboardMode {
     ActionResult(ActionResultModal),
 }
 
+/// Right panel view toggle
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum RightPanelView {
+    #[default]
+    Commits,
+    Linear,
+}
+
 /// Interactive dashboard for worktree status
 pub struct Dashboard {
     worktrees: Vec<WorktreeStats>,
@@ -88,14 +96,16 @@ pub struct Dashboard {
     /// Status message to show in title bar (auto-clears on keypress)
     /// Tuple of (is_success, message)
     status_message: Option<(bool, String)>,
-    /// Cached Linear issue titles by worktree name
-    linear_titles: HashMap<String, String>,
+    /// Cached Linear issues by worktree name
+    linear_issues: HashMap<String, LinearIssue>,
     /// Cached Claude session states by worktree name
     claude_states: HashMap<String, ClaudeSession>,
     /// Animation frame counter (wraps around 0-255)
     animation_frame: u8,
     /// Whether any worktree has an active animation state
     has_active_claude: bool,
+    /// Current view for the right panel (Commits or Linear)
+    right_panel_view: RightPanelView,
 }
 
 impl Dashboard {
@@ -106,8 +116,8 @@ impl Dashboard {
             list_state.select(Some(0));
         }
 
-        // Load Linear titles for all worktrees
-        let linear_titles = Self::load_linear_titles(&project_name, &worktrees);
+        // Load Linear issues for all worktrees
+        let linear_issues = Self::load_linear_issues(&project_name, &worktrees);
 
         let mut dashboard = Self {
             worktrees,
@@ -121,10 +131,11 @@ impl Dashboard {
             main_branch: "main".to_string(),
             pending_result: None,
             status_message: None,
-            linear_titles,
+            linear_issues,
             claude_states: HashMap::new(),
             animation_frame: 0,
             has_active_claude: false,
+            right_panel_view: RightPanelView::default(),
         };
 
         // Load initial Claude states
@@ -133,20 +144,20 @@ impl Dashboard {
         dashboard
     }
 
-    /// Load Linear issue titles from cache for all worktrees
-    fn load_linear_titles(
+    /// Load Linear issues from cache for all worktrees
+    fn load_linear_issues(
         project_name: &str,
         worktrees: &[WorktreeStats],
-    ) -> HashMap<String, String> {
-        let mut titles = HashMap::new();
+    ) -> HashMap<String, LinearIssue> {
+        let mut issues = HashMap::new();
         for wt in worktrees {
             if let Ok(Some(issue)) = linear::read_metadata(project_name, &wt.info.name) {
                 if !issue.title.is_empty() {
-                    titles.insert(wt.info.name.clone(), issue.title);
+                    issues.insert(wt.info.name.clone(), issue);
                 }
             }
         }
-        titles
+        issues
     }
 
     /// Refresh Claude session states for all worktrees
@@ -193,8 +204,8 @@ impl Dashboard {
         // Remember currently selected worktree name
         let selected_name = self.get_selected_worktree().map(|w| w.info.name.clone());
 
-        // Refresh Linear titles
-        self.linear_titles = Self::load_linear_titles(&self.project_name, &worktrees);
+        // Refresh Linear issues
+        self.linear_issues = Self::load_linear_issues(&self.project_name, &worktrees);
 
         self.worktrees = worktrees;
         self.filter_worktrees();
@@ -521,10 +532,18 @@ impl Dashboard {
             KeyCode::Char('l') => {
                 // Linear - open Linear issue (only if worktree has one)
                 if let Some(worktree) = self.get_selected_worktree() {
-                    if self.linear_titles.contains_key(&worktree.info.name) {
+                    if self.linear_issues.contains_key(&worktree.info.name) {
                         return Some(DashboardResult::Linear { worktree });
                     }
                 }
+                None
+            }
+            KeyCode::Tab => {
+                // Toggle right panel between Commits and Linear views
+                self.right_panel_view = match self.right_panel_view {
+                    RightPanelView::Commits => RightPanelView::Linear,
+                    RightPanelView::Linear => RightPanelView::Commits,
+                };
                 None
             }
             _ => None,
@@ -667,13 +686,17 @@ impl Dashboard {
 
             self.render_worktree_list(f, main_chunks[0]);
 
-            // Split right panel: commits (top 50%) and claude pane (bottom 50%)
+            // Split right panel: commits/linear (top 50%) and claude pane (bottom 50%)
             let right_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(main_chunks[1]);
 
-            self.render_commit_preview(f, right_chunks[0]);
+            // Render top panel based on toggle state
+            match self.right_panel_view {
+                RightPanelView::Commits => self.render_commit_preview(f, right_chunks[0]),
+                RightPanelView::Linear => self.render_linear_panel(f, right_chunks[0]),
+            }
             self.render_claude_pane(f, right_chunks[1]);
         }
 
@@ -757,7 +780,7 @@ impl Dashboard {
             .iter()
             .map(|&i| {
                 let wt = &self.worktrees[i];
-                let linear_title = self.linear_titles.get(&wt.info.name).map(|s| s.as_str());
+                let linear_title = self.linear_issues.get(&wt.info.name).map(|issue| issue.title.as_str());
                 let claude_state = self
                     .claude_states
                     .get(&wt.info.name)
@@ -1029,10 +1052,84 @@ impl Dashboard {
                 .collect()
         };
 
-        let list =
-            List::new(items).block(Block::default().borders(Borders::ALL).title(" Commits "));
+        // Build title with tab toggle indicator
+        let title = Line::from(vec![
+            Span::styled(" Commits", Style::default().fg(Color::White)),
+            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Linear ", Style::default().fg(Color::DarkGray)),
+        ]);
+
+        let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
 
         f.render_widget(list, area);
+    }
+
+    fn render_linear_panel(&self, f: &mut Frame, area: Rect) {
+        // Get the selected worktree's Linear issue
+        let issue = self
+            .get_selected_worktree()
+            .and_then(|wt| self.linear_issues.get(&wt.info.name));
+
+        // Build title with tab toggle indicator
+        let title = Line::from(vec![
+            Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
+            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Linear ", Style::default().fg(Color::White)),
+        ]);
+
+        let block = Block::default().borders(Borders::ALL).title(title);
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        let content: Text = match issue {
+            Some(issue) => {
+                let mut lines = Vec::new();
+
+                // Issue title in bold white
+                lines.push(Line::from(Span::styled(
+                    &issue.title,
+                    Style::default().fg(Color::White).bold(),
+                )));
+
+                // Issue ID with hint to open
+                lines.push(Line::from(vec![
+                    Span::styled(&issue.id, Style::default().fg(Color::Cyan)),
+                    Span::styled(" (l to open)", Style::default().fg(Color::DarkGray)),
+                ]));
+
+                // Empty line before description
+                lines.push(Line::from(""));
+
+                // Description or "No description"
+                if let Some(ref desc) = issue.description {
+                    // Word wrap the description
+                    for line in desc.lines() {
+                        if line.is_empty() {
+                            lines.push(Line::from(""));
+                        } else {
+                            lines.push(Line::from(Span::styled(
+                                line,
+                                Style::default().fg(Color::Gray),
+                            )));
+                        }
+                    }
+                } else {
+                    lines.push(Line::from(Span::styled(
+                        "No description",
+                        Style::default().fg(Color::DarkGray).italic(),
+                    )));
+                }
+
+                Text::from(lines)
+            }
+            None => Text::styled(
+                "No Linear issue linked\n\nCreate worktrees with Linear issue IDs\nto see issue details here.",
+                Style::default().fg(Color::DarkGray).italic(),
+            ),
+        };
+
+        let paragraph = Paragraph::new(content).wrap(Wrap { trim: true });
+        f.render_widget(paragraph, inner);
     }
 
     fn render_claude_pane(&self, f: &mut Frame, area: Rect) {
@@ -1241,7 +1338,7 @@ impl Dashboard {
                 let is_main = selected.as_ref().map(|w| w.info.is_main).unwrap_or(true);
                 let has_linear = selected
                     .as_ref()
-                    .map(|w| self.linear_titles.contains_key(&w.info.name))
+                    .map(|w| self.linear_issues.contains_key(&w.info.name))
                     .unwrap_or(false);
 
                 let mut spans = vec![
@@ -1286,6 +1383,12 @@ impl Dashboard {
                         Span::styled(": linear  ", Style::default().fg(Color::DarkGray)),
                     ]);
                 }
+
+                // Tab to toggle panel view
+                spans.extend(vec![
+                    Span::styled("Tab", Style::default().fg(Color::Cyan)),
+                    Span::styled(": panel  ", Style::default().fg(Color::DarkGray)),
+                ]);
 
                 spans.extend(vec![
                     Span::styled("q", Style::default().fg(Color::Cyan)),

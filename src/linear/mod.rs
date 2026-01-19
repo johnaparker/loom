@@ -11,6 +11,7 @@ pub struct LinearIssue {
     pub branch_name: String,
     pub title: String,
     pub url: String,
+    pub description: Option<String>,
 }
 
 /// Result of resolving user input for Linear integration
@@ -72,6 +73,7 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
                 title
                 url
                 branchName
+                description
             }
         }
     "#;
@@ -143,6 +145,11 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
             .and_then(|u| u.as_str())
             .unwrap_or("")
             .to_string(),
+        description: issue_data
+            .get("description")
+            .and_then(|d| d.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
     })
 }
 
@@ -223,7 +230,8 @@ pub fn write_metadata(project_name: &str, worktree_name: &str, issue: &LinearIss
         "id": issue.id,
         "title": issue.title,
         "url": issue.url,
-        "branch": issue.branch_name
+        "branch": issue.branch_name,
+        "description": issue.description
     });
     fs::write(
         cache_path.join("linear.json"),
@@ -249,6 +257,12 @@ pub fn read_metadata(project_name: &str, worktree_name: &str) -> Result<Option<L
         title: value.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         url: value.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         branch_name: value.get("branch").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        // Handle missing description for old caches
+        description: value
+            .get("description")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
     }))
 }
 
