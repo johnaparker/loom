@@ -97,6 +97,13 @@ pub enum Commands {
         #[arg(value_enum)]
         shell: Shell,
     },
+
+    /// Handle Claude Code hook events (internal use)
+    #[command(hide = true)]
+    Hook {
+        /// Event type: user-prompt, stop, notification, session-start, session-end
+        event: String,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum, Debug)]

@@ -55,6 +55,9 @@ fn run() -> Result<()> {
         Commands::Completions { shell } => {
             commands::completions(shell)?;
         }
+        Commands::Hook { event } => {
+            commands::hook(&event)?;
+        }
     }
 
     Ok(())
