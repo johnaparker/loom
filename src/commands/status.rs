@@ -25,7 +25,7 @@ pub fn status() -> Result<()> {
     let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
 
     let worktrees = manager.list_worktrees_with_stats()?;
-    let mut dashboard = Dashboard::new(worktrees, project_name.clone());
+    let mut dashboard = Dashboard::new(worktrees, project_name.clone(), manager.repo_root().to_path_buf());
     dashboard.set_main_branch(main_branch);
 
     // Set up terminal once for the entire session
@@ -309,9 +309,32 @@ fn run_dashboard_loop(
             DashboardResult::GitHub { worktree } => {
                 // Open GitHub PR or create-PR page
                 if let Some(branch) = &worktree.info.branch {
-                    match github::open_pr_or_create(manager.repo_root(), branch) {
-                        Ok(msg) => {
-                            dashboard.show_result(true, msg);
+                    // Try to get PR info
+                    match github::get_pr_for_branch(manager.repo_root(), branch) {
+                        Ok(Some(pr)) => {
+                            // Cache the PR info and open it
+                            let _ = github::write_pr_cache(&project_name, &worktree.info.name, &pr);
+                            if let Err(e) = github::open_url(&pr.url) {
+                                dashboard.show_result(false, format!("Failed to open URL: {}", e));
+                            } else {
+                                dashboard.show_result(true, format!("Opening PR #{}: {}", pr.number, pr.title));
+                            }
+                        }
+                        Ok(None) => {
+                            // No PR exists - open create PR page
+                            match github::get_repo_info(manager.repo_root()) {
+                                Ok((owner, repo)) => {
+                                    let create_url = github::get_create_pr_url(&owner, &repo, branch);
+                                    if let Err(e) = github::open_url(&create_url) {
+                                        dashboard.show_result(false, format!("Failed to open URL: {}", e));
+                                    } else {
+                                        dashboard.show_result(true, format!("Opening create PR page for '{}'", branch));
+                                    }
+                                }
+                                Err(e) => {
+                                    dashboard.show_result(false, format!("GitHub: {}", e));
+                                }
+                            }
                         }
                         Err(e) => {
                             dashboard.show_result(false, format!("GitHub: {}", e));

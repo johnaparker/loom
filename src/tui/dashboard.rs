@@ -91,6 +91,7 @@ pub struct Dashboard {
     selected: usize,
     list_state: ListState,
     project_name: String,
+    repo_root: std::path::PathBuf,
     mode: DashboardMode,
     search_input: String,
     matcher: Matcher,
@@ -115,7 +116,11 @@ pub struct Dashboard {
 }
 
 impl Dashboard {
-    pub fn new(worktrees: Vec<WorktreeStats>, project_name: String) -> Self {
+    pub fn new(
+        worktrees: Vec<WorktreeStats>,
+        project_name: String,
+        repo_root: std::path::PathBuf,
+    ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
         let mut list_state = ListState::default();
         if !worktrees.is_empty() {
@@ -125,8 +130,8 @@ impl Dashboard {
         // Load Linear issues for all worktrees
         let linear_issues = Self::load_linear_issues(&project_name, &worktrees);
 
-        // Load GitHub PRs for all worktrees (from cache only - no API calls in constructor)
-        let github_prs = Self::load_github_prs(&project_name, &worktrees);
+        // Load GitHub PRs for all worktrees (fetches from API if not cached)
+        let github_prs = Self::load_github_prs(&project_name, &worktrees, &repo_root);
 
         let mut dashboard = Self {
             worktrees,
@@ -134,6 +139,7 @@ impl Dashboard {
             selected: 0,
             list_state,
             project_name,
+            repo_root,
             mode: DashboardMode::Normal,
             search_input: String::new(),
             matcher: Matcher::new(NucleoConfig::DEFAULT),
@@ -170,15 +176,32 @@ impl Dashboard {
         issues
     }
 
-    /// Load GitHub PRs from cache for all worktrees
+    /// Load GitHub PRs for all worktrees (from cache or API)
     fn load_github_prs(
         project_name: &str,
         worktrees: &[WorktreeStats],
+        repo_root: &std::path::Path,
     ) -> HashMap<String, GitHubPR> {
         let mut prs = HashMap::new();
         for wt in worktrees {
+            // Skip main worktree
+            if wt.info.is_main {
+                continue;
+            }
+
+            // Try cache first
             if let Ok(Some(pr)) = github::read_pr_cache(project_name, &wt.info.name) {
                 prs.insert(wt.info.name.clone(), pr);
+                continue;
+            }
+
+            // Not in cache - fetch from GitHub API
+            if let Some(branch) = &wt.info.branch {
+                if let Ok(Some(pr)) = github::get_pr_for_branch(repo_root, branch) {
+                    // Cache the result
+                    let _ = github::write_pr_cache(project_name, &wt.info.name, &pr);
+                    prs.insert(wt.info.name.clone(), pr);
+                }
             }
         }
         prs
@@ -232,7 +255,7 @@ impl Dashboard {
         self.linear_issues = Self::load_linear_issues(&self.project_name, &worktrees);
 
         // Refresh GitHub PRs
-        self.github_prs = Self::load_github_prs(&self.project_name, &worktrees);
+        self.github_prs = Self::load_github_prs(&self.project_name, &worktrees, &self.repo_root);
 
         self.worktrees = worktrees;
         self.filter_worktrees();
