@@ -3,6 +3,7 @@ use colored::Colorize;
 
 use crate::cli::Category;
 use crate::config::Config;
+use crate::error::GwtError;
 use crate::git::WorktreeManager;
 use crate::sesh;
 use crate::sync;
@@ -18,6 +19,14 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
 
     // Sanitize branch name for filesystem
     let sanitized_name = branch.replace('/', "-");
+
+    // Check if worktree already exists
+    if let Some(_existing) = manager.get_worktree(&sanitized_name)? {
+        return Err(GwtError::WorktreeAlreadyExists {
+            name: sanitized_name,
+        }
+        .into());
+    }
 
     // Build worktree path: ~/worktrees/{project}/{category}/{name}
     let worktree_path = worktree_root

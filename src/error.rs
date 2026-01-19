@@ -6,6 +6,9 @@ pub enum GwtError {
     #[error("Worktree '{name}' not found")]
     WorktreeNotFound { name: String },
 
+    #[error("Worktree '{name}' already exists")]
+    WorktreeAlreadyExists { name: String },
+
     #[error("Cannot merge the main worktree")]
     CannotMergeMain,
 
@@ -39,6 +42,9 @@ impl GwtError {
         match self {
             GwtError::WorktreeNotFound { .. } => {
                 Some("Run 'gwt list' to see available worktrees".to_string())
+            }
+            GwtError::WorktreeAlreadyExists { name } => {
+                Some(format!("Use 'gwt switch {}' to switch to it, or choose a different name", name))
             }
             GwtError::CannotMergeMain => {
                 Some("You can only merge feature branches into main".to_string())
