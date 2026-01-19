@@ -152,18 +152,25 @@ fn resolve_project_worktree(cwd: &str) -> Result<(String, String)> {
     let worktree_root = repo.workdir()
         .context("Cannot determine worktree directory")?;
 
-    // Worktree name is the basename of the worktree root
-    let worktree_name = worktree_root
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("main")
-        .to_string();
+    // Check if this is a worktree (path contains "worktrees")
+    let is_worktree = repo.path().to_string_lossy().contains("worktrees");
+
+    // Worktree name: use "main" for main repo, basename for worktrees
+    let worktree_name = if is_worktree {
+        worktree_root
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string()
+    } else {
+        // Main repo always uses "main" as worktree name to match dashboard
+        "main".to_string()
+    };
 
     // Project name is derived from the main repo path
     // For worktrees, the common_dir points to the main repo's .git directory
     let project_name = if let Some(common_dir) = repo.path().parent() {
-        // Check if this is a worktree (path contains "worktrees")
-        if repo.path().to_string_lossy().contains("worktrees") {
+        if is_worktree {
             // This is a worktree, repo.path() is .git/worktrees/<name>
             // common_dir (parent) is .git/worktrees
             // Go up two levels to get main repo root
