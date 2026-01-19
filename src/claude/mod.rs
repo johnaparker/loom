@@ -162,7 +162,9 @@ pub fn effective_state(session: &ClaudeSession) -> ClaudeState {
                     _ => ClaudeState::Working,
                 }
             }
-            // UserPromptSubmit, ToolUse, SessionStart, SessionCleared all mean working
+            // SessionCleared means the session was reset, Claude is now idle
+            "SessionCleared" => ClaudeState::Idle,
+            // UserPromptSubmit, ToolUse, SessionStart all mean working
             _ => ClaudeState::Working,
         }
     } else {
