@@ -716,7 +716,9 @@ impl Dashboard {
             .map(|&i| {
                 let wt = &self.worktrees[i];
                 let linear_title = self.linear_titles.get(&wt.info.name).map(|s| s.as_str());
-                let claude_state = self.claude_states.get(&wt.info.name)
+                let claude_state = self
+                    .claude_states
+                    .get(&wt.info.name)
                     .map(|s| claude::effective_state(s));
                 Self::format_worktree_item(wt, content_width, linear_title, claude_state)
             })
@@ -977,7 +979,8 @@ impl Dashboard {
 
     fn render_claude_pane(&self, f: &mut Frame, area: Rect) {
         // Get the selected worktree's Claude session
-        let session = self.get_selected_worktree()
+        let session = self
+            .get_selected_worktree()
             .and_then(|wt| self.claude_states.get(&wt.info.name));
 
         // Build title with state indicator
@@ -985,22 +988,26 @@ impl Dashboard {
             Some(s) => {
                 let effective_state = claude::effective_state(s);
                 let (icon, color) = match effective_state {
-                    ClaudeState::Working => ("\u{2699}", Color::Yellow),    // ⚙
-                    ClaudeState::Idle => ("\u{2713}", Color::Green),         // ✓
+                    ClaudeState::Working => ("\u{2699}", Color::Yellow), // ⚙
+                    ClaudeState::Idle => ("\u{2713}", Color::Green),     // ✓
                     ClaudeState::WaitingPermission => ("!", Color::Red),
                     ClaudeState::Inactive => ("-", Color::DarkGray),
                 };
                 Line::from(vec![
-                    Span::raw(" Claude "),
+                    Span::styled(" Claude ", Style::default().fg(Color::Rgb(194, 76, 48))),
                     Span::styled(icon, Style::default().fg(color)),
                     Span::styled(format!(" {} ", effective_state), Style::default().fg(color)),
                 ])
             }
-            None => Line::from(" Claude "),
+            None => Line::from(Span::styled(
+                " Claude ",
+                Style::default().fg(Color::Rgb(154, 76, 48)),
+            )),
         };
 
         let block = Block::default()
             .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Rgb(154, 76, 48)))
             .title(title);
         let inner = block.inner(area);
         f.render_widget(block, area);
