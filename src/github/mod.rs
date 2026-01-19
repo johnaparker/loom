@@ -22,6 +22,8 @@ pub struct GitHubPR {
     pub assignees: Vec<String>,
     /// Usernames of requested reviewers
     pub reviewers: Vec<String>,
+    /// Review decision: APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or None
+    pub review_decision: Option<String>,
 }
 
 /// PR checks status summary
@@ -199,7 +201,7 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
             "view",
             branch,
             "--json",
-            "number,title,url,state,isDraft,headRefName,baseRefName,statusCheckRollup,comments,assignees,reviewRequests",
+            "number,title,url,state,isDraft,headRefName,baseRefName,statusCheckRollup,comments,assignees,reviewRequests,reviewDecision",
         ])
         .current_dir(repo_path)
         .output()
@@ -315,6 +317,9 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         })
         .unwrap_or_default();
 
+    // Parse review decision
+    let review_decision = json["reviewDecision"].as_str().map(|s| s.to_string());
+
     Ok(Some(GitHubPR {
         number,
         title,
@@ -327,6 +332,7 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         comments,
         assignees,
         reviewers,
+        review_decision,
     }))
 }
 

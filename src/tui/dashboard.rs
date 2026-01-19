@@ -1384,8 +1384,24 @@ impl Dashboard {
                         }
                     }
 
-                    // Empty line before checks
+                    // Empty line before review/checks
                     lines.push(Line::from(""));
+
+                    // Review decision (only show if a known decision exists)
+                    if let Some(ref decision) = pr.review_decision {
+                        let review_line = match decision.as_str() {
+                            "APPROVED" => Some(("✓", "Approved", Color::Green)),
+                            "CHANGES_REQUESTED" => Some(("✗", "Changes requested", Color::Red)),
+                            "REVIEW_REQUIRED" => Some(("○", "Review required", Color::Rgb(255, 165, 0))), // Orange
+                            _ => None,
+                        };
+                        if let Some((icon, text, color)) = review_line {
+                            lines.push(Line::from(vec![
+                                Span::styled(format!("{} ", icon), Style::default().fg(color)),
+                                Span::styled(text, Style::default().fg(color)),
+                            ]));
+                        }
+                    }
 
                     // CI Status
                     if let Some(ref checks) = pr.checks_status {
