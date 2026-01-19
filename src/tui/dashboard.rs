@@ -1409,6 +1409,14 @@ impl Dashboard {
                             ))
                         };
                         lines.push(status_line);
+
+                        // Show failing check names
+                        for name in &checks.failing_names {
+                            lines.push(Line::from(vec![
+                                Span::styled("  ✗ ", Style::default().fg(Color::Red)),
+                                Span::styled(name, Style::default().fg(Color::Red)),
+                            ]));
+                        }
                     }
 
                     // Recent comments

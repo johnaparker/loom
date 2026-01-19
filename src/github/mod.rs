@@ -27,6 +27,8 @@ pub struct ChecksStatus {
     pub passing: u32,
     pub failing: u32,
     pub pending: u32,
+    /// Names of failing checks
+    pub failing_names: Vec<String>,
 }
 
 /// A comment on a PR
@@ -234,12 +236,23 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         let mut passing = 0u32;
         let mut failing = 0u32;
         let mut pending = 0u32;
+        let mut failing_names = Vec::new();
 
         for check in checks {
             total += 1;
+            // Get check name from either "name" or "context" field
+            let name = check["name"]
+                .as_str()
+                .or_else(|| check["context"].as_str())
+                .unwrap_or("unknown")
+                .to_string();
+
             match check["conclusion"].as_str() {
                 Some("SUCCESS") => passing += 1,
-                Some("FAILURE") | Some("ERROR") | Some("CANCELLED") => failing += 1,
+                Some("FAILURE") | Some("ERROR") | Some("CANCELLED") => {
+                    failing += 1;
+                    failing_names.push(name);
+                }
                 Some("PENDING") | None => pending += 1,
                 _ => {}
             }
@@ -250,6 +263,7 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
             passing,
             failing,
             pending,
+            failing_names,
         })
     } else {
         None
