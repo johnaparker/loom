@@ -1,4 +1,4 @@
-# gwt - Git Worktree Manager
+# Git Worktree Manager
 
 A Rust CLI/TUI for managing git worktrees with tmux/sesh integration, designed for trunk-based development workflows.
 
@@ -115,7 +115,3 @@ If `.envrc` is synced to a new worktree, gwt automatically runs `direnv allow`.
 ### Tmux
 
 `gwt switch` and `gwt main` use tmux to create and switch sessions. If a session doesn't exist, it's created automatically.
-
-## License
-
-MIT
