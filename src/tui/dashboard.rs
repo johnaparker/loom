@@ -754,7 +754,7 @@ impl Dashboard {
             // Truncate if too long (leave room for indent, bullet and ellipsis)
             let max_len = width.saturating_sub(6);
             let display_title = if title.len() > max_len {
-                format!("    {}...", &title[..max_len.saturating_sub(3)])
+                format!("    {}...", &title[..max_len.saturating_sub(3)])
             } else {
                 format!("    {}", title)
             };
