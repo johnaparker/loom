@@ -14,6 +14,8 @@ pub struct GlobalConfig {
     pub sync: SyncConfig,
     #[serde(default)]
     pub sesh: SeshConfig,
+    #[serde(default)]
+    pub linear: LinearConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +42,16 @@ impl Default for SeshConfig {
     fn default() -> Self {
         Self { auto_register: true }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LinearConfig {
+    /// API key for Linear API access (optional)
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Team prefix to detect Linear issue patterns (e.g., "JOH")
+    #[serde(default)]
+    pub team_prefix: Option<String>,
 }
 
 fn default_worktree_root() -> String {
@@ -69,13 +81,25 @@ impl Default for GlobalConfig {
             default_category: default_category(),
             sync: SyncConfig::default(),
             sesh: SeshConfig::default(),
+            linear: LinearConfig::default(),
         }
     }
 }
 
 impl GlobalConfig {
     /// Get the path to the global config file
+    /// Prefers ~/.config/gwt/config.toml (XDG-style) if it exists,
+    /// otherwise falls back to platform default
     pub fn config_path() -> Result<PathBuf> {
+        // Prefer XDG-style path (~/.config/gwt/config.toml)
+        if let Some(home) = dirs::home_dir() {
+            let xdg_path = home.join(".config").join("gwt").join("config.toml");
+            if xdg_path.exists() {
+                return Ok(xdg_path);
+            }
+        }
+
+        // Fall back to platform default
         let config_dir = dirs::config_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
         Ok(config_dir.join("gwt").join("config.toml"))

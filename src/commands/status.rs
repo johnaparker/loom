@@ -10,6 +10,7 @@ use crate::cli::Category;
 use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::WorktreeManager;
+use crate::linear;
 use crate::sesh;
 use crate::sync;
 use crate::tmux;
@@ -316,6 +317,9 @@ fn execute_delete(
     // Unregister from sesh
     sesh::unregister_worktree(project_name, name)?;
 
+    // Clean up Linear cache
+    let _ = linear::delete_metadata(project_name, name);
+
     // Delete branch if requested
     if delete_branch {
         if let Some(branch) = branch {
@@ -349,6 +353,9 @@ fn execute_merge(
 
     // Unregister from sesh
     sesh::unregister_worktree(project_name, name)?;
+
+    // Clean up Linear cache
+    let _ = linear::delete_metadata(project_name, name);
 
     // Delete branch if requested
     if delete_branch {
@@ -387,13 +394,17 @@ fn execute_create(
 ) -> Result<(String, std::path::PathBuf)> {
     let worktree_root = config.worktree_root()?;
 
-    // Sanitize branch name for filesystem
-    let sanitized_name = branch.replace('/', "-");
+    // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
+    let resolved = linear::resolve_input(
+        branch,
+        config.linear_prefix(),
+        config.linear_api_key(),
+    )?;
 
     // Check if worktree already exists
-    if let Some(_existing) = manager.get_worktree(&sanitized_name)? {
+    if let Some(_existing) = manager.get_worktree(&resolved.worktree_name)? {
         return Err(GwtError::WorktreeAlreadyExists {
-            name: sanitized_name,
+            name: resolved.worktree_name,
         }
         .into());
     }
@@ -402,13 +413,18 @@ fn execute_create(
     let worktree_path = worktree_root
         .join(project_name)
         .join(category.to_string())
-        .join(&sanitized_name);
+        .join(&resolved.worktree_name);
 
     // Fetch from origin to ensure we have the latest refs
     let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
 
     // Create the worktree
-    manager.create_worktree(branch, &worktree_path)?;
+    manager.create_worktree(&resolved.git_branch, &worktree_path)?;
+
+    // Write Linear metadata if we have issue info
+    if let Some(ref issue) = resolved.issue {
+        linear::write_metadata(project_name, &resolved.worktree_name, issue)?;
+    }
 
     // Sync files from main repo
     let patterns = config.sync_patterns();
@@ -422,11 +438,11 @@ fn execute_create(
     }
 
     // Register with sesh if enabled
-    let session_name = sesh::session_name(project_name, &sanitized_name);
+    let session_name = sesh::session_name(project_name, &resolved.worktree_name);
     if config.sesh_auto_register() {
         sesh::register_worktree(
             project_name,
-            &sanitized_name,
+            &resolved.worktree_name,
             worktree_path.to_str().unwrap(),
         )?;
     }

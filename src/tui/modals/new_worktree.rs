@@ -17,7 +17,7 @@ pub struct NewWorktreeModal {
 impl NewWorktreeModal {
     pub fn new() -> Self {
         Self {
-            branch_input: TextInput::new("Branch"),
+            branch_input: TextInput::new("Branch or Linear Issue (e.g. JOH-123)"),
             category_selector: Selector::new(
                 "Category",
                 vec![
