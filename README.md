@@ -115,7 +115,3 @@ If `.envrc` is synced to a new worktree, gwt automatically runs `direnv allow`.
 ### Tmux
 
 `gwt switch` and `gwt main` use tmux to create and switch sessions. If a session doesn't exist, it's created automatically.
-
-## License
-
-MIT
