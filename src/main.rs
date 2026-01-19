@@ -49,6 +49,9 @@ fn run() -> Result<()> {
         Commands::Main => {
             commands::main_cmd()?;
         }
+        Commands::Linear => {
+            commands::linear_cmd()?;
+        }
         Commands::Completions { shell } => {
             commands::completions(shell)?;
         }

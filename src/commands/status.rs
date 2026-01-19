@@ -264,6 +264,31 @@ fn run_dashboard_loop(
                 tmux::switch_to_session(&session, path_str)?;
                 return Ok(());
             }
+            DashboardResult::Linear { worktree } => {
+                // Read Linear metadata and open URL
+                if let Ok(Some(issue)) = linear::read_metadata(project_name, &worktree.info.name) {
+                    if !issue.url.is_empty() {
+                        // Convert to desktop app URL scheme (linear:// instead of https://linear.app/)
+                        let desktop_url = issue.url.replace("https://linear.app/", "linear://");
+                        #[cfg(target_os = "macos")]
+                        {
+                            std::process::Command::new("open").arg(&desktop_url).spawn()?;
+                        }
+                        #[cfg(target_os = "linux")]
+                        {
+                            std::process::Command::new("xdg-open").arg(&desktop_url).spawn()?;
+                        }
+                        #[cfg(target_os = "windows")]
+                        {
+                            std::process::Command::new("cmd")
+                                .args(["/C", "start", &desktop_url])
+                                .spawn()?;
+                        }
+                        dashboard.show_result(true, format!("Opened {}", issue.id));
+                    }
+                }
+                // Stay in dashboard - don't exit
+            }
             DashboardResult::CreateNew { branch, category } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,

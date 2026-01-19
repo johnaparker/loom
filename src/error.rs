@@ -44,6 +44,9 @@ pub enum GwtError {
 
     #[error("Linear API error: {message}")]
     LinearApiError { message: String },
+
+    #[error("No Linear issue associated with this worktree")]
+    NoLinearIssue,
 }
 
 impl GwtError {
@@ -93,6 +96,9 @@ impl GwtError {
             }
             GwtError::LinearApiError { .. } => {
                 Some("Check your Linear API key and network connection".to_string())
+            }
+            GwtError::NoLinearIssue => {
+                Some("This worktree was not created from a Linear issue ID".to_string())
             }
         }
     }

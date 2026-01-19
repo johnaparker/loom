@@ -87,6 +87,10 @@ pub enum Commands {
     #[command(visible_alias = "ma")]
     Main,
 
+    /// Open the Linear issue for the current worktree
+    #[command(visible_alias = "li")]
+    Linear,
+
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for

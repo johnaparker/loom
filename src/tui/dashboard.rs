@@ -46,6 +46,8 @@ pub enum DashboardResult {
     Claude { worktree: WorktreeStats },
     /// Create a new worktree
     CreateNew { branch: String, category: String },
+    /// Open Linear issue for a worktree
+    Linear { worktree: WorktreeStats },
     /// Refresh the dashboard (after an action)
     Refresh,
 }
@@ -447,6 +449,15 @@ impl Dashboard {
                 // Claude - open claude in tmux window for any worktree
                 if let Some(worktree) = self.get_selected_worktree() {
                     return Some(DashboardResult::Claude { worktree });
+                }
+                None
+            }
+            KeyCode::Char('l') => {
+                // Linear - open Linear issue (only if worktree has one)
+                if let Some(worktree) = self.get_selected_worktree() {
+                    if self.linear_titles.contains_key(&worktree.info.name) {
+                        return Some(DashboardResult::Linear { worktree });
+                    }
                 }
                 None
             }
@@ -914,6 +925,10 @@ impl Dashboard {
             DashboardMode::Normal => {
                 let selected = self.get_selected_worktree();
                 let is_main = selected.as_ref().map(|w| w.info.is_main).unwrap_or(true);
+                let has_linear = selected
+                    .as_ref()
+                    .map(|w| self.linear_titles.contains_key(&w.info.name))
+                    .unwrap_or(false);
 
                 let mut spans = vec![
                     Span::styled(" \u{2191}/\u{2193}", Style::default().fg(Color::Cyan)),
@@ -949,6 +964,14 @@ impl Dashboard {
                     Span::styled("c", Style::default().fg(Color::Cyan)),
                     Span::styled(": claude  ", Style::default().fg(Color::DarkGray)),
                 ]);
+
+                // Show l: linear only if worktree has a Linear issue
+                if has_linear {
+                    spans.extend(vec![
+                        Span::styled("l", Style::default().fg(Color::Cyan)),
+                        Span::styled(": linear  ", Style::default().fg(Color::DarkGray)),
+                    ]);
+                }
 
                 spans.extend(vec![
                     Span::styled("q", Style::default().fg(Color::Cyan)),

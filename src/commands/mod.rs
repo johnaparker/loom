@@ -1,4 +1,5 @@
 mod completions;
+mod linear;
 mod list;
 mod main_cmd;
 mod merge;
@@ -10,6 +11,7 @@ mod switch;
 mod sync;
 
 pub use completions::completions;
+pub use linear::linear_cmd;
 pub use list::list;
 pub use main_cmd::main_cmd;
 pub use merge::merge;
