@@ -1,4 +1,5 @@
 mod completions;
+mod github;
 mod hook;
 mod linear;
 mod list;
@@ -12,6 +13,7 @@ mod switch;
 mod sync;
 
 pub use completions::completions;
+pub use github::github_cmd;
 pub use hook::hook;
 pub use linear::linear_cmd;
 pub use list::list;

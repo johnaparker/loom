@@ -10,6 +10,7 @@ use crate::cli::Category;
 use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::WorktreeManager;
+use crate::github;
 use crate::linear;
 use crate::sesh;
 use crate::sync;
@@ -305,6 +306,20 @@ fn run_dashboard_loop(
                 }
                 // Stay in dashboard - don't exit
             }
+            DashboardResult::GitHub { worktree } => {
+                // Open GitHub PR or create-PR page
+                if let Some(branch) = &worktree.info.branch {
+                    match github::open_pr_or_create(manager.repo_root(), branch) {
+                        Ok(msg) => {
+                            dashboard.show_result(true, msg);
+                        }
+                        Err(e) => {
+                            dashboard.show_result(false, format!("GitHub: {}", e));
+                        }
+                    }
+                }
+                // Stay in dashboard - don't exit
+            }
             DashboardResult::CreateNew { branch, category } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,
@@ -459,8 +474,15 @@ fn execute_create(
     // Fetch from origin to ensure we have the latest refs
     let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
 
-    // Create the worktree
-    manager.create_worktree(&resolved.git_branch, &worktree_path)?;
+    // Check if remote branch exists
+    let track_remote = manager.remote_branch_exists(&resolved.git_branch);
+
+    // Create the worktree - either tracking remote or creating new
+    if track_remote {
+        manager.create_worktree_tracking(&resolved.git_branch, &worktree_path)?;
+    } else {
+        manager.create_worktree(&resolved.git_branch, &worktree_path)?;
+    }
 
     // Write Linear metadata if we have issue info
     if let Some(ref issue) = resolved.issue {

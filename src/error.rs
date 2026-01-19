@@ -47,6 +47,21 @@ pub enum GwtError {
 
     #[error("No Linear issue associated with this worktree")]
     NoLinearIssue,
+
+    #[error("GitHub CLI (gh) not found")]
+    GitHubCliNotFound,
+
+    #[error("GitHub CLI not authenticated")]
+    GitHubNotAuthenticated,
+
+    #[error("GitHub API error: {message}")]
+    GitHubApiError { message: String },
+
+    #[error("No GitHub remote found")]
+    NoGitHubRemote,
+
+    #[error("No GitHub PR associated with this worktree")]
+    NoGitHubPR,
 }
 
 impl GwtError {
@@ -99,6 +114,21 @@ impl GwtError {
             }
             GwtError::NoLinearIssue => {
                 Some("This worktree was not created from a Linear issue ID".to_string())
+            }
+            GwtError::GitHubCliNotFound => {
+                Some("Install the GitHub CLI: https://cli.github.com/".to_string())
+            }
+            GwtError::GitHubNotAuthenticated => {
+                Some("Run 'gh auth login' to authenticate with GitHub".to_string())
+            }
+            GwtError::GitHubApiError { .. } => {
+                Some("Check your network connection and GitHub authentication".to_string())
+            }
+            GwtError::NoGitHubRemote => {
+                Some("Ensure the repository has a GitHub remote (origin)".to_string())
+            }
+            GwtError::NoGitHubPR => {
+                Some("Create a PR first with 'gh pr create' or push the branch".to_string())
             }
         }
     }

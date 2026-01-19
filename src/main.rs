@@ -52,6 +52,9 @@ fn run() -> Result<()> {
         Commands::Linear => {
             commands::linear_cmd()?;
         }
+        Commands::GitHub => {
+            commands::github_cmd()?;
+        }
         Commands::Completions { shell } => {
             commands::completions(shell)?;
         }
