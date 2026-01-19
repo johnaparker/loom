@@ -56,7 +56,9 @@ fn run_dashboard_loop(
             DashboardResult::SwitchTo(wt) => {
                 let session = sesh::session_name(project_name, &wt.info.name);
                 tmux::switch_to_session(&session, wt.info.path.to_str().unwrap())?;
-                return Ok(());
+                dashboard.show_result(true, format!("Switched to '{}'", wt.info.name));
+                let worktrees = manager.list_worktrees_with_stats()?;
+                dashboard.update_worktrees(worktrees);
             }
             DashboardResult::Quit => {
                 return Ok(());
@@ -243,7 +245,9 @@ fn run_dashboard_loop(
 
                 // Switch to the session
                 tmux::switch_to_session(&session, path_str)?;
-                return Ok(());
+                dashboard.show_result(true, format!("Opened review for '{}'", worktree.info.name));
+                let worktrees = manager.list_worktrees_with_stats()?;
+                dashboard.update_worktrees(worktrees);
             }
             DashboardResult::Claude { worktree } => {
                 let session = sesh::session_name(project_name, &worktree.info.name);
@@ -262,7 +266,9 @@ fn run_dashboard_loop(
 
                 // Switch to the session
                 tmux::switch_to_session(&session, path_str)?;
-                return Ok(());
+                dashboard.show_result(true, format!("Opened Claude for '{}'", worktree.info.name));
+                let worktrees = manager.list_worktrees_with_stats()?;
+                dashboard.update_worktrees(worktrees);
             }
             DashboardResult::Linear { worktree } => {
                 // Read Linear metadata and open URL
@@ -300,17 +306,17 @@ fn run_dashboard_loop(
 
                 match result {
                     Ok((session_name, worktree_path)) => {
-                        // Successfully created - switch to the new session and exit
+                        // Successfully created - switch to the new session
                         tmux::switch_to_session(&session_name, worktree_path.to_str().unwrap())?;
-                        return Ok(());
+                        dashboard.show_result(true, format!("Created and switched to '{}'", branch));
                     }
                     Err(e) => {
                         dashboard.show_result(false, format!("Failed to create: {}", e));
-                        // Refresh worktrees and continue
-                        let worktrees = manager.list_worktrees_with_stats()?;
-                        dashboard.update_worktrees(worktrees);
                     }
                 }
+                // Refresh worktrees
+                let worktrees = manager.list_worktrees_with_stats()?;
+                dashboard.update_worktrees(worktrees);
             }
             DashboardResult::Refresh => {
                 // Just refresh worktrees
