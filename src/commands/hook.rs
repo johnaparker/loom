@@ -155,19 +155,99 @@ fn handle_tool_use(
     json: &serde_json::Value,
 ) -> Result<()> {
     // Extract tool name if available
-    let tool_name = json["tool_name"].as_str()
+    let tool_name = json["tool_name"]
+        .as_str()
         .or_else(|| json["tool"].as_str())
         .map(|s| s.to_string());
+
+    // Extract detailed info from tool_input based on tool type
+    let tool_input = &json["tool_input"];
+    let detail = match tool_name.as_deref() {
+        Some("Read") => tool_input["file_path"]
+            .as_str()
+            .map(|p| shorten_path(p, 60)),
+        Some("Edit") => tool_input["file_path"]
+            .as_str()
+            .map(|p| shorten_path(p, 60)),
+        Some("Write") => tool_input["file_path"]
+            .as_str()
+            .map(|p| shorten_path(p, 60)),
+        Some("Bash") => tool_input["command"].as_str().map(|c| {
+            let trimmed = c.trim();
+            if trimmed.len() > 80 {
+                format!("{}...", &trimmed[..77])
+            } else {
+                trimmed.to_string()
+            }
+        }),
+        Some("Grep") => tool_input["pattern"]
+            .as_str()
+            .map(|p| truncate_str(p, 40)),
+        Some("Glob") => tool_input["pattern"]
+            .as_str()
+            .map(|p| truncate_str(p, 40)),
+        Some("Task") => tool_input["description"]
+            .as_str()
+            .map(|d| truncate_str(d, 60)),
+        Some("WebFetch") => tool_input["url"]
+            .as_str()
+            .map(|u| truncate_str(u, 60)),
+        Some("WebSearch") => tool_input["query"]
+            .as_str()
+            .map(|q| truncate_str(q, 60)),
+        _ => None,
+    };
 
     let event = ClaudeEvent {
         event_type: "ToolUse".to_string(),
         timestamp: now_iso8601(),
-        prompt_preview: tool_name,  // Store tool name in prompt_preview field
+        prompt_preview: tool_name, // Store tool name in prompt_preview field
         kind: None,
-        message: None,
+        message: detail, // Store detail in message field
     };
 
     crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Working)
+}
+
+/// Shorten a file path by replacing home dir with ~ and keeping basename visible
+fn shorten_path(path: &str, max_len: usize) -> String {
+    // Replace home directory with ~
+    let shortened = if let Some(home) = dirs::home_dir() {
+        if let Some(home_str) = home.to_str() {
+            if path.starts_with(home_str) {
+                format!("~{}", &path[home_str.len()..])
+            } else {
+                path.to_string()
+            }
+        } else {
+            path.to_string()
+        }
+    } else {
+        path.to_string()
+    };
+
+    if shortened.len() <= max_len {
+        shortened
+    } else {
+        // Keep the end (filename) visible, truncate the middle
+        let keep_end = 30.min(max_len / 2);
+        let keep_start = max_len - keep_end - 3; // 3 for "..."
+        format!(
+            "{}...{}",
+            &shortened[..keep_start],
+            &shortened[shortened.len() - keep_end..]
+        )
+    }
+}
+
+/// Truncate a string to max length, adding ... if needed
+fn truncate_str(s: &str, max_len: usize) -> String {
+    let trimmed = s.trim();
+    if trimmed.len() > max_len {
+        format!("{}...", &trimmed[..max_len.saturating_sub(3)])
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// Resolve project name and worktree name from the current working directory

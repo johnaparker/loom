@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Maximum number of events to keep in the cache
-const MAX_EVENTS: usize = 20;
+const MAX_EVENTS: usize = 100;
 
 /// Staleness threshold in seconds (5 minutes)
 const STALE_THRESHOLD_SECS: i64 = 300;
@@ -142,10 +142,29 @@ pub fn update_state_from_event(
     write_state(project, worktree, &session)
 }
 
-/// Get the effective state, treating stale sessions as inactive
+/// Get the effective state based on the most recent event
+/// This ensures the displayed state matches what the event log shows
 pub fn effective_state(session: &ClaudeSession) -> ClaudeState {
-    if session.state != ClaudeState::Inactive && session.is_stale() {
-        ClaudeState::Inactive
+    if session.is_stale() {
+        return ClaudeState::Inactive;
+    }
+
+    // Derive state from the most recent event
+    if let Some(event) = session.events.last() {
+        match event.event_type.as_str() {
+            "SessionEnd" => ClaudeState::Inactive,
+            "Stop" => ClaudeState::Idle,
+            "Notification" => {
+                // Check notification kind
+                match event.kind.as_deref() {
+                    Some(k) if k.contains("permission") => ClaudeState::WaitingPermission,
+                    Some(k) if k.contains("idle") => ClaudeState::Idle,
+                    _ => ClaudeState::Working,
+                }
+            }
+            // UserPromptSubmit, ToolUse, SessionStart all mean working
+            _ => ClaudeState::Working,
+        }
     } else {
         session.state.clone()
     }

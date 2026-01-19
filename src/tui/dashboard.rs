@@ -1009,9 +1009,10 @@ impl Dashboard {
             Some(s) if !s.events.is_empty() => {
                 let mut lines = Vec::new();
 
-                // Show recent events (most recent first, limit to what fits)
+                // Show recent events (most recent first, fill available height)
                 // Track index to know if notification is "handled" (not the most recent)
-                for (idx, event) in s.events.iter().rev().take(10).enumerate() {
+                let max_events = inner.height as usize;
+                for (idx, event) in s.events.iter().rev().take(max_events).enumerate() {
                     let time_str = claude::relative_time(&event.timestamp);
                     let is_most_recent = idx == 0;
 
@@ -1051,25 +1052,55 @@ impl Dashboard {
                             } else {
                                 ("\u{25CF}", Color::Cyan) // ●
                             };
-                            vec![
+                            let mut spans = vec![
                                 Span::styled(
                                     format!("{:>8} ", time_str),
                                     Style::default().fg(Color::DarkGray),
                                 ),
                                 Span::styled(format!("{} ", icon), Style::default().fg(color)),
                                 Span::styled(kind, Style::default().fg(color)),
-                            ]
+                            ];
+                            // Add message if available
+                            if let Some(ref msg) = event.message {
+                                let max_msg_len =
+                                    inner.width.saturating_sub(14 + kind.len() as u16) as usize;
+                                let truncated = if msg.len() > max_msg_len {
+                                    format!("{}...", &msg[..max_msg_len.saturating_sub(3)])
+                                } else {
+                                    msg.clone()
+                                };
+                                spans.push(Span::styled(
+                                    format!(": {}", truncated),
+                                    Style::default().fg(color),
+                                ));
+                            }
+                            spans
                         }
                         "ToolUse" => {
                             let tool = event.prompt_preview.as_deref().unwrap_or("tool");
-                            vec![
+                            let mut spans = vec![
                                 Span::styled(
                                     format!("{:>8} ", time_str),
                                     Style::default().fg(Color::DarkGray),
                                 ),
                                 Span::styled("\u{2699} ", Style::default().fg(Color::DarkGray)), // ⚙
                                 Span::styled(tool, Style::default().fg(Color::DarkGray)),
-                            ]
+                            ];
+                            // Add detail if available (file path, command, etc.)
+                            if let Some(ref detail) = event.message {
+                                let max_detail_len =
+                                    inner.width.saturating_sub(14 + tool.len() as u16) as usize;
+                                let truncated = if detail.len() > max_detail_len {
+                                    format!("{}...", &detail[..max_detail_len.saturating_sub(3)])
+                                } else {
+                                    detail.clone()
+                                };
+                                spans.push(Span::styled(
+                                    format!(" {}", truncated),
+                                    Style::default().fg(Color::DarkGray),
+                                ));
+                            }
+                            spans
                         }
                         "SessionStart" => {
                             vec![
