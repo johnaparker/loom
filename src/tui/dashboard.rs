@@ -1362,6 +1362,28 @@ impl Dashboard {
                         Span::styled(" (g to open)", Style::default().fg(Color::DarkGray)),
                     ]));
 
+                    // Assignees and reviewers
+                    if !pr.assignees.is_empty() || !pr.reviewers.is_empty() {
+                        if !pr.assignees.is_empty() {
+                            lines.push(Line::from(vec![
+                                Span::styled("Assignees: ", Style::default().fg(Color::DarkGray)),
+                                Span::styled(
+                                    pr.assignees.iter().map(|a| format!("@{}", a)).collect::<Vec<_>>().join(", "),
+                                    Style::default().fg(Color::Cyan),
+                                ),
+                            ]));
+                        }
+                        if !pr.reviewers.is_empty() {
+                            lines.push(Line::from(vec![
+                                Span::styled("Reviewers: ", Style::default().fg(Color::DarkGray)),
+                                Span::styled(
+                                    pr.reviewers.iter().map(|r| format!("@{}", r)).collect::<Vec<_>>().join(", "),
+                                    Style::default().fg(Color::Cyan),
+                                ),
+                            ]));
+                        }
+                    }
+
                     // Empty line before checks
                     lines.push(Line::from(""));
 

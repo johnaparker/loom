@@ -18,6 +18,10 @@ pub struct GitHubPR {
     pub base_branch: String,
     pub checks_status: Option<ChecksStatus>,
     pub comments: Vec<PRComment>,
+    /// Usernames of assignees
+    pub assignees: Vec<String>,
+    /// Usernames of requested reviewers
+    pub reviewers: Vec<String>,
 }
 
 /// PR checks status summary
@@ -195,7 +199,7 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
             "view",
             branch,
             "--json",
-            "number,title,url,state,isDraft,headRefName,baseRefName,statusCheckRollup,comments",
+            "number,title,url,state,isDraft,headRefName,baseRefName,statusCheckRollup,comments,assignees,reviewRequests",
         ])
         .current_dir(repo_path)
         .output()
@@ -291,6 +295,26 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         Vec::new()
     };
 
+    // Parse assignees
+    let assignees: Vec<String> = json["assignees"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|a| a["login"].as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Parse requested reviewers
+    let reviewers: Vec<String> = json["reviewRequests"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|r| r["login"].as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
     Ok(Some(GitHubPR {
         number,
         title,
@@ -301,6 +325,8 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         base_branch,
         checks_status,
         comments,
+        assignees,
+        reviewers,
     }))
 }
 
