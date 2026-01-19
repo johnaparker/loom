@@ -714,18 +714,10 @@ impl Dashboard {
 
         lines.push(Line::from(line1_spans));
 
-        // Line 2: Commits ahead and age
+        // Line 2: Age (left), commits ahead (↑), commits behind (↓)
         let mut line2_spans = Vec::new();
 
-        if let Some(ahead) = wt.commits_ahead
-            && ahead > 0
-        {
-            line2_spans.push(Span::styled(
-                format!("  \u{2191}{} commits", ahead),
-                Style::default().fg(Color::Yellow),
-            ));
-        }
-
+        // Age - always far left
         if let Some(days) = wt.age_days {
             let age_text = if days == 0 {
                 "today".to_string()
@@ -738,11 +730,33 @@ impl Dashboard {
             line2_spans.push(Span::styled(age_text, Style::default().fg(Color::DarkGray)));
         }
 
+        // Commits ahead (↑)
+        if let Some(ahead) = wt.commits_ahead
+            && ahead > 0
+        {
+            line2_spans.push(Span::raw("  "));
+            line2_spans.push(Span::styled(
+                format!(" \u{2191}{}", ahead),
+                Style::default().fg(Color::Yellow),
+            ));
+        }
+
+        // Commits behind (↓)
+        if let Some(behind) = wt.commits_behind
+            && behind > 0
+        {
+            line2_spans.push(Span::raw("  "));
+            line2_spans.push(Span::styled(
+                format!(" \u{2193}{}", behind),
+                Style::default().fg(Color::Magenta),
+            ));
+        }
+
         if !line2_spans.is_empty() {
             lines.push(Line::from(line2_spans));
         }
 
-        // Line 3: Diff stats vs main and uncommitted
+        // Line 3: Git changes only (+/- vs main and uncommitted)
         let mut line3_spans = Vec::new();
 
         // Diff vs main (skip for main worktree)
@@ -774,7 +788,6 @@ impl Dashboard {
         if wt.uncommitted_added > 0 || wt.uncommitted_removed > 0 {
             let padding = if line3_spans.is_empty() { "  " } else { "   " };
             line3_spans.push(Span::raw(padding));
-            line3_spans.push(Span::styled("~", Style::default().fg(Color::DarkGray)));
             line3_spans.push(Span::styled(
                 format!("+{}", wt.uncommitted_added),
                 Style::default().fg(Color::Green),
@@ -783,18 +796,12 @@ impl Dashboard {
                 format!(" -{}", wt.uncommitted_removed),
                 Style::default().fg(Color::Red),
             ));
+            line3_spans.push(Span::styled(
+                " uncommitted",
+                Style::default().fg(Color::DarkGray),
+            ));
         } else if line3_spans.is_empty() {
             line3_spans.push(Span::styled("  Clean", Style::default().fg(Color::Green)));
-        }
-
-        // Commits behind main (purple, after diff stats)
-        if let Some(behind) = wt.commits_behind
-            && behind > 0
-        {
-            line3_spans.push(Span::styled(
-                format!("    \u{2193}{}", behind),
-                Style::default().fg(Color::Magenta),
-            ));
         }
 
         if !line3_spans.is_empty() {
