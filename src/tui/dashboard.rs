@@ -11,11 +11,14 @@ use ratatui::{
 };
 use std::collections::HashMap;
 use std::io::{self, stdout};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::claude::{self, ClaudeSession, ClaudeState};
 use crate::git::WorktreeStats;
 use crate::linear;
+
+/// Braille spinner frames for smooth rotation animation
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 use crate::tui::modals::{
     ActionResultModal, DeleteConfirmModal, MergeConfirmModal, Modal, ModalAction, NewWorktreeModal,
     render_modal_overlay,
@@ -89,6 +92,10 @@ pub struct Dashboard {
     linear_titles: HashMap<String, String>,
     /// Cached Claude session states by worktree name
     claude_states: HashMap<String, ClaudeSession>,
+    /// Animation frame counter (wraps around 0-255)
+    animation_frame: u8,
+    /// Whether any worktree has an active animation state
+    has_active_claude: bool,
 }
 
 impl Dashboard {
@@ -116,6 +123,8 @@ impl Dashboard {
             status_message: None,
             linear_titles,
             claude_states: HashMap::new(),
+            animation_frame: 0,
+            has_active_claude: false,
         };
 
         // Load initial Claude states
@@ -151,6 +160,14 @@ impl Dashboard {
                 }
             }
         }
+
+        // Track if any worktree has an active animation state
+        self.has_active_claude = self.claude_states.values().any(|s| {
+            matches!(
+                claude::effective_state(s),
+                ClaudeState::Working | ClaudeState::WaitingPermission
+            )
+        });
     }
 
     /// Set the main branch name (for merge modal)
@@ -264,14 +281,30 @@ impl Dashboard {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     ) -> Result<DashboardResult> {
-        // Auto-refresh interval
+        // Intervals for polling
+        const ANIMATION_INTERVAL: Duration = Duration::from_millis(150);
         const REFRESH_INTERVAL: Duration = Duration::from_secs(5);
+
+        let last_refresh = Instant::now();
 
         loop {
             terminal.draw(|f| self.render(f))?;
 
-            // Poll for events with timeout - returns true if event is available
-            if event::poll(REFRESH_INTERVAL)? {
+            // Use short interval when animating, otherwise wait for full refresh
+            let poll_timeout = if self.has_active_claude {
+                ANIMATION_INTERVAL
+            } else {
+                // Calculate remaining time until next refresh
+                let elapsed = last_refresh.elapsed();
+                if elapsed >= REFRESH_INTERVAL {
+                    Duration::ZERO
+                } else {
+                    REFRESH_INTERVAL - elapsed
+                }
+            };
+
+            // Poll for events with timeout
+            if event::poll(poll_timeout)? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind != KeyEventKind::Press {
                         continue;
@@ -281,8 +314,16 @@ impl Dashboard {
                         return Ok(result);
                     }
                 }
+            } else if self.has_active_claude {
+                // Animation tick - increment frame counter
+                self.animation_frame = self.animation_frame.wrapping_add(1);
+
+                // Check if it's also time for a full refresh
+                if last_refresh.elapsed() >= REFRESH_INTERVAL {
+                    return Ok(DashboardResult::Refresh);
+                }
             } else {
-                // Timeout - trigger refresh to update worktree stats
+                // Full refresh interval elapsed
                 return Ok(DashboardResult::Refresh);
             }
         }
@@ -707,9 +748,10 @@ impl Dashboard {
     }
 
     fn render_worktree_list(&mut self, f: &mut Frame, area: Rect) {
-        // Calculate available width for content (subtract borders and highlight symbol)
-        let content_width = area.width.saturating_sub(5) as usize; // 2 borders + "> " symbol
+        // Calculate available width for content (subtract borders, highlight symbol, and bar)
+        let content_width = area.width.saturating_sub(7) as usize; // 2 borders + "> " + "▌ "
 
+        let animation_frame = self.animation_frame;
         let items: Vec<ListItem> = self
             .filtered_indices
             .iter()
@@ -720,7 +762,7 @@ impl Dashboard {
                     .claude_states
                     .get(&wt.info.name)
                     .map(|s| claude::effective_state(s));
-                Self::format_worktree_item(wt, content_width, linear_title, claude_state)
+                Self::format_worktree_item(wt, content_width, linear_title, claude_state, animation_frame)
             })
             .collect();
 
@@ -744,7 +786,17 @@ impl Dashboard {
         width: usize,
         linear_title: Option<&str>,
         claude_state: Option<ClaudeState>,
+        animation_frame: u8,
     ) -> ListItem<'static> {
+        // Determine bar color based on Claude state
+        let bar_color = match claude_state {
+            None => Color::Rgb(60, 60, 60),
+            Some(ClaudeState::Inactive) => Color::Rgb(60, 60, 60),
+            Some(ClaudeState::Idle) => Color::Green,
+            Some(ClaudeState::Working) => Color::Yellow,
+            Some(ClaudeState::WaitingPermission) => Color::Red,
+        };
+
         let mut lines = Vec::new();
 
         // Line 1: Name, Claude state indicator, branch (left), Category badge (right)
@@ -901,12 +953,15 @@ impl Dashboard {
         }
 
         // Line 4: Claude status (only if active session)
-        if let Some(state) = claude_state {
+        if let Some(ref state) = claude_state {
             let claude_line = match state {
-                ClaudeState::Working => Some(("\u{2699} Claude working", Color::Yellow)),
-                ClaudeState::Idle => Some(("\u{2713} Claude idle", Color::Green)),
+                ClaudeState::Working => {
+                    let spinner = SPINNER_FRAMES[(animation_frame as usize) % SPINNER_FRAMES.len()];
+                    Some((format!("{} Claude working", spinner), Color::Yellow))
+                }
+                ClaudeState::Idle => Some(("\u{2713} Claude idle".to_string(), Color::Green)),
                 ClaudeState::WaitingPermission => {
-                    Some(("! Claude waiting for response", Color::Red))
+                    Some(("! Claude waiting for response".to_string(), Color::Red))
                 }
                 ClaudeState::Inactive => None, // Don't show line
             };
@@ -921,6 +976,16 @@ impl Dashboard {
 
         // Empty line for spacing
         lines.push(Line::from(""));
+
+        // Prepend colored bar to each line
+        let lines: Vec<Line> = lines
+            .into_iter()
+            .map(|line| {
+                let mut spans = vec![Span::styled("▌ ", Style::default().fg(bar_color))];
+                spans.extend(line.spans);
+                Line::from(spans)
+            })
+            .collect();
 
         ListItem::new(lines)
     }
