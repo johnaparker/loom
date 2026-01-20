@@ -44,7 +44,7 @@ impl Default for SeshConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinearConfig {
     /// API key for Linear API access (optional)
     #[serde(default)]
@@ -52,6 +52,19 @@ pub struct LinearConfig {
     /// Team prefix to detect Linear issue patterns (e.g., "ABC")
     #[serde(default)]
     pub team_prefix: Option<String>,
+    /// Automatically update Linear issue status on gwt new/merge (default: true)
+    #[serde(default = "default_true")]
+    pub auto_update_status: bool,
+}
+
+impl Default for LinearConfig {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            team_prefix: None,
+            auto_update_status: true,
+        }
+    }
 }
 
 fn default_worktree_root() -> String {

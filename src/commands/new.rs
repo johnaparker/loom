@@ -86,6 +86,16 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
             "✓".green(),
             issue.id.cyan()
         );
+
+        // Update Linear issue to "In Progress" (non-critical)
+        if config.linear_auto_update_status() {
+            if let Some(api_key) = config.linear_api_key() {
+                match linear::update_issue_status(api_key, &issue.id, "started") {
+                    Ok(()) => println!("{} Updated Linear issue to In Progress", "✓".green()),
+                    Err(e) => eprintln!("{} Could not update Linear status: {}", "⚠".yellow(), e),
+                }
+            }
+        }
     }
 
     // Sync files from main repo

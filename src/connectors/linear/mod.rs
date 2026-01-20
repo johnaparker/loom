@@ -19,7 +19,7 @@ pub use types::{LinearIssue, ResolvedInput};
 pub use parser::{extract_issue_id, is_issue_id};
 
 // Re-export API functions
-pub use api::get_issue;
+pub use api::{get_issue, update_issue_status};
 
 // Re-export resolution functions
 pub use resolve::resolve_input;

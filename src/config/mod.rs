@@ -77,4 +77,9 @@ impl Config {
     pub fn linear_api_key(&self) -> Option<&str> {
         self.global.linear.api_key.as_deref()
     }
+
+    /// Whether to automatically update Linear issue status
+    pub fn linear_auto_update_status(&self) -> bool {
+        self.global.linear.auto_update_status
+    }
 }

@@ -35,6 +35,9 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     let main_branch = manager.main_branch_name()?;
     let session_name = sesh::session_name(&project_name, name);
 
+    // Check for Linear issue metadata (used for status updates)
+    let linear_issue = linear::read_metadata(&project_name, name).ok().flatten();
+
     // Dry run mode - preview actions
     if dry_run {
         dry_run_header();
@@ -49,6 +52,14 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
         ));
         dry_run_action(&format!("Offer to delete branch '{}'", branch.green()));
         dry_run_action(&format!("Unregister sesh session '{}'", session_name.cyan()));
+        if config.linear_auto_update_status() && config.linear_api_key().is_some() {
+            if let Some(ref issue) = linear_issue {
+                dry_run_action(&format!(
+                    "Update Linear issue {} to Done",
+                    issue.id.cyan()
+                ));
+            }
+        }
         dry_run_footer();
         return Ok(());
     }
@@ -63,6 +74,18 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     // Merge the branch to main
     manager.merge_to_main(&branch)?;
     println!("{} Merged successfully", "✓".green());
+
+    // Update Linear issue to "Done" (non-critical)
+    if config.linear_auto_update_status() {
+        if let Some(api_key) = config.linear_api_key() {
+            if let Some(ref issue) = linear_issue {
+                match linear::update_issue_status(api_key, &issue.id, "completed") {
+                    Ok(()) => println!("{} Updated Linear issue {} to Done", "✓".green(), issue.id.cyan()),
+                    Err(e) => eprintln!("{} Could not update Linear status: {}", "⚠".yellow(), e),
+                }
+            }
+        }
+    }
 
     // Remove the worktree
     println!("{} Removing worktree", "→".blue());
