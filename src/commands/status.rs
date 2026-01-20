@@ -262,9 +262,10 @@ fn run_dashboard_loop(
 
                 if tmux::session_exists(&session) {
                     // Check if Claude is actively running in ANY pane (by checking pane title)
-                    // Try "Claude" first (normal mode), then "✳" (other modes like multi-pane)
+                    // Claude uses different title prefixes: "Claude" (normal), "✳" (multi-pane), "⠂" (planning/stats)
                     let claude_pane = tmux::find_pane_with_title(&session, "Claude")
-                        .or_else(|| tmux::find_pane_with_title(&session, "✳"));
+                        .or_else(|| tmux::find_pane_with_title(&session, "✳"))
+                        .or_else(|| tmux::find_pane_with_title(&session, "⠂"));
                     if let Some(location) = claude_pane {
                         // Claude is running - switch to that specific pane
                         tmux::switch_to_session(&session, path_str)?;
