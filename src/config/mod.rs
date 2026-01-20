@@ -78,6 +78,11 @@ impl Config {
         self.global.linear.api_key.as_deref()
     }
 
+    /// Whether to automatically update Linear issue status
+    pub fn linear_auto_update_status(&self) -> bool {
+        self.global.linear.auto_update_status
+    }
+
     /// Get the cache directory, expanding ~ to home
     ///
     /// Priority: GWT_CACHE_DIR env var > config file > default (~/.cache/gwt)

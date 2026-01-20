@@ -5,11 +5,15 @@
 //! operations themselves without output formatting.
 
 use anyhow::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use crate::cli::Category;
+use crate::config::Config;
+use crate::error::GwtError;
 use crate::git::WorktreeManager;
-use crate::linear;
+use crate::linear::{self, LinearIssue};
 use crate::sesh;
+use crate::sync;
 use crate::tmux;
 
 /// Clean up all resources associated with a worktree.
@@ -118,4 +122,150 @@ pub fn sync_worktree_with_main(
     manager.sync_branch_with_main(worktree_path, &source_ref)?;
 
     Ok(())
+}
+
+/// Result of worktree creation for reporting.
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct CreateWorktreeResult {
+    /// Name of the worktree directory
+    pub worktree_name: String,
+    /// Git branch name
+    pub git_branch: String,
+    /// Full path to the worktree
+    pub worktree_path: PathBuf,
+    /// Session name for tmux/sesh
+    pub session_name: String,
+    /// Whether the worktree tracks a remote branch
+    pub tracked_remote: bool,
+    /// Linear issue if linked
+    pub issue: Option<LinearIssue>,
+    /// Whether Linear status was updated to "In Progress"
+    pub linear_status_updated: bool,
+    /// Files that were synced from main
+    pub synced_files: Vec<String>,
+    /// Whether direnv allow was run
+    pub direnv_allowed: bool,
+    /// Whether registered with sesh
+    pub sesh_registered: bool,
+}
+
+/// Create a new worktree with all associated setup.
+///
+/// This is the complete create operation used by both CLI and TUI.
+/// It handles:
+/// - Resolving Linear issue IDs to branch names
+/// - Creating the worktree (tracking remote or new branch)
+/// - Writing Linear metadata cache
+/// - Updating Linear issue status to "In Progress"
+/// - Syncing files from main (.env, .envrc, .claude/)
+/// - Running direnv allow if needed
+/// - Registering with sesh
+///
+/// Callers are responsible for:
+/// - Printing output (CLI) or showing results (TUI)
+/// - Switching to the tmux session
+pub fn create_worktree(
+    manager: &WorktreeManager,
+    config: &Config,
+    project_name: &str,
+    branch: &str,
+    category: Category,
+    cache_dir: &Path,
+) -> Result<CreateWorktreeResult> {
+    let worktree_root = config.worktree_root()?;
+
+    // Fetch from origin to ensure we have the latest refs
+    let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
+
+    // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
+    let resolved = linear::resolve_input(
+        branch,
+        config.linear_prefix(),
+        config.linear_api_key(),
+    )?;
+
+    // Check if worktree already exists
+    if manager.get_worktree(&resolved.worktree_name)?.is_some() {
+        return Err(GwtError::WorktreeAlreadyExists {
+            name: resolved.worktree_name,
+        }
+        .into());
+    }
+
+    // Build worktree path: ~/worktrees/{project}/{category}/{name}
+    let worktree_path = worktree_root
+        .join(project_name)
+        .join(category.to_string())
+        .join(&resolved.worktree_name);
+
+    // Check if remote branch exists
+    let track_remote = manager.remote_branch_exists(&resolved.git_branch);
+
+    // Create the worktree - either tracking remote or creating new
+    if track_remote {
+        manager.create_worktree_tracking(&resolved.git_branch, &worktree_path)?;
+    } else {
+        manager.create_worktree(&resolved.git_branch, &worktree_path)?;
+    }
+
+    // Write Linear metadata and update status if we have issue info
+    let mut linear_status_updated = false;
+    if let Some(ref issue) = resolved.issue {
+        linear::write_metadata(cache_dir, project_name, &resolved.worktree_name, issue)?;
+
+        // Update Linear issue to "In Progress" (non-critical)
+        if config.linear_auto_update_status() {
+            if let Some(api_key) = config.linear_api_key() {
+                if linear::update_issue_status(api_key, &issue.id, "started").is_ok() {
+                    linear_status_updated = true;
+                }
+            }
+        }
+    }
+
+    // Sync files from main repo
+    let patterns = config.sync_patterns();
+    let mut synced_files = Vec::new();
+    let mut direnv_allowed = false;
+
+    if !patterns.is_empty() {
+        synced_files = sync::sync_files(manager.repo_root(), &worktree_path, &patterns)?;
+
+        // Run direnv allow if .envrc was synced
+        if synced_files.iter().any(|p| p == ".envrc") {
+            if sync::run_direnv_allow(&worktree_path).unwrap_or(false) {
+                direnv_allowed = true;
+            }
+        }
+    }
+
+    // Register with sesh if enabled
+    let session_name = sesh::session_name(project_name, &resolved.worktree_name);
+    let mut sesh_registered = false;
+
+    if config.sesh_auto_register() {
+        if sesh::register_worktree(
+            project_name,
+            &resolved.worktree_name,
+            worktree_path.to_str().unwrap(),
+        )
+        .is_ok()
+        {
+            sesh_registered = true;
+        }
+    }
+
+    Ok(CreateWorktreeResult {
+        worktree_name: resolved.worktree_name,
+        git_branch: resolved.git_branch,
+        worktree_path,
+        session_name,
+        tracked_remote: track_remote,
+        issue: resolved.issue,
+        linear_status_updated,
+        synced_files,
+        direnv_allowed,
+        sesh_registered,
+    })
 }
