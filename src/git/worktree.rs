@@ -36,6 +36,10 @@ pub struct WorktreeStats {
     pub uncommitted_removed: u32,
     pub age_days: Option<u32>,
     pub recent_commits: Vec<CommitInfo>,
+    /// Commits ahead of tracking branch (e.g., origin/<branch>)
+    pub tracking_ahead: Option<u32>,
+    /// Commits behind tracking branch (e.g., origin/<branch>)
+    pub tracking_behind: Option<u32>,
 }
 
 impl WorktreeStats {
@@ -521,6 +525,55 @@ impl WorktreeManager {
         }
     }
 
+    /// Get the tracking branch for a given branch (origin/<branch>)
+    /// Only returns a value if origin/<branch> exists - this ensures
+    /// "vs self" compares to the same branch on the remote, not a
+    /// different configured upstream (like origin/main for feature branches)
+    fn get_tracking_branch(&self, path: &Path, branch: &str) -> Option<String> {
+        // Only check if origin/<branch> exists (same branch name on remote)
+        let remote_branch = format!("origin/{}", branch);
+        let output = Command::new("git")
+            .args(["rev-parse", "--verify", &format!("refs/remotes/{}", remote_branch)])
+            .current_dir(path)
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            Some(remote_branch)
+        } else {
+            None
+        }
+    }
+
+    /// Get commits ahead/behind vs tracking branch
+    /// Returns (ahead, behind) count
+    fn commits_vs_tracking(&self, path: &Path, branch: &str) -> Option<(u32, u32)> {
+        let tracking = self.get_tracking_branch(path, branch)?;
+
+        let output = Command::new("git")
+            .args([
+                "rev-list",
+                "--left-right",
+                "--count",
+                &format!("{}...{}", branch, tracking),
+            ])
+            .current_dir(path)
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let parts: Vec<&str> = stdout.trim().split('\t').collect();
+            if parts.len() == 2 {
+                let ahead = parts[0].parse().unwrap_or(0);
+                let behind = parts[1].parse().unwrap_or(0);
+                return Some((ahead, behind));
+            }
+        }
+
+        None
+    }
+
     /// Get diff stats vs main (lines added, lines removed)
     fn diff_stats_vs_main(&self, path: &Path, branch: &str) -> Option<(u32, u32)> {
         let main_branch = self.main_branch_name().ok()?;
@@ -680,6 +733,15 @@ impl WorktreeManager {
             (None, None)
         };
 
+        // Get tracking branch comparison (commits ahead/behind origin/<branch>)
+        let (tracking_ahead, tracking_behind) = if !branch.is_empty() {
+            self.commits_vs_tracking(&info.path, branch)
+                .map(|(a, b)| (Some(a), Some(b)))
+                .unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
+
         let (uncommitted_added, uncommitted_removed) = self.uncommitted_stats(&info.path);
         let age_days = self.worktree_age_days(&info.path);
         let recent_commits = self.recent_commits(&info.path, 10, info.is_main);
@@ -694,6 +756,8 @@ impl WorktreeManager {
             uncommitted_removed,
             age_days,
             recent_commits,
+            tracking_ahead,
+            tracking_behind,
         }
     }
 
