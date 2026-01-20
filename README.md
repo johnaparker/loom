@@ -1,86 +1,54 @@
-# Git Worktree Manager
+# gwt - Git Worktree Manager
 
-A Rust CLI/TUI for managing git worktrees with tmux/sesh integration, designed for trunk-based development workflows.
+A TUI control center for managing git worktrees with Claude Code integration. Monitor multiple Claude agents, track Linear issues and GitHub PRs, all from a single dashboard.
 
-## Features
+## What is this?
 
-- Create and manage git worktrees with organized directory structure
-- Fuzzy picker TUI for fast worktree switching
-- Automatic tmux/sesh session management
-- File syncing (.env, .envrc, .claude/) from main repo to worktrees
-- Category-based organization (dev, review, demo)
+If you work on multiple features simultaneously using git worktrees, `gwt` gives you:
 
-## Installation
+- **Claude agent monitoring** - See which agents are working, waiting for permission, or idle across all your worktrees
+- **Worktree lifecycle** - Create, switch, merge, and remove worktrees without leaving the dashboard
+- **Project context** - Link worktrees to Linear issues and GitHub PRs for at-a-glance status
+
+The dashboard (`gwt status`) is the primary interface. CLI commands exist for quick one-off operations.
+
+## Setup
+
+### Installation
 
 ```bash
 cargo install --path .
 ```
 
-## Usage
+### Claude Code Integration
 
-### Create a new worktree
+Add the hook to your Claude Code settings (`~/.claude/settings.json`):
 
-```bash
-# Create a new worktree for feature branch
-gwt new feature-branch
-
-# Create with specific category
-gwt new feature-branch --category review
-gwt new feature-branch -c demo
+```json
+{
+  "hooks": {
+    "postToolCall": ["gwt hook post-tool-call"]
+  }
+}
 ```
 
-Worktrees are created at `~/worktrees/{project}/{category}/{branch-name}`.
+This enables gwt to track Claude agent state (working/waiting/idle) per worktree.
 
-### List worktrees
+### Connectors
 
-```bash
-gwt list
-```
+gwt integrates with external services via connectors:
 
-### Switch worktrees (TUI)
+| Connector | Purpose | Setup |
+|-----------|---------|-------|
+| **Claude** | Track agent state across worktrees | Add hook above |
+| **Linear** | Link worktrees to issues, show status | Set `LINEAR_API_KEY` env var |
+| **GitHub** | Track PR state, checks, reviews | Install [gh CLI](https://cli.github.com/) and authenticate |
+| **tmux** | Session management, quick switching | Just have tmux installed |
+| **sesh** | Worktree registration for session picker | Optional, auto-detected |
 
-```bash
-gwt switch
-```
+### Configuration
 
-Opens an interactive fuzzy picker to select and switch to a worktree via tmux.
-
-### Show worktree status
-
-```bash
-gwt status
-```
-
-Shows the git status of all worktrees including modified/added/deleted file counts.
-
-### Merge and cleanup
-
-```bash
-gwt merge feature-branch
-```
-
-Merges the branch into main, removes the worktree, deletes the branch, and unregisters from sesh.
-
-### Remove a worktree
-
-```bash
-gwt remove feature-branch
-
-# Force removal with uncommitted changes
-gwt remove feature-branch --force
-```
-
-### Switch to main
-
-```bash
-gwt main
-```
-
-Switches to the main branch tmux session.
-
-## Configuration
-
-### Global Config: `~/.config/gwt/config.toml`
+**Global config:** `~/.config/gwt/config.toml`
 
 ```toml
 worktree_root = "~/worktrees"
@@ -93,48 +61,66 @@ patterns = [".env", ".envrc", ".claude/"]
 auto_register = true
 ```
 
-### Project Config: `.gwt.toml`
+**Project config:** `.gwt.toml` in repo root
 
 ```toml
-project_name = "my-project"  # Override detected name
+project_name = "my-project"
 
 [sync]
 patterns = [".env", ".envrc", ".claude/", ".env.local"]
 ```
 
-## Integrations
+## Usage
 
-### Sesh
+### Dashboard (primary interface)
 
-When creating a worktree, gwt automatically registers it with sesh at `~/.config/sesh/sesh.toml`. Session names follow the format `{project}/{worktree-name}`.
-
-### Direnv
-
-If `.envrc` is synced to a new worktree, gwt automatically runs `direnv allow`.
-
-### Tmux
-
-`gwt switch` and `gwt main` use tmux to create and switch sessions. If a session doesn't exist, it's created automatically.
-
-## Architecture
-
-```
-src/
-├── core/           # Shared utilities (fuzzy matching, terminal helpers)
-├── connectors/     # External integrations (Linear, GitHub, Claude, tmux, sesh)
-├── commands/       # CLI command implementations
-├── tui/            # Terminal UI (dashboard, picker, modals)
-├── git/            # Git worktree operations
-└── config/         # Configuration handling
+```bash
+gwt status
 ```
 
-### Connector Pattern
+Interactive dashboard showing all worktrees with Claude state, Linear issues, and GitHub PRs. Keyboard shortcuts for common actions.
 
-External service integrations live in `src/connectors/`. Each connector follows a consistent structure:
+### Quick commands
 
-- `types.rs` - Data structures
-- `cache.rs` - Local caching (in `~/.cache/gwt/`)
-- `api.rs` or `cli.rs` - External API/CLI interactions
-- `mod.rs` - Public re-exports
+```bash
+# Create worktree linked to Linear issue
+gwt new JOH-123
 
-Connectors are re-exported at the crate root for backward compatibility (`crate::linear`, `crate::github`, etc.).
+# Switch worktrees (fuzzy picker)
+gwt switch
+
+# Merge to main and cleanup
+gwt merge
+
+# Remove worktree
+gwt remove
+
+# Jump to main branch
+gwt main
+```
+
+### Worktree organization
+
+Worktrees are created at `~/worktrees/{project}/{category}/{branch-name}`:
+
+```bash
+gwt new feature-auth              # dev category (default)
+gwt new bugfix-123 -c review      # review category
+gwt new demo-client -c demo       # demo category
+```
+
+## How it works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  gwt status (dashboard)                                      │
+├─────────────────────────────────────────────────────────────┤
+│  Worktree          │ Claude    │ Linear      │ GitHub       │
+│  ────────────────────────────────────────────────────────── │
+│  dev/joh-255       │ Working   │ In Progress │ PR #42 ✓     │
+│  dev/joh-256       │ Waiting   │ Todo        │ -            │
+│  review/joh-240    │ Idle      │ Done        │ PR #41 merged│
+└─────────────────────────────────────────────────────────────┘
+```
+
+The dashboard polls for updates and highlights worktrees needing attention (e.g., Claude waiting for permission).
