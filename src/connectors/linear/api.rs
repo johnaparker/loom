@@ -107,9 +107,15 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
 /// Update a Linear issue's status by state type
 ///
 /// state_type values:
-/// - "started" - marks issue as "In Progress"
-/// - "completed" - marks issue as "Done"
+/// - "started" - marks issue as "In Progress" (prefers state named "In Progress")
+/// - "completed" - marks issue as "Done" (prefers state named "Done")
 pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> Result<()> {
+    // Map state types to preferred state names
+    let preferred_name = match state_type {
+        "started" => Some("In Progress"),
+        "completed" => Some("Done"),
+        _ => None,
+    };
     let client = reqwest::blocking::Client::builder()
         .timeout(API_TIMEOUT)
         .build()?;
@@ -198,13 +204,24 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
             message: "Could not get team workflow states".to_string(),
         })?;
 
-    let target_state = states
-        .iter()
-        .find(|state| {
-            state
-                .get("type")
-                .and_then(|t| t.as_str())
-                .is_some_and(|t| t == state_type)
+    // First try to find by preferred name (e.g., "In Progress" for started)
+    // Fall back to any state with matching type
+    let target_state = preferred_name
+        .and_then(|name| {
+            states.iter().find(|state| {
+                state
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .is_some_and(|n| n.eq_ignore_ascii_case(name))
+            })
+        })
+        .or_else(|| {
+            states.iter().find(|state| {
+                state
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .is_some_and(|t| t == state_type)
+            })
         })
         .ok_or_else(|| GwtError::LinearApiError {
             message: format!("No workflow state with type '{}' found", state_type),

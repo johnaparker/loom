@@ -9,12 +9,10 @@ use std::io::{self, stdout};
 use super::operations;
 use crate::cli::Category;
 use crate::config::Config;
-use crate::error::GwtError;
 use crate::git::WorktreeManager;
 use crate::github;
 use crate::linear;
 use crate::sesh;
-use crate::sync;
 use crate::tmux;
 use crate::tui::{Dashboard, DashboardResult};
 
@@ -355,25 +353,25 @@ fn run_dashboard_loop(
                     _ => Category::Dev,
                 };
 
-                let result = execute_create(&manager, &config, project_name, &branch, cat, cache_dir);
+                let result = operations::create_worktree(&manager, &config, project_name, &branch, cat, cache_dir);
 
                 match result {
-                    Ok((session_name, worktree_path, issue_id)) => {
-                        let path_str = worktree_path.to_str().unwrap();
+                    Ok(create_result) => {
+                        let path_str = create_result.worktree_path.to_str().unwrap();
 
-                        if auto_claude && issue_id.is_some() {
+                        if auto_claude && create_result.issue.is_some() {
                             // Launch Claude with initial prompt for the Linear issue
-                            let issue = issue_id.unwrap();
+                            let issue_id = &create_result.issue.as_ref().unwrap().id;
                             let claude_cmd = format!(
                                 "bash -c 'claude \"work on {} /plan\"; exec $SHELL'",
-                                issue
+                                issue_id
                             );
-                            tmux::create_session_with_command(&session_name, path_str, &claude_cmd)?;
-                            tmux::switch_to_session(&session_name, path_str)?;
+                            tmux::create_session_with_command(&create_result.session_name, path_str, &claude_cmd)?;
+                            tmux::switch_to_session(&create_result.session_name, path_str)?;
                             dashboard.show_result(true, format!("Created '{}' and started Claude", branch));
                         } else {
                             // Normal flow - just switch to the new session
-                            tmux::switch_to_session(&session_name, path_str)?;
+                            tmux::switch_to_session(&create_result.session_name, path_str)?;
                             dashboard.show_result(true, format!("Created and switched to '{}'", branch));
                         }
                     }
@@ -431,80 +429,3 @@ fn execute_sync(
     operations::sync_worktree_with_main(manager, path)
 }
 
-/// Execute worktree creation
-/// Returns (session_name, worktree_path, issue_id) where issue_id is Some if linked to Linear
-fn execute_create(
-    manager: &WorktreeManager,
-    config: &Config,
-    project_name: &str,
-    branch: &str,
-    category: Category,
-    cache_dir: &std::path::Path,
-) -> Result<(String, std::path::PathBuf, Option<String>)> {
-    let worktree_root = config.worktree_root()?;
-
-    // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
-    let resolved = linear::resolve_input(
-        branch,
-        config.linear_prefix(),
-        config.linear_api_key(),
-    )?;
-
-    // Check if worktree already exists
-    if let Some(_existing) = manager.get_worktree(&resolved.worktree_name)? {
-        return Err(GwtError::WorktreeAlreadyExists {
-            name: resolved.worktree_name,
-        }
-        .into());
-    }
-
-    // Build worktree path: ~/worktrees/{project}/{category}/{name}
-    let worktree_path = worktree_root
-        .join(project_name)
-        .join(category.to_string())
-        .join(&resolved.worktree_name);
-
-    // Fetch from origin to ensure we have the latest refs
-    let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
-
-    // Check if remote branch exists
-    let track_remote = manager.remote_branch_exists(&resolved.git_branch);
-
-    // Create the worktree - either tracking remote or creating new
-    if track_remote {
-        manager.create_worktree_tracking(&resolved.git_branch, &worktree_path)?;
-    } else {
-        manager.create_worktree(&resolved.git_branch, &worktree_path)?;
-    }
-
-    // Write Linear metadata if we have issue info
-    if let Some(ref issue) = resolved.issue {
-        linear::write_metadata(cache_dir, project_name, &resolved.worktree_name, issue)?;
-    }
-
-    // Sync files from main repo
-    let patterns = config.sync_patterns();
-    if !patterns.is_empty() {
-        let synced = sync::sync_files(manager.repo_root(), &worktree_path, &patterns)?;
-
-        // Run direnv allow if .envrc was synced
-        if synced.iter().any(|p| p == ".envrc") {
-            let _ = sync::run_direnv_allow(&worktree_path);
-        }
-    }
-
-    // Register with sesh if enabled
-    let session_name = sesh::session_name(project_name, &resolved.worktree_name);
-    if config.sesh_auto_register() {
-        sesh::register_worktree(
-            project_name,
-            &resolved.worktree_name,
-            worktree_path.to_str().unwrap(),
-        )?;
-    }
-
-    // Extract issue ID for auto-claude feature
-    let issue_id = resolved.issue.as_ref().map(|i| i.id.clone());
-
-    Ok((session_name, worktree_path, issue_id))
-}
