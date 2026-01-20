@@ -91,6 +91,10 @@ pub enum Commands {
     #[command(visible_alias = "li")]
     Linear,
 
+    /// Open the GitHub PR for the current worktree (or create-PR page)
+    #[command(visible_alias = "gh")]
+    GitHub,
+
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for

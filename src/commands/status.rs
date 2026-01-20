@@ -10,6 +10,7 @@ use crate::cli::Category;
 use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::WorktreeManager;
+use crate::github;
 use crate::linear;
 use crate::sesh;
 use crate::sync;
@@ -24,7 +25,7 @@ pub fn status() -> Result<()> {
     let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
 
     let worktrees = manager.list_worktrees_with_stats()?;
-    let mut dashboard = Dashboard::new(worktrees, project_name.clone());
+    let mut dashboard = Dashboard::new(worktrees, project_name.clone(), manager.repo_root().to_path_buf());
     dashboard.set_main_branch(main_branch);
 
     // Set up terminal once for the entire session
@@ -305,6 +306,43 @@ fn run_dashboard_loop(
                 }
                 // Stay in dashboard - don't exit
             }
+            DashboardResult::GitHub { worktree } => {
+                // Open GitHub PR or create-PR page
+                if let Some(branch) = &worktree.info.branch {
+                    // Try to get PR info
+                    match github::get_pr_for_branch(manager.repo_root(), branch) {
+                        Ok(Some(pr)) => {
+                            // Cache the PR info and open it
+                            let _ = github::write_pr_cache(&project_name, &worktree.info.name, &pr);
+                            if let Err(e) = github::open_url(&pr.url) {
+                                dashboard.show_result(false, format!("Failed to open URL: {}", e));
+                            } else {
+                                dashboard.show_result(true, format!("Opening PR #{}: {}", pr.number, pr.title));
+                            }
+                        }
+                        Ok(None) => {
+                            // No PR exists - open create PR page
+                            match github::get_repo_info(manager.repo_root()) {
+                                Ok((owner, repo)) => {
+                                    let create_url = github::get_create_pr_url(&owner, &repo, branch);
+                                    if let Err(e) = github::open_url(&create_url) {
+                                        dashboard.show_result(false, format!("Failed to open URL: {}", e));
+                                    } else {
+                                        dashboard.show_result(true, format!("Opening create PR page for '{}'", branch));
+                                    }
+                                }
+                                Err(e) => {
+                                    dashboard.show_result(false, format!("GitHub: {}", e));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            dashboard.show_result(false, format!("GitHub: {}", e));
+                        }
+                    }
+                }
+                // Stay in dashboard - don't exit
+            }
             DashboardResult::CreateNew { branch, category } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,
@@ -459,8 +497,15 @@ fn execute_create(
     // Fetch from origin to ensure we have the latest refs
     let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
 
-    // Create the worktree
-    manager.create_worktree(&resolved.git_branch, &worktree_path)?;
+    // Check if remote branch exists
+    let track_remote = manager.remote_branch_exists(&resolved.git_branch);
+
+    // Create the worktree - either tracking remote or creating new
+    if track_remote {
+        manager.create_worktree_tracking(&resolved.git_branch, &worktree_path)?;
+    } else {
+        manager.create_worktree(&resolved.git_branch, &worktree_path)?;
+    }
 
     // Write Linear metadata if we have issue info
     if let Some(ref issue) = resolved.issue {

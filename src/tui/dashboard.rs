@@ -11,10 +11,14 @@ use ratatui::{
 };
 use std::collections::HashMap;
 use std::io::{self, stdout};
+use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::claude::{self, ClaudeSession, ClaudeState};
 use crate::git::WorktreeStats;
+use crate::github::{self, GitHubPR};
 use crate::linear::{self, LinearIssue};
 
 /// Braille spinner frames for smooth rotation animation
@@ -52,6 +56,8 @@ pub enum DashboardResult {
     CreateNew { branch: String, category: String },
     /// Open Linear issue for a worktree
     Linear { worktree: WorktreeStats },
+    /// Open GitHub PR for a worktree
+    GitHub { worktree: WorktreeStats },
     /// Refresh the dashboard (after an action)
     Refresh,
 }
@@ -78,7 +84,11 @@ enum RightPanelView {
     #[default]
     Commits,
     Linear,
+    GitHub,
 }
+
+/// Result of async GitHub PR fetch
+type GitHubPRResult = (String, Option<GitHubPR>); // (worktree_name, pr)
 
 /// Interactive dashboard for worktree status
 pub struct Dashboard {
@@ -87,6 +97,7 @@ pub struct Dashboard {
     selected: usize,
     list_state: ListState,
     project_name: String,
+    repo_root: PathBuf,
     mode: DashboardMode,
     search_input: String,
     matcher: Matcher,
@@ -98,6 +109,8 @@ pub struct Dashboard {
     status_message: Option<(bool, String)>,
     /// Cached Linear issues by worktree name
     linear_issues: HashMap<String, LinearIssue>,
+    /// Cached GitHub PRs by worktree name
+    github_prs: HashMap<String, GitHubPR>,
     /// Cached Claude session states by worktree name
     claude_states: HashMap<String, ClaudeSession>,
     /// Animation frame counter (wraps around 0-255)
@@ -106,10 +119,20 @@ pub struct Dashboard {
     has_active_claude: bool,
     /// Current view for the right panel (Commits or Linear)
     right_panel_view: RightPanelView,
+    /// Channel for receiving async GitHub PR results
+    github_pr_receiver: Receiver<GitHubPRResult>,
+    /// Sender for spawning async GitHub PR fetches
+    github_pr_sender: Sender<GitHubPRResult>,
+    /// Worktrees currently loading GitHub PR data
+    github_loading: std::collections::HashSet<String>,
 }
 
 impl Dashboard {
-    pub fn new(worktrees: Vec<WorktreeStats>, project_name: String) -> Self {
+    pub fn new(
+        worktrees: Vec<WorktreeStats>,
+        project_name: String,
+        repo_root: PathBuf,
+    ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
         let mut list_state = ListState::default();
         if !worktrees.is_empty() {
@@ -119,12 +142,19 @@ impl Dashboard {
         // Load Linear issues for all worktrees
         let linear_issues = Self::load_linear_issues(&project_name, &worktrees);
 
+        // Load GitHub PRs from cache only (API fetch happens lazily when GitHub panel is viewed)
+        let github_prs = Self::load_github_prs_from_cache(&project_name, &worktrees);
+
+        // Create channel for async GitHub PR fetches
+        let (github_pr_sender, github_pr_receiver) = mpsc::channel();
+
         let mut dashboard = Self {
             worktrees,
             filtered_indices,
             selected: 0,
             list_state,
             project_name,
+            repo_root,
             mode: DashboardMode::Normal,
             search_input: String::new(),
             matcher: Matcher::new(NucleoConfig::DEFAULT),
@@ -132,10 +162,14 @@ impl Dashboard {
             pending_result: None,
             status_message: None,
             linear_issues,
+            github_prs,
             claude_states: HashMap::new(),
             animation_frame: 0,
             has_active_claude: false,
             right_panel_view: RightPanelView::default(),
+            github_pr_receiver,
+            github_pr_sender,
+            github_loading: std::collections::HashSet::new(),
         };
 
         // Load initial Claude states
@@ -158,6 +192,84 @@ impl Dashboard {
             }
         }
         issues
+    }
+
+    /// Load GitHub PRs from cache only (lazy loading - API fetch happens when panel is viewed)
+    fn load_github_prs_from_cache(
+        project_name: &str,
+        worktrees: &[WorktreeStats],
+    ) -> HashMap<String, GitHubPR> {
+        let mut prs = HashMap::new();
+        for wt in worktrees {
+            if let Ok(Some(pr)) = github::read_pr_cache(project_name, &wt.info.name) {
+                prs.insert(wt.info.name.clone(), pr);
+            }
+        }
+        prs
+    }
+
+    /// Spawn async fetch of GitHub PR for the selected worktree (non-blocking)
+    fn fetch_github_pr_for_selected(&mut self) {
+        let Some(worktree) = self.get_selected_worktree() else {
+            return;
+        };
+
+        // Skip main worktree
+        if worktree.info.is_main {
+            return;
+        }
+
+        let worktree_name = worktree.info.name.clone();
+        let branch = match &worktree.info.branch {
+            Some(b) => b.clone(),
+            None => return,
+        };
+
+        // Skip if already loading this worktree
+        if self.github_loading.contains(&worktree_name) {
+            return;
+        }
+
+        // Mark as loading
+        self.github_loading.insert(worktree_name.clone());
+
+        // Clone data needed for the thread
+        let repo_root = self.repo_root.clone();
+        let project_name = self.project_name.clone();
+        let sender = self.github_pr_sender.clone();
+
+        // Spawn thread to fetch PR
+        thread::spawn(move || {
+            let pr = github::get_pr_for_branch(&repo_root, &branch).ok().flatten();
+
+            // Cache the result
+            if let Some(ref pr) = pr {
+                let _ = github::write_pr_cache(&project_name, &worktree_name, pr);
+            } else {
+                let _ = github::delete_pr_cache(&project_name, &worktree_name);
+            }
+
+            // Send result back (ignore error if receiver is gone)
+            let _ = sender.send((worktree_name, pr));
+        });
+    }
+
+    /// Check for completed async GitHub PR fetches and update state
+    pub fn poll_github_results(&mut self) {
+        // Non-blocking receive of all pending results
+        while let Ok((worktree_name, pr)) = self.github_pr_receiver.try_recv() {
+            self.github_loading.remove(&worktree_name);
+            if let Some(pr) = pr {
+                self.github_prs.insert(worktree_name, pr);
+            } else {
+                self.github_prs.remove(&worktree_name);
+            }
+        }
+    }
+
+    /// Check if a worktree's GitHub PR is currently loading
+    fn is_github_loading(&self, worktree_name: &str) -> bool {
+        self.github_loading.contains(worktree_name)
     }
 
     /// Refresh Claude session states for all worktrees
@@ -206,6 +318,9 @@ impl Dashboard {
 
         // Refresh Linear issues
         self.linear_issues = Self::load_linear_issues(&self.project_name, &worktrees);
+
+        // Refresh GitHub PRs from cache (API fetch happens lazily)
+        self.github_prs = Self::load_github_prs_from_cache(&self.project_name, &worktrees);
 
         self.worktrees = worktrees;
         self.filter_worktrees();
@@ -299,10 +414,14 @@ impl Dashboard {
         let last_refresh = Instant::now();
 
         loop {
+            // Check for completed async GitHub PR fetches
+            self.poll_github_results();
+
             terminal.draw(|f| self.render(f))?;
 
-            // Use short interval when animating, otherwise wait for full refresh
-            let poll_timeout = if self.has_active_claude {
+            // Use short interval when animating or loading GitHub data
+            let has_pending_github = !self.github_loading.is_empty();
+            let poll_timeout = if self.has_active_claude || has_pending_github {
                 ANIMATION_INTERVAL
             } else {
                 // Calculate remaining time until next refresh
@@ -538,12 +657,26 @@ impl Dashboard {
                 }
                 None
             }
+            KeyCode::Char('g') => {
+                // GitHub - open PR or create-PR page (only for non-main worktrees)
+                if let Some(worktree) = self.get_selected_worktree() {
+                    if !worktree.info.is_main && worktree.info.branch.is_some() {
+                        return Some(DashboardResult::GitHub { worktree });
+                    }
+                }
+                None
+            }
             KeyCode::Tab => {
-                // Toggle right panel between Commits and Linear views
+                // Cycle right panel between Commits, Linear, and GitHub views
                 self.right_panel_view = match self.right_panel_view {
                     RightPanelView::Commits => RightPanelView::Linear,
-                    RightPanelView::Linear => RightPanelView::Commits,
+                    RightPanelView::Linear => RightPanelView::GitHub,
+                    RightPanelView::GitHub => RightPanelView::Commits,
                 };
+                // Fetch GitHub PR when switching to GitHub panel
+                if matches!(self.right_panel_view, RightPanelView::GitHub) {
+                    self.fetch_github_pr_for_selected();
+                }
                 None
             }
             _ => None,
@@ -598,6 +731,11 @@ impl Dashboard {
         let new = (current + delta).rem_euclid(len) as usize;
         self.selected = new;
         self.list_state.select(Some(new));
+
+        // Fetch GitHub PR when selection changes while on GitHub panel
+        if matches!(self.right_panel_view, RightPanelView::GitHub) {
+            self.fetch_github_pr_for_selected();
+        }
     }
 
     fn filter_worktrees(&mut self) {
@@ -696,6 +834,7 @@ impl Dashboard {
             match self.right_panel_view {
                 RightPanelView::Commits => self.render_commit_preview(f, right_chunks[0]),
                 RightPanelView::Linear => self.render_linear_panel(f, right_chunks[0]),
+                RightPanelView::GitHub => self.render_github_panel(f, right_chunks[0]),
             }
             self.render_claude_pane(f, right_chunks[1]);
         }
@@ -1065,7 +1204,9 @@ impl Dashboard {
         let title = Line::from(vec![
             Span::styled(" Commits", Style::default().fg(Color::White)),
             Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("Linear ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Linear", Style::default().fg(Color::DarkGray)),
+            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+            Span::styled("GitHub ", Style::default().fg(Color::DarkGray)),
         ]);
 
         let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
@@ -1083,7 +1224,9 @@ impl Dashboard {
         let title = Line::from(vec![
             Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
             Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("Linear ", Style::default().fg(Color::White)),
+            Span::styled("Linear", Style::default().fg(Color::White)),
+            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+            Span::styled("GitHub ", Style::default().fg(Color::DarkGray)),
         ]);
 
         let block = Block::default().borders(Borders::ALL).title(title);
@@ -1135,6 +1278,221 @@ impl Dashboard {
                 "No Linear issue linked\n\nCreate worktrees with Linear issue IDs\nto see issue details here.",
                 Style::default().fg(Color::DarkGray).italic(),
             ),
+        };
+
+        let paragraph = Paragraph::new(content).wrap(Wrap { trim: true });
+        f.render_widget(paragraph, inner);
+    }
+
+    fn render_github_panel(&self, f: &mut Frame, area: Rect) {
+        // Get the selected worktree info
+        let worktree = self.get_selected_worktree();
+        let worktree_name = worktree.as_ref().map(|wt| wt.info.name.as_str());
+        let pr = worktree
+            .as_ref()
+            .and_then(|wt| self.github_prs.get(&wt.info.name));
+        let is_loading = worktree_name
+            .map(|name| self.is_github_loading(name))
+            .unwrap_or(false);
+
+        let is_main = worktree
+            .as_ref()
+            .map(|wt| wt.info.is_main)
+            .unwrap_or(true);
+
+        // Build title with tab toggle indicator and loading state
+        let title = if is_loading {
+            Line::from(vec![
+                Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
+                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Linear", Style::default().fg(Color::DarkGray)),
+                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+                Span::styled("GitHub ", Style::default().fg(Color::White)),
+                Span::styled("⟳", Style::default().fg(Color::Yellow)),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
+                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+                Span::styled("Linear", Style::default().fg(Color::DarkGray)),
+                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
+                Span::styled("GitHub ", Style::default().fg(Color::White)),
+            ])
+        };
+
+        let block = Block::default().borders(Borders::ALL).title(title);
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        let content: Text = if is_main {
+            Text::styled(
+                "Main branch - no PR",
+                Style::default().fg(Color::DarkGray).italic(),
+            )
+        } else if is_loading && pr.is_none() {
+            Text::styled(
+                "Loading...",
+                Style::default().fg(Color::Yellow).italic(),
+            )
+        } else {
+            match pr {
+                Some(pr) => {
+                    let mut lines = Vec::new();
+
+                    // PR title in bold white
+                    lines.push(Line::from(Span::styled(
+                        &pr.title,
+                        Style::default().fg(Color::White).bold(),
+                    )));
+
+                    // PR number and state with hint to open
+                    let state_color = match pr.state.as_str() {
+                        "OPEN" => Color::Green,
+                        "MERGED" => Color::Magenta,
+                        "CLOSED" => Color::Red,
+                        _ => Color::DarkGray,
+                    };
+                    let draft_text = if pr.draft { " (draft)" } else { "" };
+                    lines.push(Line::from(vec![
+                        Span::styled(format!("#{}", pr.number), Style::default().fg(Color::Cyan)),
+                        Span::styled(
+                            format!(" {}{}", pr.state, draft_text),
+                            Style::default().fg(state_color),
+                        ),
+                        Span::styled(" (g to open)", Style::default().fg(Color::DarkGray)),
+                    ]));
+
+                    // Assignees and reviewers
+                    if !pr.assignees.is_empty() || !pr.reviewers.is_empty() {
+                        if !pr.assignees.is_empty() {
+                            lines.push(Line::from(vec![
+                                Span::styled("Assignees: ", Style::default().fg(Color::DarkGray)),
+                                Span::styled(
+                                    pr.assignees.iter().map(|a| format!("@{}", a)).collect::<Vec<_>>().join(", "),
+                                    Style::default().fg(Color::Cyan),
+                                ),
+                            ]));
+                        }
+                        if !pr.reviewers.is_empty() {
+                            lines.push(Line::from(vec![
+                                Span::styled("Reviewers: ", Style::default().fg(Color::DarkGray)),
+                                Span::styled(
+                                    pr.reviewers.iter().map(|r| format!("@{}", r)).collect::<Vec<_>>().join(", "),
+                                    Style::default().fg(Color::Cyan),
+                                ),
+                            ]));
+                        }
+                    }
+
+                    // Empty line before review/checks
+                    lines.push(Line::from(""));
+
+                    // Review decision (only show if a known decision exists)
+                    if let Some(ref decision) = pr.review_decision {
+                        let review_line = match decision.as_str() {
+                            "APPROVED" => Some(("✓", "Approved", Color::Green)),
+                            "CHANGES_REQUESTED" => Some(("✗", "Changes requested", Color::Red)),
+                            "REVIEW_REQUIRED" => Some(("○", "Review required", Color::Rgb(255, 165, 0))), // Orange
+                            _ => None,
+                        };
+                        if let Some((icon, text, color)) = review_line {
+                            lines.push(Line::from(vec![
+                                Span::styled(format!("{} ", icon), Style::default().fg(color)),
+                                Span::styled(text, Style::default().fg(color)),
+                            ]));
+                        }
+                    }
+
+                    // CI Status
+                    if let Some(ref checks) = pr.checks_status {
+                        let status_line = if checks.failing > 0 {
+                            Line::from(vec![
+                                Span::styled("✗ ", Style::default().fg(Color::Red)),
+                                Span::styled(
+                                    format!("{} failing", checks.failing),
+                                    Style::default().fg(Color::Red),
+                                ),
+                                Span::styled(
+                                    format!(
+                                        ", {} passing, {} pending",
+                                        checks.passing, checks.pending
+                                    ),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                            ])
+                        } else if checks.pending > 0 {
+                            Line::from(vec![
+                                Span::styled("○ ", Style::default().fg(Color::Yellow)),
+                                Span::styled(
+                                    format!("{} pending", checks.pending),
+                                    Style::default().fg(Color::Yellow),
+                                ),
+                                Span::styled(
+                                    format!(", {} passing", checks.passing),
+                                    Style::default().fg(Color::DarkGray),
+                                ),
+                            ])
+                        } else if checks.passing > 0 {
+                            Line::from(vec![
+                                Span::styled("✓ ", Style::default().fg(Color::Green)),
+                                Span::styled(
+                                    format!("{} checks passing", checks.passing),
+                                    Style::default().fg(Color::Green),
+                                ),
+                            ])
+                        } else {
+                            Line::from(Span::styled(
+                                "No checks",
+                                Style::default().fg(Color::DarkGray),
+                            ))
+                        };
+                        lines.push(status_line);
+
+                        // Show failing check names
+                        for name in &checks.failing_names {
+                            lines.push(Line::from(vec![
+                                Span::styled("  ✗ ", Style::default().fg(Color::Red)),
+                                Span::styled(name, Style::default().fg(Color::Red)),
+                            ]));
+                        }
+                    }
+
+                    // Recent comments
+                    if !pr.comments.is_empty() {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from(Span::styled(
+                            "Recent comments:",
+                            Style::default().fg(Color::DarkGray),
+                        )));
+
+                        for comment in pr.comments.iter().take(3) {
+                            // Truncate body to fit
+                            let max_len = (inner.width as usize).saturating_sub(4);
+                            let body_preview = if comment.body.len() > max_len {
+                                format!("{}...", &comment.body[..max_len.saturating_sub(3)])
+                            } else {
+                                comment.body.clone()
+                            };
+                            // Replace newlines with spaces for preview
+                            let body_preview = body_preview.replace('\n', " ");
+
+                            lines.push(Line::from(vec![
+                                Span::styled(
+                                    format!("  @{}: ", comment.author),
+                                    Style::default().fg(Color::Cyan),
+                                ),
+                                Span::styled(body_preview, Style::default().fg(Color::Gray)),
+                            ]));
+                        }
+                    }
+
+                    Text::from(lines)
+                }
+                None => Text::styled(
+                    "No PR found\n\nPress 'g' to create a PR",
+                    Style::default().fg(Color::DarkGray).italic(),
+                ),
+            }
         };
 
         let paragraph = Paragraph::new(content).wrap(Wrap { trim: true });
@@ -1390,6 +1748,14 @@ impl Dashboard {
                     spans.extend(vec![
                         Span::styled("l", Style::default().fg(Color::Cyan)),
                         Span::styled(": linear  ", Style::default().fg(Color::DarkGray)),
+                    ]);
+                }
+
+                // Show g: github only for non-main worktrees
+                if !is_main {
+                    spans.extend(vec![
+                        Span::styled("g", Style::default().fg(Color::Cyan)),
+                        Span::styled(": github  ", Style::default().fg(Color::DarkGray)),
                     ]);
                 }
 

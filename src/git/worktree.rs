@@ -53,12 +53,38 @@ pub struct WorktreeManager {
 
 impl WorktreeManager {
     /// Open a repository and create a worktree manager
+    /// Always finds the main repository, even when called from a worktree
     pub fn open(path: &Path) -> Result<Self> {
         let repo = Repository::discover(path).map_err(|_| GwtError::NotGitRepo)?;
-        let repo_root = repo
-            .workdir()
-            .ok_or(GwtError::NotGitRepo)?
-            .to_path_buf();
+        let workdir = repo.workdir().ok_or(GwtError::NotGitRepo)?;
+
+        // Check if we're in a worktree by looking for the common git dir
+        // git rev-parse --git-common-dir returns the path to the main .git directory
+        let output = Command::new("git")
+            .args(["rev-parse", "--git-common-dir"])
+            .current_dir(workdir)
+            .output()
+            .context("Failed to run git rev-parse")?;
+
+        if !output.status.success() {
+            return Err(GwtError::NotGitRepo.into());
+        }
+
+        let common_dir = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+
+        // The main repo root is the parent of the .git directory
+        // For worktrees, common_dir will be like /path/to/main/.git
+        // For main repo, common_dir will be .git (relative) or /path/to/main/.git
+        let repo_root = if common_dir.is_absolute() {
+            common_dir.parent().unwrap_or(&common_dir).to_path_buf()
+        } else {
+            // Relative path means we're already in the main repo
+            workdir.to_path_buf()
+        };
+
+        // Re-open repository from the main repo root to ensure consistent behavior
+        let repo = Repository::open(&repo_root).map_err(|_| GwtError::NotGitRepo)?;
+
         Ok(Self { repo, repo_root })
     }
 
@@ -245,6 +271,71 @@ impl WorktreeManager {
         }
 
         Ok(())
+    }
+
+    /// Create a new worktree tracking a remote branch
+    /// This creates a local branch that tracks origin/<branch>
+    pub fn create_worktree_tracking(&self, branch: &str, path: &Path) -> Result<()> {
+        // Create parent directories
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let path_str = path.to_str().unwrap();
+        let remote_ref = format!("origin/{}", branch);
+
+        // Check if local branch already exists
+        let local_branch_exists = self.repo.find_branch(branch, BranchType::Local).is_ok();
+
+        let output = if local_branch_exists {
+            // Local branch exists - use it directly without -b flag
+            Command::new("git")
+                .args(["worktree", "add", path_str, branch])
+                .current_dir(&self.repo_root)
+                .output()
+                .context("Failed to run git worktree add")?
+        } else {
+            // Create new local branch tracking the remote
+            // git worktree add -b <branch> <path> origin/<branch>
+            Command::new("git")
+                .args(["worktree", "add", "-b", branch, path_str, &remote_ref])
+                .current_dir(&self.repo_root)
+                .output()
+                .context("Failed to run git worktree add")?
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: "git worktree add".to_string(),
+                stderr,
+            }
+            .into());
+        }
+
+        // Set up tracking (in case git worktree add didn't do it automatically)
+        let _ = Command::new("git")
+            .args(["branch", "--set-upstream-to", &remote_ref, branch])
+            .current_dir(path)
+            .output();
+
+        Ok(())
+    }
+
+    /// Check if a remote branch exists
+    pub fn remote_branch_exists(&self, branch: &str) -> bool {
+        let output = Command::new("git")
+            .args(["ls-remote", "--heads", "origin", branch])
+            .current_dir(&self.repo_root)
+            .output();
+
+        match output {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                !stdout.trim().is_empty()
+            }
+            _ => false,
+        }
     }
 
     /// Remove a worktree
