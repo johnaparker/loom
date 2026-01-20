@@ -20,12 +20,12 @@ use crate::tmux;
 /// - Deleting Linear metadata cache
 ///
 /// Call this AFTER removing the worktree itself.
-pub fn cleanup_worktree_resources(project_name: &str, worktree_name: &str) -> Result<CleanupResult> {
+pub fn cleanup_worktree_resources(cache_dir: &Path, project_name: &str, worktree_name: &str) -> Result<CleanupResult> {
     let session_name = sesh::session_name(project_name, worktree_name);
 
     let tmux_killed = tmux::kill_session(&session_name);
     let sesh_unregistered = sesh::unregister_worktree(project_name, worktree_name)?;
-    let linear_deleted = linear::delete_metadata(project_name, worktree_name).is_ok();
+    let linear_deleted = linear::delete_metadata(cache_dir, project_name, worktree_name).is_ok();
 
     Ok(CleanupResult {
         tmux_killed,
@@ -47,6 +47,7 @@ pub struct CleanupResult {
 /// This is the complete delete operation used by both CLI and TUI.
 pub fn delete_worktree(
     manager: &WorktreeManager,
+    cache_dir: &Path,
     project_name: &str,
     worktree_name: &str,
     worktree_path: &Path,
@@ -58,7 +59,7 @@ pub fn delete_worktree(
     manager.remove_worktree(worktree_path, force)?;
 
     // Clean up associated resources
-    let result = cleanup_worktree_resources(project_name, worktree_name)?;
+    let result = cleanup_worktree_resources(cache_dir, project_name, worktree_name)?;
 
     // Delete branch if requested
     if delete_branch {
@@ -75,6 +76,7 @@ pub fn delete_worktree(
 /// This is the complete merge operation used by both CLI and TUI.
 pub fn merge_worktree_to_main(
     manager: &WorktreeManager,
+    cache_dir: &Path,
     project_name: &str,
     worktree_name: &str,
     worktree_path: &Path,
@@ -88,7 +90,7 @@ pub fn merge_worktree_to_main(
     manager.remove_worktree(worktree_path, false)?;
 
     // Clean up associated resources
-    let result = cleanup_worktree_resources(project_name, worktree_name)?;
+    let result = cleanup_worktree_resources(cache_dir, project_name, worktree_name)?;
 
     // Delete branch if requested
     if delete_branch {

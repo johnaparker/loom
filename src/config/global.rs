@@ -10,6 +10,9 @@ pub struct GlobalConfig {
     pub worktree_root: String,
     #[serde(default = "default_category")]
     pub default_category: String,
+    /// Cache directory (default: ~/.cache/gwt)
+    #[serde(default = "default_cache_dir")]
+    pub cache_dir: String,
     #[serde(default)]
     pub sync: SyncConfig,
     #[serde(default)]
@@ -62,6 +65,10 @@ fn default_category() -> String {
     "dev".to_string()
 }
 
+fn default_cache_dir() -> String {
+    "~/.cache/gwt".to_string()
+}
+
 fn default_sync_patterns() -> Vec<String> {
     vec![
         ".env".to_string(),
@@ -79,6 +86,7 @@ impl Default for GlobalConfig {
         Self {
             worktree_root: default_worktree_root(),
             default_category: default_category(),
+            cache_dir: default_cache_dir(),
             sync: SyncConfig::default(),
             sesh: SeshConfig::default(),
             linear: LinearConfig::default(),
@@ -138,6 +146,7 @@ mod tests {
         let config = GlobalConfig::default();
         assert_eq!(config.worktree_root, "~/worktrees");
         assert_eq!(config.default_category, "dev");
+        assert_eq!(config.cache_dir, "~/.cache/gwt");
         assert!(config.sesh.auto_register);
         assert!(config.sync.patterns.contains(&".env".to_string()));
         assert!(config.sync.patterns.contains(&".envrc".to_string()));

@@ -1,6 +1,7 @@
 //! Cache operations for Linear issue metadata.
 
 use anyhow::Result;
+use std::path::Path;
 
 use crate::connectors::cache as shared_cache;
 use super::types::LinearIssue;
@@ -8,7 +9,7 @@ use super::types::LinearIssue;
 const CACHE_FILENAME: &str = "linear.json";
 
 /// Write Linear issue metadata to cache directory
-pub fn write_metadata(project_name: &str, worktree_name: &str, issue: &LinearIssue) -> Result<()> {
+pub fn write_metadata(base: &Path, project_name: &str, worktree_name: &str, issue: &LinearIssue) -> Result<()> {
     let metadata = serde_json::json!({
         "id": issue.id,
         "title": issue.title,
@@ -16,13 +17,13 @@ pub fn write_metadata(project_name: &str, worktree_name: &str, issue: &LinearIss
         "branch": issue.branch_name,
         "description": issue.description
     });
-    shared_cache::write_json(project_name, worktree_name, CACHE_FILENAME, &metadata)
+    shared_cache::write_json(base, project_name, worktree_name, CACHE_FILENAME, &metadata)
 }
 
 /// Read Linear issue metadata from cache directory
-pub fn read_metadata(project_name: &str, worktree_name: &str) -> Result<Option<LinearIssue>> {
+pub fn read_metadata(base: &Path, project_name: &str, worktree_name: &str) -> Result<Option<LinearIssue>> {
     let value: Option<serde_json::Value> =
-        shared_cache::read_json(project_name, worktree_name, CACHE_FILENAME)?;
+        shared_cache::read_json(base, project_name, worktree_name, CACHE_FILENAME)?;
 
     let Some(value) = value else {
         return Ok(None);
@@ -43,6 +44,6 @@ pub fn read_metadata(project_name: &str, worktree_name: &str) -> Result<Option<L
 }
 
 /// Delete Linear issue metadata from cache directory
-pub fn delete_metadata(project_name: &str, worktree_name: &str) -> Result<()> {
-    shared_cache::delete_worktree_cache(project_name, worktree_name)
+pub fn delete_metadata(base: &Path, project_name: &str, worktree_name: &str) -> Result<()> {
+    shared_cache::delete_worktree_cache(base, project_name, worktree_name)
 }

@@ -18,6 +18,7 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     let manager = WorktreeManager::open(&current_dir)?;
     let config = Config::load(Some(manager.repo_root()))?;
     let project_name = config.project_name(&manager.project_name()?);
+    let cache_dir = config.cache_dir()?;
 
     // Fetch from origin to ensure we have accurate lag information (only for TUI picker)
     if name.is_none() && !dry_run {
@@ -193,7 +194,7 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     }
 
     // Clean up Linear cache
-    let _ = linear::delete_metadata(&project_name, &worktree.name);
+    let _ = linear::delete_metadata(&cache_dir, &project_name, &worktree.name);
 
     // Offer to delete the branch
     if let Some(ref branch) = worktree.branch {

@@ -11,6 +11,7 @@ pub fn github_cmd() -> Result<()> {
     let manager = WorktreeManager::open(&current_dir)?;
     let config = Config::load(Some(manager.repo_root()))?;
     let project_name = config.project_name(&manager.project_name()?);
+    let cache_dir = config.cache_dir()?;
 
     // Find worktree from current directory
     let worktrees = manager.list_worktrees()?;
@@ -40,7 +41,7 @@ pub fn github_cmd() -> Result<()> {
     // Try to get PR info and cache it
     if let Ok(Some(pr)) = github::get_pr_for_branch(manager.repo_root(), &branch) {
         // Cache the PR info
-        let _ = github::write_pr_cache(&project_name, &worktree.name, &pr);
+        let _ = github::write_pr_cache(&cache_dir, &project_name, &worktree.name, &pr);
         github::open_url(&pr.url)?;
         println!("{} Opening PR #{}: {}", "✓".green(), pr.number, pr.title);
     } else {

@@ -5,7 +5,7 @@ pub use global::GlobalConfig;
 pub use project::ProjectConfig;
 
 use anyhow::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Combined configuration from global and project sources
 #[derive(Debug, Clone)]
@@ -76,5 +76,25 @@ impl Config {
     /// Get the Linear API key
     pub fn linear_api_key(&self) -> Option<&str> {
         self.global.linear.api_key.as_deref()
+    }
+
+    /// Get the cache directory, expanding ~ to home
+    ///
+    /// Priority: GWT_CACHE_DIR env var > config file > default (~/.cache/gwt)
+    pub fn cache_dir(&self) -> Result<PathBuf> {
+        // Environment variable takes precedence
+        if let Ok(env_dir) = std::env::var("GWT_CACHE_DIR") {
+            return Ok(PathBuf::from(env_dir));
+        }
+
+        // Use config value, expanding ~ to home
+        let dir = &self.global.cache_dir;
+        if dir.starts_with("~") {
+            let home = dirs::home_dir()
+                .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+            Ok(home.join(dir.strip_prefix("~/").unwrap_or(dir.strip_prefix("~").unwrap_or(dir))))
+        } else {
+            Ok(PathBuf::from(dir))
+        }
     }
 }

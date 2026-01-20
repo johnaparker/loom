@@ -14,6 +14,7 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     let manager = WorktreeManager::open(&current_dir)?;
     let config = Config::load(Some(manager.repo_root()))?;
     let project_name = config.project_name(&manager.project_name()?);
+    let cache_dir = config.cache_dir()?;
 
     // Find the worktree
     let worktree = manager
@@ -83,7 +84,7 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     }
 
     // Clean up Linear cache
-    let _ = linear::delete_metadata(&project_name, name);
+    let _ = linear::delete_metadata(&cache_dir, &project_name, name);
 
     println!();
     println!(
