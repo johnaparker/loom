@@ -256,7 +256,7 @@ impl Dashboard {
 
         lines.push(Line::from(line1_spans));
 
-        // Line 2: All git info on one line - age, commits ahead/behind, diff vs main, uncommitted
+        // Line 2: age  [vs main bracket]  [vs self bracket]
         let mut line2_spans = Vec::new();
 
         // Age - always far left
@@ -272,71 +272,31 @@ impl Dashboard {
             line2_spans.push(Span::styled(age_text, Style::default().fg(Color::DarkGray)));
         }
 
-        // Commits ahead (↑)
-        if let Some(ahead) = wt.commits_ahead
-            && ahead > 0
-        {
+        // Build vs main bracket
+        let vs_main_bracket = Self::render_vs_main_bracket(wt);
+        let has_main_bracket = !vs_main_bracket.is_empty();
+        if has_main_bracket {
             line2_spans.push(Span::raw("  "));
-            line2_spans.push(Span::styled(
-                format!(" \u{2191}{}", ahead),
-                Style::default().fg(Color::Yellow),
-            ));
+            line2_spans.extend(vs_main_bracket);
         }
 
-        // Commits behind (↓)
-        if let Some(behind) = wt.commits_behind
-            && behind > 0
-        {
+        // Build vs self bracket
+        let vs_self_bracket = Self::render_vs_self_bracket(wt);
+        let has_self_bracket = !vs_self_bracket.is_empty();
+        if has_self_bracket {
             line2_spans.push(Span::raw("  "));
-            line2_spans.push(Span::styled(
-                format!(" \u{2193}{}", behind),
-                Style::default().fg(Color::Magenta),
-            ));
+            line2_spans.extend(vs_self_bracket);
         }
 
-        // Diff vs main (skip for main worktree)
-        if !wt.info.is_main
-            && let (Some(added), Some(removed)) = (wt.diff_added, wt.diff_removed)
-        {
-            if added > 0 || removed > 0 {
-                line2_spans.push(Span::styled(
-                    format!("  +{}", added),
-                    Style::default().fg(Color::Green),
-                ));
-                line2_spans.push(Span::styled(
-                    format!(" -{}", removed),
-                    Style::default().fg(Color::Red),
-                ));
-                line2_spans.push(Span::styled(
-                    " vs main",
-                    Style::default().fg(Color::DarkGray),
-                ));
-            } else {
-                line2_spans.push(Span::styled(
-                    "  no commits",
-                    Style::default().fg(Color::DarkGray),
-                ));
-            }
-        }
+        // Show "Clean" only if both brackets are empty and no uncommitted changes
+        let is_clean = !has_main_bracket
+            && !has_self_bracket
+            && !wt.has_uncommitted_changes();
 
-        // Uncommitted changes (use green/red with ~ prefix)
-        if wt.uncommitted_added > 0 || wt.uncommitted_removed > 0 {
-            let padding = if line2_spans.is_empty() { "  " } else { "  " };
-            line2_spans.push(Span::raw(padding));
-            line2_spans.push(Span::styled(
-                format!("+{}", wt.uncommitted_added),
-                Style::default().fg(Color::Green),
-            ));
-            line2_spans.push(Span::styled(
-                format!(" -{}", wt.uncommitted_removed),
-                Style::default().fg(Color::Red),
-            ));
-            line2_spans.push(Span::styled(
-                " uncommitted",
-                Style::default().fg(Color::DarkGray),
-            ));
-        } else if line2_spans.is_empty() {
-            line2_spans.push(Span::styled("  Clean", Style::default().fg(Color::Green)));
+        if is_clean && line2_spans.len() <= 2 {
+            // Only age was added
+            line2_spans.push(Span::raw("  "));
+            line2_spans.push(Span::styled("Clean", Style::default().fg(Color::Green)));
         }
 
         if !line2_spans.is_empty() {
@@ -394,6 +354,148 @@ impl Dashboard {
             .collect();
 
         ListItem::new(lines)
+    }
+
+    /// Render the "vs main" bracket: [↑N ↓N +X -Y vs main]
+    /// For main branch: shows [↓N vs origin] if behind origin/main
+    /// For other branches: shows commits ahead/behind main and diff stats
+    fn render_vs_main_bracket(wt: &WorktreeStats) -> Vec<Span<'static>> {
+        let mut spans = Vec::new();
+        let mut has_content = false;
+
+        if wt.info.is_main {
+            // Main branch: show if behind origin/main
+            if let Some(behind) = wt.commits_behind
+                && behind > 0
+            {
+                spans.push(Span::styled("[", Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled(
+                    format!("\u{2193}{}", behind),
+                    Style::default().fg(Color::Magenta),
+                ));
+                spans.push(Span::styled(" vs origin", Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled("]", Style::default().fg(Color::DarkGray)));
+            }
+        } else {
+            // Non-main branches: show commits ahead/behind main and diff
+            spans.push(Span::styled("[", Style::default().fg(Color::DarkGray)));
+
+            // Commits ahead of main (↑)
+            if let Some(ahead) = wt.commits_ahead
+                && ahead > 0
+            {
+                spans.push(Span::styled(
+                    format!("\u{2191}{}", ahead),
+                    Style::default().fg(Color::Yellow),
+                ));
+                has_content = true;
+            }
+
+            // Commits behind main (↓)
+            if let Some(behind) = wt.commits_behind
+                && behind > 0
+            {
+                if has_content {
+                    spans.push(Span::raw(" "));
+                }
+                spans.push(Span::styled(
+                    format!("\u{2193}{}", behind),
+                    Style::default().fg(Color::Magenta),
+                ));
+                has_content = true;
+            }
+
+            // Diff vs main
+            if let (Some(added), Some(removed)) = (wt.diff_added, wt.diff_removed) {
+                if added > 0 || removed > 0 {
+                    if has_content {
+                        spans.push(Span::raw(" "));
+                    }
+                    spans.push(Span::styled(
+                        format!("+{}", added),
+                        Style::default().fg(Color::Green),
+                    ));
+                    spans.push(Span::styled(
+                        format!(" -{}", removed),
+                        Style::default().fg(Color::Red),
+                    ));
+                    has_content = true;
+                }
+            }
+
+            if has_content {
+                spans.push(Span::styled(" vs main", Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled("]", Style::default().fg(Color::DarkGray)));
+            } else {
+                // No content - return empty, don't show empty bracket
+                return Vec::new();
+            }
+        }
+
+        spans
+    }
+
+    /// Render the "vs self" bracket: [↑N ↓N +X -Y vs self]
+    /// Shows unpushed commits (tracking_ahead) and uncommitted changes
+    /// For main branch: only shows uncommitted changes (tracking is shown in vs origin bracket)
+    fn render_vs_self_bracket(wt: &WorktreeStats) -> Vec<Span<'static>> {
+        let mut spans = Vec::new();
+        let mut has_content = false;
+
+        spans.push(Span::styled("[", Style::default().fg(Color::DarkGray)));
+
+        // For non-main branches, show tracking info (ahead/behind origin/<branch>)
+        if !wt.info.is_main {
+            // Unpushed commits (ahead of tracking branch)
+            if let Some(ahead) = wt.tracking_ahead
+                && ahead > 0
+            {
+                spans.push(Span::styled(
+                    format!("\u{2191}{}", ahead),
+                    Style::default().fg(Color::Yellow),
+                ));
+                has_content = true;
+            }
+
+            // Behind tracking branch
+            if let Some(behind) = wt.tracking_behind
+                && behind > 0
+            {
+                if has_content {
+                    spans.push(Span::raw(" "));
+                }
+                spans.push(Span::styled(
+                    format!("\u{2193}{}", behind),
+                    Style::default().fg(Color::Magenta),
+                ));
+                has_content = true;
+            }
+        }
+
+        // Uncommitted changes (for all branches)
+        if wt.uncommitted_added > 0 || wt.uncommitted_removed > 0 {
+            if has_content {
+                spans.push(Span::raw(" "));
+            }
+            spans.push(Span::styled(
+                format!("+{}", wt.uncommitted_added),
+                Style::default().fg(Color::Green),
+            ));
+            spans.push(Span::styled(
+                format!(" -{}", wt.uncommitted_removed),
+                Style::default().fg(Color::Red),
+            ));
+            has_content = true;
+        }
+
+        if has_content {
+            spans.push(Span::styled(" vs self", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled("]", Style::default().fg(Color::DarkGray)));
+            spans
+        } else {
+            // No content - return empty, don't show empty bracket
+            Vec::new()
+        }
     }
 
     fn render_commit_preview(&self, f: &mut Frame, area: Rect) {
