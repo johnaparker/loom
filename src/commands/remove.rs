@@ -1,9 +1,9 @@
 use anyhow::Result;
 use colored::Colorize;
-use nucleo::{Config as NucleoConfig, Matcher, Utf32Str};
 use std::io::{self, Write};
 
 use crate::config::Config;
+use crate::core::FuzzyMatcher;
 use crate::error::GwtError;
 use crate::git::{WorktreeInfo, WorktreeManager};
 use crate::linear;
@@ -235,31 +235,17 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
 }
 
 fn fuzzy_match_worktree(worktrees: &[WorktreeInfo], query: &str) -> Result<WorktreeInfo> {
-    let mut matcher = Matcher::new(NucleoConfig::DEFAULT);
+    let mut matcher = FuzzyMatcher::new();
 
-    let mut scored: Vec<(usize, u16)> = worktrees
-        .iter()
-        .enumerate()
-        .filter_map(|(i, wt)| {
-            let haystack = format!("{} {}", wt.name, wt.branch.as_deref().unwrap_or(""));
-            let mut haystack_buf = Vec::new();
-            let haystack_str = Utf32Str::new(&haystack, &mut haystack_buf);
-            let mut needle_buf = Vec::new();
-            let needle_str = Utf32Str::new(query, &mut needle_buf);
+    let best_idx = matcher.best_match(worktrees, query, |wt| {
+        format!("{} {}", wt.name, wt.branch.as_deref().unwrap_or(""))
+    });
 
-            matcher
-                .fuzzy_match(haystack_str, needle_str)
-                .map(|score| (i, score))
-        })
-        .collect();
-
-    if scored.is_empty() {
-        return Err(GwtError::NoMatch {
+    match best_idx {
+        Some(idx) => Ok(worktrees[idx].clone()),
+        None => Err(GwtError::NoMatch {
             query: query.to_string(),
         }
-        .into());
+        .into()),
     }
-
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
-    Ok(worktrees[scored[0].0].clone())
 }

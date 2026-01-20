@@ -115,3 +115,26 @@ If `.envrc` is synced to a new worktree, gwt automatically runs `direnv allow`.
 ### Tmux
 
 `gwt switch` and `gwt main` use tmux to create and switch sessions. If a session doesn't exist, it's created automatically.
+
+## Architecture
+
+```
+src/
+├── core/           # Shared utilities (fuzzy matching, terminal helpers)
+├── connectors/     # External integrations (Linear, GitHub, Claude, tmux, sesh)
+├── commands/       # CLI command implementations
+├── tui/            # Terminal UI (dashboard, picker, modals)
+├── git/            # Git worktree operations
+└── config/         # Configuration handling
+```
+
+### Connector Pattern
+
+External service integrations live in `src/connectors/`. Each connector follows a consistent structure:
+
+- `types.rs` - Data structures
+- `cache.rs` - Local caching (in `~/.cache/gwt/`)
+- `api.rs` or `cli.rs` - External API/CLI interactions
+- `mod.rs` - Public re-exports
+
+Connectors are re-exported at the crate root for backward compatibility (`crate::linear`, `crate::github`, etc.).

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use colored::Colorize;
-use nucleo::{Config as NucleoConfig, Matcher, Utf32Str};
 
 use crate::config::Config;
+use crate::core::FuzzyMatcher;
 use crate::git::{WorktreeInfo, WorktreeManager};
 use crate::tmux;
 use crate::tui::Picker;
@@ -106,37 +106,19 @@ pub fn switch(name: Option<&str>) -> Result<()> {
 }
 
 fn switch_by_name(worktrees: &[WorktreeInfo], project_name: &str, query: &str) -> Result<()> {
-    let mut matcher = Matcher::new(NucleoConfig::DEFAULT);
+    let mut matcher = FuzzyMatcher::new();
 
-    // Score all worktrees against the query
-    let mut scored: Vec<(usize, u16)> = worktrees
-        .iter()
-        .enumerate()
-        .filter_map(|(i, wt)| {
-            let haystack = format!(
-                "{} {}",
-                wt.name,
-                wt.branch.as_deref().unwrap_or("")
-            );
-            let mut haystack_buf = Vec::new();
-            let haystack_str = Utf32Str::new(&haystack, &mut haystack_buf);
-            let mut needle_buf = Vec::new();
-            let needle_str = Utf32Str::new(query, &mut needle_buf);
+    // Find the best matching worktree
+    let best_idx = matcher.best_match(worktrees, query, |wt| {
+        format!("{} {}", wt.name, wt.branch.as_deref().unwrap_or(""))
+    });
 
-            matcher
-                .fuzzy_match(haystack_str, needle_str)
-                .map(|score| (i, score))
-        })
-        .collect();
-
-    if scored.is_empty() {
+    let Some(idx) = best_idx else {
         println!("{} No worktree matching '{}'", "!".yellow(), query);
         return Ok(());
-    }
+    };
 
-    // Sort by score descending and pick the best match
-    scored.sort_by(|a, b| b.1.cmp(&a.1));
-    let best_match = &worktrees[scored[0].0];
+    let best_match = &worktrees[idx];
 
     let session_name = if best_match.is_main {
         format!("{}/main", project_name)

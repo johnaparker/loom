@@ -1,4 +1,4 @@
-mod dashboard;
+pub mod dashboard;
 pub mod modals;
 mod picker;
 pub mod widgets;

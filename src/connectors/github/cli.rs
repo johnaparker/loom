@@ -1,65 +1,12 @@
+//! GitHub CLI (gh) wrapper functions.
+
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::Path;
 use std::process::Command;
 
 use crate::error::GwtError;
-
-/// GitHub PR information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GitHubPR {
-    pub number: u32,
-    pub title: String,
-    pub url: String,
-    pub state: String, // "OPEN", "MERGED", "CLOSED"
-    pub draft: bool,
-    pub head_branch: String,
-    pub base_branch: String,
-    pub checks_status: Option<ChecksStatus>,
-    pub comments: Vec<PRComment>,
-    /// Usernames of assignees
-    pub assignees: Vec<String>,
-    /// Usernames of requested reviewers
-    pub reviewers: Vec<String>,
-    /// Review decision: APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or None
-    pub review_decision: Option<String>,
-}
-
-/// PR checks status summary
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChecksStatus {
-    pub total: u32,
-    pub passing: u32,
-    pub failing: u32,
-    pub pending: u32,
-    /// Names of failing checks
-    pub failing_names: Vec<String>,
-}
-
-/// A comment on a PR
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PRComment {
-    pub author: String,
-    pub body: String,
-    pub created_at: String,
-}
-
-/// Type of GitHub URL
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum GitHubUrlType {
-    PullRequest(u32),
-    Branch(String),
-    Tree(String), // branch/path in tree view
-}
-
-/// Parsed GitHub URL information
-#[derive(Debug, Clone)]
-pub struct GitHubUrlInfo {
-    pub owner: String,
-    pub repo: String,
-    pub url_type: GitHubUrlType,
-}
+use super::types::{ChecksStatus, GitHubPR, PRComment};
+use super::url::get_create_pr_url;
 
 /// Check if the gh CLI is installed and authenticated
 pub fn check_gh_cli() -> Result<()> {
@@ -84,56 +31,6 @@ pub fn check_gh_cli() -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Check if a string looks like a GitHub URL
-pub fn is_github_url(input: &str) -> bool {
-    input.starts_with("https://github.com/") || input.starts_with("http://github.com/")
-}
-
-/// Parse a GitHub URL to extract owner, repo, and URL type
-/// Supports:
-/// - https://github.com/owner/repo/pull/123
-/// - https://github.com/owner/repo/tree/branch-name
-/// - https://github.com/owner/repo/tree/branch-name/path/to/file
-pub fn parse_github_url(url: &str) -> Option<GitHubUrlInfo> {
-    let url = url.trim();
-
-    // Remove protocol
-    let path = url
-        .strip_prefix("https://github.com/")
-        .or_else(|| url.strip_prefix("http://github.com/"))?;
-
-    let parts: Vec<&str> = path.split('/').collect();
-    if parts.len() < 2 {
-        return None;
-    }
-
-    let owner = parts[0].to_string();
-    let repo = parts[1].to_string();
-
-    let url_type = if parts.len() >= 4 {
-        match parts[2] {
-            "pull" => {
-                let pr_num: u32 = parts[3].parse().ok()?;
-                GitHubUrlType::PullRequest(pr_num)
-            }
-            "tree" => {
-                // Use all remaining segments as the branch/path
-                // This handles branches with slashes like "feature/sub-feature"
-                GitHubUrlType::Tree(parts[3..].join("/"))
-            }
-            _ => return None,
-        }
-    } else {
-        return None;
-    };
-
-    Some(GitHubUrlInfo {
-        owner,
-        repo,
-        url_type,
-    })
 }
 
 /// Get the branch name from a PR number using gh CLI
@@ -336,16 +233,6 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
     }))
 }
 
-/// Get the URL to create a new PR for a branch
-pub fn get_create_pr_url(owner: &str, repo: &str, branch: &str) -> String {
-    format!(
-        "https://github.com/{}/{}/compare/{}?expand=1",
-        owner,
-        repo,
-        urlencoding::encode(branch)
-    )
-}
-
 /// Get repo info (owner/name) from the current git repo using gh CLI
 pub fn get_repo_info(repo_path: &Path) -> Result<(String, String)> {
     check_gh_cli()?;
@@ -414,120 +301,5 @@ pub fn open_url(url: &str) -> Result<()> {
             "Cannot open URL: unsupported platform. Please open manually: {}",
             url
         ))
-    }
-}
-
-// === Caching ===
-
-/// Get the cache directory for a worktree's GitHub metadata
-/// Returns ~/.cache/gwt/<project>/<worktree_name>/
-fn cache_dir(project_name: &str, worktree_name: &str) -> Result<std::path::PathBuf> {
-    let cache_base = dirs::cache_dir()
-        .or_else(|| dirs::home_dir().map(|h| h.join(".cache")))
-        .ok_or_else(|| anyhow::anyhow!("Could not find cache directory"))?;
-
-    Ok(cache_base
-        .join("gwt")
-        .join(project_name)
-        .join(worktree_name))
-}
-
-/// Write GitHub PR metadata to cache directory
-pub fn write_pr_cache(project_name: &str, worktree_name: &str, pr: &GitHubPR) -> Result<()> {
-    let cache_path = cache_dir(project_name, worktree_name)?;
-    fs::create_dir_all(&cache_path)?;
-
-    fs::write(
-        cache_path.join("github.json"),
-        serde_json::to_string_pretty(pr)?,
-    )?;
-    Ok(())
-}
-
-/// Read GitHub PR metadata from cache directory
-pub fn read_pr_cache(project_name: &str, worktree_name: &str) -> Result<Option<GitHubPR>> {
-    let cache_path = cache_dir(project_name, worktree_name)?;
-    let file_path = cache_path.join("github.json");
-
-    if !file_path.exists() {
-        return Ok(None);
-    }
-
-    let content = fs::read_to_string(&file_path)?;
-    let pr: GitHubPR = serde_json::from_str(&content)?;
-    Ok(Some(pr))
-}
-
-/// Delete GitHub PR metadata from cache directory
-pub fn delete_pr_cache(project_name: &str, worktree_name: &str) -> Result<()> {
-    let cache_path = cache_dir(project_name, worktree_name)?;
-    let file_path = cache_path.join("github.json");
-    if file_path.exists() {
-        fs::remove_file(&file_path)?;
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_is_github_url() {
-        assert!(is_github_url("https://github.com/user/repo/pull/123"));
-        assert!(is_github_url("https://github.com/user/repo/tree/branch"));
-        assert!(is_github_url("http://github.com/user/repo"));
-        assert!(!is_github_url("https://gitlab.com/user/repo"));
-        assert!(!is_github_url("my-branch-name"));
-    }
-
-    #[test]
-    fn test_parse_github_url_pr() {
-        let info = parse_github_url("https://github.com/anthropics/claude/pull/123").unwrap();
-        assert_eq!(info.owner, "anthropics");
-        assert_eq!(info.repo, "claude");
-        assert_eq!(info.url_type, GitHubUrlType::PullRequest(123));
-    }
-
-    #[test]
-    fn test_parse_github_url_tree() {
-        let info = parse_github_url("https://github.com/user/repo/tree/feature-branch").unwrap();
-        assert_eq!(info.owner, "user");
-        assert_eq!(info.repo, "repo");
-        assert_eq!(
-            info.url_type,
-            GitHubUrlType::Tree("feature-branch".to_string())
-        );
-
-        // Test branches with slashes
-        let info =
-            parse_github_url("https://github.com/user/repo/tree/feature/sub-feature").unwrap();
-        assert_eq!(
-            info.url_type,
-            GitHubUrlType::Tree("feature/sub-feature".to_string())
-        );
-    }
-
-    #[test]
-    fn test_parse_github_url_invalid() {
-        assert!(parse_github_url("https://github.com/user").is_none());
-        assert!(parse_github_url("https://gitlab.com/user/repo").is_none());
-        assert!(parse_github_url("not-a-url").is_none());
-    }
-
-    #[test]
-    fn test_get_create_pr_url() {
-        let url = get_create_pr_url("owner", "repo", "feature-branch");
-        assert_eq!(
-            url,
-            "https://github.com/owner/repo/compare/feature-branch?expand=1"
-        );
-
-        // Test URL encoding of special characters
-        let url = get_create_pr_url("owner", "repo", "feature/branch#123");
-        assert_eq!(
-            url,
-            "https://github.com/owner/repo/compare/feature%2Fbranch%23123?expand=1"
-        );
     }
 }
