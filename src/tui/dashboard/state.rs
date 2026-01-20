@@ -28,7 +28,7 @@ pub enum DashboardResult {
     /// Open Claude in the worktree
     Claude { worktree: WorktreeStats },
     /// Create a new worktree
-    CreateNew { branch: String, category: String },
+    CreateNew { branch: String, category: String, auto_claude: bool },
     /// Open Linear issue for a worktree
     Linear { worktree: WorktreeStats },
     /// Open GitHub PR for a worktree
