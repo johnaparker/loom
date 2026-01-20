@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::claude::{time::now_iso8601, ClaudeEvent, ClaudeState};
+use crate::config::GlobalConfig;
 
 /// Handle hook events from Claude Code
 /// Reads JSON from stdin, updates cache file
@@ -24,17 +25,20 @@ pub fn hook(event: &str) -> Result<()> {
     let cwd = json["cwd"].as_str().unwrap_or(".");
     let session_id = json["session_id"].as_str().unwrap_or("unknown");
 
+    // Get cache directory from config
+    let cache_dir = get_cache_dir()?;
+
     // Determine project and worktree from cwd
     let (project, worktree) = resolve_project_worktree(cwd)?;
 
     // Handle the event based on type
     match event {
-        "user-prompt" => handle_user_prompt(&project, &worktree, session_id, &json)?,
-        "stop" => handle_stop(&project, &worktree, session_id, &json)?,
-        "notification" => handle_notification(&project, &worktree, session_id, &json)?,
-        "session-start" => handle_session_start(&project, &worktree, session_id, &json)?,
-        "session-end" => handle_session_end(&project, &worktree, session_id, &json)?,
-        "tool-use" => handle_tool_use(&project, &worktree, session_id, &json)?,
+        "user-prompt" => handle_user_prompt(&cache_dir, &project, &worktree, session_id, &json)?,
+        "stop" => handle_stop(&cache_dir, &project, &worktree, session_id, &json)?,
+        "notification" => handle_notification(&cache_dir, &project, &worktree, session_id, &json)?,
+        "session-start" => handle_session_start(&cache_dir, &project, &worktree, session_id, &json)?,
+        "session-end" => handle_session_end(&cache_dir, &project, &worktree, session_id, &json)?,
+        "tool-use" => handle_tool_use(&cache_dir, &project, &worktree, session_id, &json)?,
         _ => {
             // Unknown event type, ignore
         }
@@ -43,7 +47,27 @@ pub fn hook(event: &str) -> Result<()> {
     Ok(())
 }
 
+/// Get the cache directory from config
+fn get_cache_dir() -> Result<PathBuf> {
+    // Check environment variable first (fast path)
+    if let Ok(env_dir) = std::env::var("GWT_CACHE_DIR") {
+        return Ok(PathBuf::from(env_dir));
+    }
+
+    // Load global config to get cache_dir
+    let config = GlobalConfig::load()?;
+    let dir = &config.cache_dir;
+    if dir.starts_with("~") {
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+        Ok(home.join(dir.strip_prefix("~/").unwrap_or(dir.strip_prefix("~").unwrap_or(dir))))
+    } else {
+        Ok(PathBuf::from(dir))
+    }
+}
+
 fn handle_user_prompt(
+    cache_dir: &Path,
     project: &str,
     worktree: &str,
     session_id: &str,
@@ -69,10 +93,11 @@ fn handle_user_prompt(
         message: None,
     };
 
-    crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Working)
+    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
 }
 
 fn handle_stop(
+    cache_dir: &Path,
     project: &str,
     worktree: &str,
     session_id: &str,
@@ -86,10 +111,11 @@ fn handle_stop(
         message: None,
     };
 
-    crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Idle)
+    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Idle)
 }
 
 fn handle_notification(
+    cache_dir: &Path,
     project: &str,
     worktree: &str,
     session_id: &str,
@@ -144,10 +170,11 @@ fn handle_notification(
         message,
     };
 
-    crate::claude::update_state_from_event(project, worktree, event, session_id, new_state)
+    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, new_state)
 }
 
 fn handle_session_start(
+    cache_dir: &Path,
     project: &str,
     worktree: &str,
     session_id: &str,
@@ -158,7 +185,7 @@ fn handle_session_start(
 
     // Check if this is a clear operation - combine with previous SessionEnd
     if source == Some("clear") {
-        if let Some(mut session) = crate::claude::read_state(project, worktree) {
+        if let Some(mut session) = crate::claude::read_state(cache_dir, project, worktree) {
             // Check if last event was SessionEnd with reason "clear"
             if let Some(last_event) = session.events.last() {
                 if last_event.event_type == "SessionEnd"
@@ -175,7 +202,7 @@ fn handle_session_start(
                     });
                     session.session_id = session_id.to_string();
                     session.state = ClaudeState::Working;
-                    return crate::claude::write_state(project, worktree, &session);
+                    return crate::claude::write_state(cache_dir, project, worktree, &session);
                 }
             }
         }
@@ -190,10 +217,11 @@ fn handle_session_start(
         message: None,
     };
 
-    crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Working)
+    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
 }
 
 fn handle_session_end(
+    cache_dir: &Path,
     project: &str,
     worktree: &str,
     session_id: &str,
@@ -210,10 +238,11 @@ fn handle_session_end(
         message: None,
     };
 
-    crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Inactive)
+    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Inactive)
 }
 
 fn handle_tool_use(
+    cache_dir: &Path,
     project: &str,
     worktree: &str,
     session_id: &str,
@@ -267,7 +296,7 @@ fn handle_tool_use(
         message: detail, // Store detail in message field
     };
 
-    crate::claude::update_state_from_event(project, worktree, event, session_id, ClaudeState::Working)
+    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
 }
 
 /// Shorten a file path by replacing home dir with ~ and keeping basename visible

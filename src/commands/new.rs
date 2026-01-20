@@ -30,6 +30,7 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
 
     let project_name = config.project_name(&manager.project_name()?);
     let worktree_root = config.worktree_root()?;
+    let cache_dir = config.cache_dir()?;
 
     // Fetch from origin first to ensure we have the latest refs
     if manager.fetch_origin().is_ok() {
@@ -80,7 +81,7 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
 
     // Write Linear metadata if we have issue info
     if let Some(ref issue) = resolved.issue {
-        linear::write_metadata(&project_name, &resolved.worktree_name, issue)?;
+        linear::write_metadata(&cache_dir, &project_name, &resolved.worktree_name, issue)?;
         println!(
             "{} Cached Linear metadata for {}",
             "✓".green(),

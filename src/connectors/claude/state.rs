@@ -1,12 +1,14 @@
 //! State management for Claude sessions.
 
 use anyhow::Result;
+use std::path::Path;
 
 use super::cache::{read_state, write_state};
 use super::types::{ClaudeEvent, ClaudeSession, ClaudeState};
 
 /// Update the state from a hook event
 pub fn update_state_from_event(
+    base: &Path,
     project: &str,
     worktree: &str,
     event: ClaudeEvent,
@@ -14,7 +16,7 @@ pub fn update_state_from_event(
     new_state: ClaudeState,
 ) -> Result<()> {
     // Read existing session or create new one
-    let mut session = read_state(project, worktree).unwrap_or_else(|| {
+    let mut session = read_state(base, project, worktree).unwrap_or_else(|| {
         ClaudeSession::new(session_id.to_string(), ClaudeState::Inactive)
     });
 
@@ -25,7 +27,7 @@ pub fn update_state_from_event(
     session.state = new_state;
     session.add_event(event);
 
-    write_state(project, worktree, &session)
+    write_state(base, project, worktree, &session)
 }
 
 /// Get the effective state based on the most recent event
