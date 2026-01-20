@@ -344,7 +344,7 @@ fn run_dashboard_loop(
                 }
                 // Stay in dashboard - don't exit
             }
-            DashboardResult::CreateNew { branch, category } => {
+            DashboardResult::CreateNew { branch, category, auto_claude } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,
                     "demo" => Category::Demo,
@@ -354,10 +354,24 @@ fn run_dashboard_loop(
                 let result = execute_create(&manager, &config, project_name, &branch, cat);
 
                 match result {
-                    Ok((session_name, worktree_path)) => {
-                        // Successfully created - switch to the new session
-                        tmux::switch_to_session(&session_name, worktree_path.to_str().unwrap())?;
-                        dashboard.show_result(true, format!("Created and switched to '{}'", branch));
+                    Ok((session_name, worktree_path, issue_id)) => {
+                        let path_str = worktree_path.to_str().unwrap();
+
+                        if auto_claude && issue_id.is_some() {
+                            // Launch Claude with initial prompt for the Linear issue
+                            let issue = issue_id.unwrap();
+                            let claude_cmd = format!(
+                                "bash -c 'claude \"work on {} /plan\"; exec $SHELL'",
+                                issue
+                            );
+                            tmux::create_session_with_command(&session_name, path_str, &claude_cmd)?;
+                            tmux::switch_to_session(&session_name, path_str)?;
+                            dashboard.show_result(true, format!("Created '{}' and started Claude", branch));
+                        } else {
+                            // Normal flow - just switch to the new session
+                            tmux::switch_to_session(&session_name, path_str)?;
+                            dashboard.show_result(true, format!("Created and switched to '{}'", branch));
+                        }
                     }
                     Err(e) => {
                         dashboard.show_result(false, format!("Failed to create: {}", e));
@@ -414,13 +428,14 @@ fn execute_sync(
 }
 
 /// Execute worktree creation
+/// Returns (session_name, worktree_path, issue_id) where issue_id is Some if linked to Linear
 fn execute_create(
     manager: &WorktreeManager,
     config: &Config,
     project_name: &str,
     branch: &str,
     category: Category,
-) -> Result<(String, std::path::PathBuf)> {
+) -> Result<(String, std::path::PathBuf, Option<String>)> {
     let worktree_root = config.worktree_root()?;
 
     // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
@@ -483,5 +498,8 @@ fn execute_create(
         )?;
     }
 
-    Ok((session_name, worktree_path))
+    // Extract issue ID for auto-claude feature
+    let issue_id = resolved.issue.as_ref().map(|i| i.id.clone());
+
+    Ok((session_name, worktree_path, issue_id))
 }

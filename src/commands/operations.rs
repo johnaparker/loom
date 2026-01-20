@@ -36,6 +36,7 @@ pub fn cleanup_worktree_resources(project_name: &str, worktree_name: &str) -> Re
 
 /// Result of cleanup operations for reporting.
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 pub struct CleanupResult {
     pub tmux_killed: bool,
     pub sesh_unregistered: bool,
