@@ -27,7 +27,12 @@ Add the hook to your Claude Code settings (`~/.claude/settings.json`):
 ```json
 {
   "hooks": {
-    "postToolCall": ["gwt hook post-tool-call"]
+    "PreToolUse": [{"hooks": [{"type": "command", "command": "gwt hook tool-use"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "gwt hook user-prompt"}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "gwt hook stop"}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "gwt hook notification"}]}],
+    "SessionStart": [{"hooks": [{"type": "command", "command": "gwt hook session-start"}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "gwt hook session-end"}]}]
   }
 }
 ```
