@@ -9,7 +9,8 @@
       "Bash(cargo test:*)",
       "Bash(printf:*)",
       "Bash(/Users/john/github/gwt/target/debug/gwt hook:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "mcp__linear-server__update_issue"
     ]
   }
 }
