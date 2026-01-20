@@ -284,13 +284,25 @@ impl WorktreeManager {
         let path_str = path.to_str().unwrap();
         let remote_ref = format!("origin/{}", branch);
 
-        // Create worktree with local branch tracking the remote
-        // git worktree add -b <branch> <path> origin/<branch>
-        let output = Command::new("git")
-            .args(["worktree", "add", "-b", branch, path_str, &remote_ref])
-            .current_dir(&self.repo_root)
-            .output()
-            .context("Failed to run git worktree add")?;
+        // Check if local branch already exists
+        let local_branch_exists = self.repo.find_branch(branch, BranchType::Local).is_ok();
+
+        let output = if local_branch_exists {
+            // Local branch exists - use it directly without -b flag
+            Command::new("git")
+                .args(["worktree", "add", path_str, branch])
+                .current_dir(&self.repo_root)
+                .output()
+                .context("Failed to run git worktree add")?
+        } else {
+            // Create new local branch tracking the remote
+            // git worktree add -b <branch> <path> origin/<branch>
+            Command::new("git")
+                .args(["worktree", "add", "-b", branch, path_str, &remote_ref])
+                .current_dir(&self.repo_root)
+                .output()
+                .context("Failed to run git worktree add")?
+        };
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();

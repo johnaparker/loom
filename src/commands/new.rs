@@ -146,7 +146,7 @@ fn resolve_new_input(
                 GitHubUrlType::Branch(ref b) | GitHubUrlType::Tree(ref b) => b.clone(),
             };
 
-            // GitHub URLs always imply a remote branch exists
+            // For GitHub URLs, check whether the corresponding remote branch exists
             let track_remote = manager.remote_branch_exists(&branch);
 
             // Generate worktree name from branch (sanitize / to -)

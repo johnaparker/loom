@@ -119,9 +119,9 @@ pub fn parse_github_url(url: &str) -> Option<GitHubUrlInfo> {
                 GitHubUrlType::PullRequest(pr_num)
             }
             "tree" => {
-                // For now, take the first segment as the branch
-                // (Branch names with slashes would need more context to parse correctly)
-                GitHubUrlType::Tree(parts[3].to_string())
+                // Use all remaining segments as the branch/path
+                // This handles branches with slashes like "feature/sub-feature"
+                GitHubUrlType::Tree(parts[3..].join("/"))
             }
             _ => return None,
         }
@@ -340,7 +340,9 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
 pub fn get_create_pr_url(owner: &str, repo: &str, branch: &str) -> String {
     format!(
         "https://github.com/{}/{}/compare/{}?expand=1",
-        owner, repo, branch
+        owner,
+        repo,
+        urlencoding::encode(branch)
     )
 }
 
@@ -389,11 +391,13 @@ pub fn open_url(url: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         Command::new("open").arg(url).spawn()?;
+        return Ok(());
     }
 
     #[cfg(target_os = "linux")]
     {
         Command::new("xdg-open").arg(url).spawn()?;
+        return Ok(());
     }
 
     #[cfg(target_os = "windows")]
@@ -401,9 +405,16 @@ pub fn open_url(url: &str) -> Result<()> {
         Command::new("cmd")
             .args(["/C", "start", url])
             .spawn()?;
+        return Ok(());
     }
 
-    Ok(())
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Err(anyhow::anyhow!(
+            "Cannot open URL: unsupported platform. Please open manually: {}",
+            url
+        ))
+    }
 }
 
 // === Caching ===
@@ -483,7 +494,18 @@ mod tests {
         let info = parse_github_url("https://github.com/user/repo/tree/feature-branch").unwrap();
         assert_eq!(info.owner, "user");
         assert_eq!(info.repo, "repo");
-        assert_eq!(info.url_type, GitHubUrlType::Tree("feature-branch".to_string()));
+        assert_eq!(
+            info.url_type,
+            GitHubUrlType::Tree("feature-branch".to_string())
+        );
+
+        // Test branches with slashes
+        let info =
+            parse_github_url("https://github.com/user/repo/tree/feature/sub-feature").unwrap();
+        assert_eq!(
+            info.url_type,
+            GitHubUrlType::Tree("feature/sub-feature".to_string())
+        );
     }
 
     #[test]
@@ -499,6 +521,13 @@ mod tests {
         assert_eq!(
             url,
             "https://github.com/owner/repo/compare/feature-branch?expand=1"
+        );
+
+        // Test URL encoding of special characters
+        let url = get_create_pr_url("owner", "repo", "feature/branch#123");
+        assert_eq!(
+            url,
+            "https://github.com/owner/repo/compare/feature%2Fbranch%23123?expand=1"
         );
     }
 }
