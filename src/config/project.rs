@@ -38,3 +38,56 @@ impl ProjectConfig {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_parse_project_config() {
+        let toml_str = r#"
+project_name = "my-project"
+
+[sync]
+patterns = ["custom-file.txt"]
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.project_name, Some("my-project".to_string()));
+        assert_eq!(config.sync.patterns, vec!["custom-file.txt"]);
+    }
+
+    #[test]
+    fn test_parse_minimal_project_config() {
+        let toml_str = r#"
+project_name = "minimal"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.project_name, Some("minimal".to_string()));
+        assert!(config.sync.patterns.is_empty()); // default
+    }
+
+    #[test]
+    fn test_load_nonexistent_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = ProjectConfig::load(temp_dir.path()).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_save_and_load_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = ProjectConfig {
+            project_name: Some("test-project".to_string()),
+            sync: ProjectSyncConfig {
+                patterns: vec!["file1.txt".to_string(), "file2.txt".to_string()],
+            },
+        };
+
+        config.save(temp_dir.path()).unwrap();
+
+        let loaded = ProjectConfig::load(temp_dir.path()).unwrap().unwrap();
+        assert_eq!(loaded.project_name, Some("test-project".to_string()));
+        assert_eq!(loaded.sync.patterns.len(), 2);
+    }
+}

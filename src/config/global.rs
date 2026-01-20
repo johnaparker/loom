@@ -128,3 +128,66 @@ impl GlobalConfig {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = GlobalConfig::default();
+        assert_eq!(config.worktree_root, "~/worktrees");
+        assert_eq!(config.default_category, "dev");
+        assert!(config.sesh.auto_register);
+        assert!(config.sync.patterns.contains(&".env".to_string()));
+        assert!(config.sync.patterns.contains(&".envrc".to_string()));
+    }
+
+    #[test]
+    fn test_parse_minimal_config() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.worktree_root, "/custom/path");
+        assert_eq!(config.default_category, "dev"); // default
+        assert!(config.sesh.auto_register); // default
+    }
+
+    #[test]
+    fn test_parse_full_config() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+default_category = "review"
+
+[sync]
+patterns = [".env", "custom-file.txt"]
+
+[sesh]
+auto_register = false
+
+[linear]
+api_key = "test-key"
+team_prefix = "ABC"
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.worktree_root, "/custom/path");
+        assert_eq!(config.default_category, "review");
+        assert!(!config.sesh.auto_register);
+        assert_eq!(config.sync.patterns.len(), 2);
+        assert_eq!(config.linear.api_key, Some("test-key".to_string()));
+        assert_eq!(config.linear.team_prefix, Some("ABC".to_string()));
+    }
+
+    #[test]
+    fn test_serialize_config() {
+        let config = GlobalConfig::default();
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        assert!(serialized.contains("worktree_root"));
+        assert!(serialized.contains("default_category"));
+
+        // Should be able to round-trip
+        let deserialized: GlobalConfig = toml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.worktree_root, config.worktree_root);
+    }
+}
