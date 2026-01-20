@@ -248,11 +248,10 @@ Current coverage: Unit tests for fuzzy matching, URL parsing, cache operations.
 3. Export from `tui/widgets/mod.rs`
 4. Keep widgets pure: take data in, render out, no side effects
 
-### Shell completions
+### Linear project management
 
-Generate and install completions:
-```bash
-gwt completions bash > ~/.local/share/bash-completion/completions/gwt
-gwt completions zsh > ~/.zfunc/_gwt
-gwt completions fish > ~/.config/fish/completions/gwt.fish
-```
+When creating Linear issues for this project, use:
+- **Team**: `john.parker.personal`
+- **Project**: `Git Worktree Tool`
+
+The project name can be used directly - no need to look up UUIDs.
