@@ -1,7 +1,7 @@
 use anyhow::Result;
 use colored::Colorize;
-use std::io::{self, Write};
 
+use super::ui;
 use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::WorktreeManager;
@@ -70,13 +70,7 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     println!("{} Worktree removed", "✓".green());
 
     // Prompt to delete branch
-    print!("Delete branch '{}'? [y/N] ", branch.yellow());
-    io::stdout().flush()?;
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-
-    if input.trim().eq_ignore_ascii_case("y") {
+    if ui::confirm_delete_branch(&branch)? {
         manager.delete_branch(&branch, true)?;
         println!("{} Branch '{}' deleted", "✓".green(), branch);
     } else {

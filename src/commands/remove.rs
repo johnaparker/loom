@@ -2,6 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 use std::io::{self, Write};
 
+use super::ui;
 use crate::config::Config;
 use crate::core::FuzzyMatcher;
 use crate::error::GwtError;
@@ -52,17 +53,12 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
 
         if !dry_run {
             // Confirm with user (skip confirmation in dry run mode)
-            print!(
-                "Remove worktree '{}' at {}? [y/N] ",
+            let prompt = format!(
+                "Remove worktree '{}' at {}?",
                 matched.name.yellow(),
                 matched.path.display().to_string().dimmed()
             );
-            io::stdout().flush()?;
-
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            if !input.trim().eq_ignore_ascii_case("y") {
+            if !ui::confirm(&prompt)? {
                 println!("Cancelled.");
                 return Ok(());
             }
@@ -125,28 +121,12 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
 
     // If dirty and not already forced, require stricter confirmation
     if needs_force && !dry_run {
-        println!();
-        println!(
-            "{} This worktree has uncommitted changes: {} {} lines",
-            "⚠ Warning:".yellow().bold(),
+        let warning = format!(
+            "This worktree has uncommitted changes: {} {} lines",
             format!("+{}", uncommitted_added).green(),
             format!("-{}", uncommitted_removed).red()
         );
-        println!(
-            "{}",
-            "These changes will be permanently lost!".yellow()
-        );
-        println!();
-        print!(
-            "Type '{}' to confirm deletion: ",
-            "yes".red().bold()
-        );
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-
-        if input.trim() != "yes" {
+        if !ui::confirm_destructive(&warning, "These changes will be permanently lost!")? {
             println!("Cancelled.");
             return Ok(());
         }
@@ -217,13 +197,7 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
 
     // Offer to delete the branch
     if let Some(ref branch) = worktree.branch {
-        print!("Delete branch '{}'? [y/N] ", branch.yellow());
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-
-        if input.trim().eq_ignore_ascii_case("y") {
+        if ui::confirm_delete_branch(branch)? {
             manager.delete_branch(branch, use_force)?;
             println!("{} Branch '{}' deleted", "✓".green(), branch);
         } else {

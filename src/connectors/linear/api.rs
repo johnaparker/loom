@@ -1,13 +1,20 @@
 //! Linear GraphQL API client.
 
+use std::time::Duration;
+
 use anyhow::Result;
 
 use crate::error::GwtError;
 use super::types::LinearIssue;
 
+/// API timeout for Linear requests (5 seconds)
+const API_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Fetch Linear issue details from the API
 pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(API_TIMEOUT)
+        .build()?;
 
     let query = r#"
         query Issue($id: String!) {
