@@ -41,6 +41,7 @@ pub struct Dashboard {
     list_state: ListState,
     project_name: String,
     repo_root: PathBuf,
+    cache_dir: PathBuf,
     mode: DashboardMode,
     search_input: String,
     matcher: FuzzyMatcher,
@@ -75,6 +76,7 @@ impl Dashboard {
         worktrees: Vec<WorktreeStats>,
         project_name: String,
         repo_root: PathBuf,
+        cache_dir: PathBuf,
     ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
         let mut list_state = ListState::default();
@@ -83,16 +85,16 @@ impl Dashboard {
         }
 
         // Load Linear issues for all worktrees
-        let linear_issues = load_linear_issues(&project_name, &worktrees);
+        let linear_issues = load_linear_issues(&cache_dir, &project_name, &worktrees);
 
         // Load GitHub PRs from cache only (API fetch happens lazily when GitHub panel is viewed)
-        let github_prs = load_github_prs_from_cache(&project_name, &worktrees);
+        let github_prs = load_github_prs_from_cache(&cache_dir, &project_name, &worktrees);
 
         // Create channel for async GitHub PR fetches
         let (github_pr_sender, github_pr_receiver) = mpsc::channel();
 
         // Load initial Claude states
-        let (claude_states, has_active_claude) = load_claude_states(&project_name, &worktrees);
+        let (claude_states, has_active_claude) = load_claude_states(&cache_dir, &project_name, &worktrees);
 
         Self {
             worktrees,
@@ -101,6 +103,7 @@ impl Dashboard {
             list_state,
             project_name,
             repo_root,
+            cache_dir,
             mode: DashboardMode::Normal,
             search_input: String::new(),
             matcher: FuzzyMatcher::new(),
@@ -146,6 +149,7 @@ impl Dashboard {
 
         // Clone data needed for the thread
         fetch_github_pr_async(
+            self.cache_dir.clone(),
             worktree_name,
             branch,
             self.repo_root.clone(),
@@ -174,7 +178,7 @@ impl Dashboard {
 
     /// Refresh Claude session states for all worktrees
     fn refresh_claude_states(&mut self) {
-        let (states, has_active) = load_claude_states(&self.project_name, &self.worktrees);
+        let (states, has_active) = load_claude_states(&self.cache_dir, &self.project_name, &self.worktrees);
         self.claude_states = states;
         self.has_active_claude = has_active;
     }
@@ -203,10 +207,10 @@ impl Dashboard {
         let selected_name = self.get_selected_worktree().map(|w| w.info.name.clone());
 
         // Refresh Linear issues
-        self.linear_issues = load_linear_issues(&self.project_name, &worktrees);
+        self.linear_issues = load_linear_issues(&self.cache_dir, &self.project_name, &worktrees);
 
         // Refresh GitHub PRs from cache (API fetch happens lazily)
-        self.github_prs = load_github_prs_from_cache(&self.project_name, &worktrees);
+        self.github_prs = load_github_prs_from_cache(&self.cache_dir, &self.project_name, &worktrees);
 
         self.worktrees = worktrees;
         self.filter_worktrees();

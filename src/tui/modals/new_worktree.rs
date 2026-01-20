@@ -5,12 +5,13 @@ use ratatui::{
 };
 
 use super::{Modal, ModalAction};
-use crate::tui::widgets::{Selector, TextInput};
+use crate::tui::widgets::{Checkbox, Selector, TextInput};
 
 /// Modal for creating a new worktree
 pub struct NewWorktreeModal {
     branch_input: TextInput,
     category_selector: Selector<String>,
+    auto_claude_checkbox: Checkbox,
     error_message: Option<String>,
 }
 
@@ -26,6 +27,7 @@ impl NewWorktreeModal {
                     ("demo".to_string(), "Demo".to_string()),
                 ],
             ),
+            auto_claude_checkbox: Checkbox::new("Start Claude with issue prompt", true),
             error_message: None,
         }
     }
@@ -81,7 +83,8 @@ impl Modal for NewWorktreeModal {
                             .selected_value()
                             .cloned()
                             .unwrap_or_else(|| "dev".to_string());
-                        Some(ModalAction::CreateNew { branch, category })
+                        let auto_claude = self.auto_claude_checkbox.is_checked();
+                        Some(ModalAction::CreateNew { branch, category, auto_claude })
                     }
                     Err(msg) => {
                         self.error_message = Some(msg);
@@ -97,6 +100,11 @@ impl Modal for NewWorktreeModal {
             KeyCode::BackTab => {
                 // Shift+Tab cycles backwards
                 self.category_selector.select_prev();
+                None
+            }
+            KeyCode::Char(' ') => {
+                // Space toggles checkbox
+                self.auto_claude_checkbox.toggle();
                 None
             }
             KeyCode::Char(c) => {
@@ -139,6 +147,8 @@ impl Modal for NewWorktreeModal {
                 Constraint::Length(1), // spacer
                 Constraint::Length(1), // category
                 Constraint::Length(1), // spacer
+                Constraint::Length(1), // checkbox
+                Constraint::Length(1), // spacer
                 Constraint::Length(1), // error
                 Constraint::Length(1), // spacer
                 Constraint::Length(1), // help
@@ -149,6 +159,8 @@ impl Modal for NewWorktreeModal {
                 Constraint::Length(3), // branch input
                 Constraint::Length(1), // spacer
                 Constraint::Length(1), // category
+                Constraint::Length(1), // spacer
+                Constraint::Length(1), // checkbox
                 Constraint::Length(1), // spacer
                 Constraint::Length(1), // help
             ]
@@ -165,6 +177,9 @@ impl Modal for NewWorktreeModal {
         // Category selector - always shows selection, not focused
         self.category_selector.render(chunks[3], buf, true);
 
+        // Auto-claude checkbox
+        self.auto_claude_checkbox.render(chunks[5], buf, true);
+
         let help_idx = if self.error_message.is_some() {
             // Error message
             if let Some(ref err) = self.error_message {
@@ -172,15 +187,17 @@ impl Modal for NewWorktreeModal {
                     err,
                     Style::default().fg(Color::Red),
                 )]));
-                error.render(chunks[5], buf);
+                error.render(chunks[7], buf);
             }
-            7
+            9
         } else {
-            5
+            7
         };
 
         // Help text
         let help = Paragraph::new(Line::from(vec![
+            Span::styled("Space", Style::default().fg(Color::Cyan)),
+            Span::styled(": toggle    ", Style::default().fg(Color::DarkGray)),
             Span::styled("Tab", Style::default().fg(Color::Cyan)),
             Span::styled(": category    ", Style::default().fg(Color::DarkGray)),
             Span::styled("Enter", Style::default().fg(Color::Cyan)),
@@ -193,9 +210,9 @@ impl Modal for NewWorktreeModal {
 
     fn preferred_size(&self) -> (u16, u16) {
         if self.error_message.is_some() {
-            (48, 13)
+            (68, 15)
         } else {
-            (48, 11)
+            (68, 13)
         }
     }
 }

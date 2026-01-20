@@ -18,6 +18,7 @@ pub fn linear_cmd() -> Result<()> {
     let manager = WorktreeManager::open(&current_dir)?;
     let config = Config::load(Some(manager.repo_root()))?;
     let project_name = config.project_name(&manager.project_name()?);
+    let cache_dir = config.cache_dir()?;
 
     // Find worktree from current directory
     let worktrees = manager.list_worktrees()?;
@@ -27,7 +28,7 @@ pub fn linear_cmd() -> Result<()> {
         .ok_or(GwtError::NotInWorktree)?;
 
     // Read Linear metadata from cache
-    let issue = linear::read_metadata(&project_name, &worktree.name)?
+    let issue = linear::read_metadata(&cache_dir, &project_name, &worktree.name)?
         .ok_or(GwtError::NoLinearIssue)?;
 
     if issue.url.is_empty() {

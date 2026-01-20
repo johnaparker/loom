@@ -23,10 +23,11 @@ pub fn status() -> Result<()> {
     let manager = WorktreeManager::open(&current_dir)?;
     let project_name = manager.project_name()?;
     let config = Config::load(Some(manager.repo_root()))?;
+    let cache_dir = config.cache_dir()?;
     let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
 
     let worktrees = manager.list_worktrees_with_stats()?;
-    let mut dashboard = Dashboard::new(worktrees, project_name.clone(), manager.repo_root().to_path_buf());
+    let mut dashboard = Dashboard::new(worktrees, project_name.clone(), manager.repo_root().to_path_buf(), cache_dir);
     dashboard.set_main_branch(main_branch);
 
     // Set up terminal once for the entire session
@@ -36,8 +37,10 @@ pub fn status() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    let cache_dir_for_loop = config.cache_dir()?;
+
     // Use a closure to ensure cleanup happens on all exit paths
-    let result = run_dashboard_loop(&mut dashboard, &mut terminal, &manager, &config, &project_name);
+    let result = run_dashboard_loop(&mut dashboard, &mut terminal, &manager, &config, &project_name, &cache_dir_for_loop);
 
     // Tear down terminal
     disable_raw_mode()?;
@@ -52,6 +55,7 @@ fn run_dashboard_loop(
     manager: &WorktreeManager,
     config: &Config,
     project_name: &str,
+    cache_dir: &std::path::Path,
 ) -> Result<()> {
     loop {
         match dashboard.run_with_terminal(terminal)? {
@@ -72,7 +76,7 @@ fn run_dashboard_loop(
             } => {
                 let result = execute_delete(
                     &manager,
-                    &config,
+                    cache_dir,
                     project_name,
                     &worktree.info.name,
                     &worktree.info.path,
@@ -129,7 +133,7 @@ fn run_dashboard_loop(
 
                 let result = execute_merge(
                     &manager,
-                    &config,
+                    cache_dir,
                     project_name,
                     &worktree.info.name,
                     &worktree.info.path,
@@ -284,7 +288,7 @@ fn run_dashboard_loop(
             }
             DashboardResult::Linear { worktree } => {
                 // Read Linear metadata and open URL
-                if let Ok(Some(issue)) = linear::read_metadata(project_name, &worktree.info.name) {
+                if let Ok(Some(issue)) = linear::read_metadata(cache_dir, project_name, &worktree.info.name) {
                     if !issue.url.is_empty() {
                         // Convert to desktop app URL scheme (linear:// instead of https://linear.app/)
                         let desktop_url = issue.url.replace("https://linear.app/", "linear://");
@@ -314,7 +318,7 @@ fn run_dashboard_loop(
                     match github::get_pr_for_branch(manager.repo_root(), branch) {
                         Ok(Some(pr)) => {
                             // Cache the PR info and open it
-                            let _ = github::write_pr_cache(&project_name, &worktree.info.name, &pr);
+                            let _ = github::write_pr_cache(cache_dir, project_name, &worktree.info.name, &pr);
                             if let Err(e) = github::open_url(&pr.url) {
                                 dashboard.show_result(false, format!("Failed to open URL: {}", e));
                             } else {
@@ -344,20 +348,34 @@ fn run_dashboard_loop(
                 }
                 // Stay in dashboard - don't exit
             }
-            DashboardResult::CreateNew { branch, category } => {
+            DashboardResult::CreateNew { branch, category, auto_claude } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,
                     "demo" => Category::Demo,
                     _ => Category::Dev,
                 };
 
-                let result = execute_create(&manager, &config, project_name, &branch, cat);
+                let result = execute_create(&manager, &config, project_name, &branch, cat, cache_dir);
 
                 match result {
-                    Ok((session_name, worktree_path)) => {
-                        // Successfully created - switch to the new session
-                        tmux::switch_to_session(&session_name, worktree_path.to_str().unwrap())?;
-                        dashboard.show_result(true, format!("Created and switched to '{}'", branch));
+                    Ok((session_name, worktree_path, issue_id)) => {
+                        let path_str = worktree_path.to_str().unwrap();
+
+                        if auto_claude && issue_id.is_some() {
+                            // Launch Claude with initial prompt for the Linear issue
+                            let issue = issue_id.unwrap();
+                            let claude_cmd = format!(
+                                "bash -c 'claude \"work on {} /plan\"; exec $SHELL'",
+                                issue
+                            );
+                            tmux::create_session_with_command(&session_name, path_str, &claude_cmd)?;
+                            tmux::switch_to_session(&session_name, path_str)?;
+                            dashboard.show_result(true, format!("Created '{}' and started Claude", branch));
+                        } else {
+                            // Normal flow - just switch to the new session
+                            tmux::switch_to_session(&session_name, path_str)?;
+                            dashboard.show_result(true, format!("Created and switched to '{}'", branch));
+                        }
                     }
                     Err(e) => {
                         dashboard.show_result(false, format!("Failed to create: {}", e));
@@ -379,7 +397,7 @@ fn run_dashboard_loop(
 /// Execute worktree deletion using shared operations
 fn execute_delete(
     manager: &WorktreeManager,
-    _config: &Config,
+    cache_dir: &std::path::Path,
     project_name: &str,
     name: &str,
     path: &std::path::Path,
@@ -387,21 +405,21 @@ fn execute_delete(
     delete_branch: bool,
     force: bool,
 ) -> Result<()> {
-    operations::delete_worktree(manager, project_name, name, path, branch, delete_branch, force)?;
+    operations::delete_worktree(manager, cache_dir, project_name, name, path, branch, delete_branch, force)?;
     Ok(())
 }
 
 /// Execute merge to main using shared operations
 fn execute_merge(
     manager: &WorktreeManager,
-    _config: &Config,
+    cache_dir: &std::path::Path,
     project_name: &str,
     name: &str,
     path: &std::path::Path,
     branch: &str,
     delete_branch: bool,
 ) -> Result<()> {
-    operations::merge_worktree_to_main(manager, project_name, name, path, branch, delete_branch)?;
+    operations::merge_worktree_to_main(manager, cache_dir, project_name, name, path, branch, delete_branch)?;
     Ok(())
 }
 
@@ -414,13 +432,15 @@ fn execute_sync(
 }
 
 /// Execute worktree creation
+/// Returns (session_name, worktree_path, issue_id) where issue_id is Some if linked to Linear
 fn execute_create(
     manager: &WorktreeManager,
     config: &Config,
     project_name: &str,
     branch: &str,
     category: Category,
-) -> Result<(String, std::path::PathBuf)> {
+    cache_dir: &std::path::Path,
+) -> Result<(String, std::path::PathBuf, Option<String>)> {
     let worktree_root = config.worktree_root()?;
 
     // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
@@ -459,7 +479,7 @@ fn execute_create(
 
     // Write Linear metadata if we have issue info
     if let Some(ref issue) = resolved.issue {
-        linear::write_metadata(project_name, &resolved.worktree_name, issue)?;
+        linear::write_metadata(cache_dir, project_name, &resolved.worktree_name, issue)?;
     }
 
     // Sync files from main repo
@@ -483,5 +503,8 @@ fn execute_create(
         )?;
     }
 
-    Ok((session_name, worktree_path))
+    // Extract issue ID for auto-claude feature
+    let issue_id = resolved.issue.as_ref().map(|i| i.id.clone());
+
+    Ok((session_name, worktree_path, issue_id))
 }
