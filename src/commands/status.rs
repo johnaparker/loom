@@ -6,6 +6,7 @@ use crossterm::{
 use ratatui::prelude::*;
 use std::io::{self, stdout};
 
+use super::operations;
 use crate::cli::Category;
 use crate::config::Config;
 use crate::error::GwtError;
@@ -375,7 +376,7 @@ fn run_dashboard_loop(
     }
 }
 
-/// Execute worktree deletion
+/// Execute worktree deletion using shared operations
 fn execute_delete(
     manager: &WorktreeManager,
     _config: &Config,
@@ -386,31 +387,11 @@ fn execute_delete(
     delete_branch: bool,
     force: bool,
 ) -> Result<()> {
-    // Remove the worktree (force=true if worktree has uncommitted changes)
-    manager.remove_worktree(path, force)?;
-
-    // Kill tmux session if it exists
-    let session_name = sesh::session_name(project_name, name);
-    tmux::kill_session(&session_name);
-
-    // Unregister from sesh
-    sesh::unregister_worktree(project_name, name)?;
-
-    // Clean up Linear cache
-    let _ = linear::delete_metadata(project_name, name);
-
-    // Delete branch if requested
-    if delete_branch {
-        if let Some(branch) = branch {
-            // Use force delete since worktree is already gone
-            manager.delete_branch(branch, true)?;
-        }
-    }
-
+    operations::delete_worktree(manager, project_name, name, path, branch, delete_branch, force)?;
     Ok(())
 }
 
-/// Execute merge to main
+/// Execute merge to main using shared operations
 fn execute_merge(
     manager: &WorktreeManager,
     _config: &Config,
@@ -420,47 +401,16 @@ fn execute_merge(
     branch: &str,
     delete_branch: bool,
 ) -> Result<()> {
-    // Merge to main
-    manager.merge_to_main(branch)?;
-
-    // Remove the worktree
-    manager.remove_worktree(path, false)?;
-
-    // Kill tmux session if it exists
-    let session_name = sesh::session_name(project_name, name);
-    tmux::kill_session(&session_name);
-
-    // Unregister from sesh
-    sesh::unregister_worktree(project_name, name)?;
-
-    // Clean up Linear cache
-    let _ = linear::delete_metadata(project_name, name);
-
-    // Delete branch if requested
-    if delete_branch {
-        manager.delete_branch(branch, true)?;
-    }
-
+    operations::merge_worktree_to_main(manager, project_name, name, path, branch, delete_branch)?;
     Ok(())
 }
 
-/// Execute sync with main
+/// Execute sync with main using shared operations
 fn execute_sync(
     manager: &WorktreeManager,
     path: &std::path::Path,
 ) -> Result<()> {
-    // Fetch from origin first
-    let _ = manager.fetch_origin(); // Ignore errors - we can still try sync
-
-    // Get sync source ref
-    let source_ref = manager
-        .get_sync_source_ref()
-        .ok_or_else(|| anyhow::anyhow!("No main branch found to sync from"))?;
-
-    // Perform sync
-    manager.sync_branch_with_main(path, &source_ref)?;
-
-    Ok(())
+    operations::sync_worktree_with_main(manager, path)
 }
 
 /// Execute worktree creation

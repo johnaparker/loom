@@ -4,12 +4,13 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use nucleo::{Config as NucleoConfig, Matcher, Utf32Str};
 use ratatui::{
     prelude::*,
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 use std::io::{self, stdout};
+
+use crate::core::FuzzyMatcher;
 
 /// A fuzzy picker TUI component
 pub struct Picker {
@@ -17,7 +18,7 @@ pub struct Picker {
     filtered_indices: Vec<usize>,
     input: String,
     list_state: ListState,
-    matcher: Matcher,
+    matcher: FuzzyMatcher,
 }
 
 impl Picker {
@@ -34,7 +35,7 @@ impl Picker {
             filtered_indices,
             input: String::new(),
             list_state,
-            matcher: Matcher::new(NucleoConfig::DEFAULT),
+            matcher: FuzzyMatcher::new(),
         })
     }
 
@@ -110,30 +111,9 @@ impl Picker {
     }
 
     fn filter(&mut self) {
-        if self.input.is_empty() {
-            self.filtered_indices = (0..self.items.len()).collect();
-        } else {
-            let mut scored: Vec<(usize, u16)> = self
-                .items
-                .iter()
-                .enumerate()
-                .filter_map(|(i, (name, details, _))| {
-                    let haystack = format!("{} {}", name, details);
-                    let mut haystack_buf = Vec::new();
-                    let haystack_str = Utf32Str::new(&haystack, &mut haystack_buf);
-                    let mut needle_buf = Vec::new();
-                    let needle_str = Utf32Str::new(&self.input, &mut needle_buf);
-
-                    self.matcher
-                        .fuzzy_match(haystack_str, needle_str)
-                        .map(|score| (i, score))
-                })
-                .collect();
-
-            // Sort by score descending
-            scored.sort_by(|a, b| b.1.cmp(&a.1));
-            self.filtered_indices = scored.into_iter().map(|(i, _)| i).collect();
-        }
+        self.filtered_indices = self.matcher.filter(&self.items, &self.input, |(name, details, _)| {
+            format!("{} {}", name, details)
+        });
 
         // Reset selection
         if self.filtered_indices.is_empty() {

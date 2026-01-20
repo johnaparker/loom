@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::io::{self, Read};
 use std::path::Path;
 
-use crate::claude::{ClaudeEvent, ClaudeState};
+use crate::claude::{time::now_iso8601, ClaudeEvent, ClaudeState};
 
 /// Handle hook events from Claude Code
 /// Reads JSON from stdin, updates cache file
@@ -365,60 +365,4 @@ fn resolve_project_worktree(cwd: &str) -> Result<(String, String)> {
     };
 
     Ok((project_name, worktree_name))
-}
-
-/// Get current time as ISO 8601 string
-fn now_iso8601() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap();
-
-    let secs = duration.as_secs();
-
-    // Calculate date/time components
-    let days = secs / 86400;
-    let remaining = secs % 86400;
-    let hours = remaining / 3600;
-    let minutes = (remaining % 3600) / 60;
-    let seconds = remaining % 60;
-
-    // Simplified date calculation (days since 1970-01-01)
-    let mut year = 1970i32;
-    let mut remaining_days = days as i32;
-
-    loop {
-        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
-        if remaining_days < days_in_year {
-            break;
-        }
-        remaining_days -= days_in_year;
-        year += 1;
-    }
-
-    let days_in_months: [i32; 12] = if is_leap_year(year) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-
-    let mut month = 1;
-    for days_in_month in days_in_months {
-        if remaining_days < days_in_month {
-            break;
-        }
-        remaining_days -= days_in_month;
-        month += 1;
-    }
-    let day = remaining_days + 1;
-
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        year, month, day, hours, minutes, seconds
-    )
-}
-
-fn is_leap_year(year: i32) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }

@@ -1,3 +1,9 @@
+//! Sesh session configuration integration.
+//!
+//! Sesh (https://github.com/joshmedeski/sesh) is a terminal session manager.
+//! This module provides integration for registering and unregistering worktrees
+//! with sesh's configuration file.
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;

@@ -6,11 +6,13 @@ mod list;
 mod main_cmd;
 mod merge;
 mod new;
+mod operations;
 mod remove;
 mod review;
 mod status;
 mod switch;
 mod sync;
+mod ui;
 
 pub use completions::completions;
 pub use github::github_cmd;

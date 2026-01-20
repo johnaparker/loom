@@ -1,3 +1,8 @@
+//! Tmux session management.
+//!
+//! Provides functionality for creating, switching, and managing tmux sessions
+//! for worktree navigation.
+
 use anyhow::Result;
 use colored::Colorize;
 use std::process::Command;
