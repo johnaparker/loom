@@ -28,7 +28,7 @@ use crate::github::GitHubPR;
 use crate::linear::LinearIssue;
 
 pub use state::{DashboardMode, DashboardResult};
-use data::{GitHubPRResult, fetch_github_pr_async, load_claude_states, load_github_prs_from_cache, load_linear_issues};
+use data::{GitHubPRResult, LinearIssueResult, fetch_github_pr_async, fetch_linear_issue_async, load_claude_states, load_github_prs_from_cache, load_linear_issues};
 
 /// Braille spinner frames for smooth rotation animation
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -67,6 +67,16 @@ pub struct Dashboard {
     github_pr_sender: Sender<GitHubPRResult>,
     /// Worktrees currently loading GitHub PR data
     github_loading: std::collections::HashSet<String>,
+    /// Channel for receiving async Linear issue results
+    linear_issue_receiver: Receiver<LinearIssueResult>,
+    /// Sender for spawning async Linear issue fetches
+    linear_issue_sender: Sender<LinearIssueResult>,
+    /// Worktrees currently loading Linear issue data
+    linear_loading: std::collections::HashSet<String>,
+    /// Linear API key from config
+    linear_api_key: Option<String>,
+    /// Linear team prefix from config
+    linear_prefix: Option<String>,
 }
 
 impl Dashboard {
@@ -75,6 +85,8 @@ impl Dashboard {
         project_name: String,
         repo_root: PathBuf,
         cache_dir: PathBuf,
+        linear_api_key: Option<String>,
+        linear_prefix: Option<String>,
     ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
         let mut list_state = ListState::default();
@@ -82,7 +94,7 @@ impl Dashboard {
             list_state.select(Some(0));
         }
 
-        // Load Linear issues for all worktrees
+        // Load Linear issues for all worktrees (from cache)
         let linear_issues = load_linear_issues(&cache_dir, &project_name, &worktrees);
 
         // Load GitHub PRs from cache only (API fetch happens lazily when GitHub panel is viewed)
@@ -90,6 +102,9 @@ impl Dashboard {
 
         // Create channel for async GitHub PR fetches
         let (github_pr_sender, github_pr_receiver) = mpsc::channel();
+
+        // Create channel for async Linear issue fetches
+        let (linear_issue_sender, linear_issue_receiver) = mpsc::channel();
 
         // Load initial Claude states
         let (claude_states, has_active_claude) = load_claude_states(&cache_dir, &project_name, &worktrees);
@@ -116,10 +131,18 @@ impl Dashboard {
             github_pr_receiver,
             github_pr_sender,
             github_loading: std::collections::HashSet::new(),
+            linear_issue_receiver,
+            linear_issue_sender,
+            linear_loading: std::collections::HashSet::new(),
+            linear_api_key,
+            linear_prefix,
         };
 
         // GitHub panel is always visible, so fetch PR data for initial selection
         dashboard.fetch_github_pr_for_selected();
+
+        // Linear panel is always visible, so fetch issue data for initial selection
+        dashboard.fetch_linear_issue_for_selected();
 
         dashboard
     }
@@ -176,6 +199,68 @@ impl Dashboard {
     /// Check if a worktree's GitHub PR is currently loading
     fn is_github_loading(&self, worktree_name: &str) -> bool {
         self.github_loading.contains(worktree_name)
+    }
+
+    /// Spawn async fetch of Linear issue for the selected worktree (non-blocking)
+    fn fetch_linear_issue_for_selected(&mut self) {
+        // Skip if no API key configured (cache-only mode)
+        let (Some(api_key), Some(prefix)) = (&self.linear_api_key, &self.linear_prefix) else {
+            return;
+        };
+
+        let Some(worktree) = self.get_selected_worktree() else {
+            return;
+        };
+
+        // Skip main worktree
+        if worktree.info.is_main {
+            return;
+        }
+
+        let worktree_name = worktree.info.name.clone();
+        let branch = match &worktree.info.branch {
+            Some(b) => b.clone(),
+            None => return,
+        };
+
+        // Extract issue ID from branch name
+        let Some(issue_id) = crate::linear::extract_issue_id(&branch, prefix) else {
+            return;
+        };
+
+        // Skip if already loading this worktree
+        if self.linear_loading.contains(&worktree_name) {
+            return;
+        }
+
+        // Mark as loading
+        self.linear_loading.insert(worktree_name.clone());
+
+        // Clone data needed for the thread
+        fetch_linear_issue_async(
+            self.cache_dir.clone(),
+            worktree_name,
+            issue_id,
+            api_key.clone(),
+            self.project_name.clone(),
+            self.linear_issue_sender.clone(),
+        );
+    }
+
+    /// Check for completed async Linear issue fetches and update state
+    fn poll_linear_results(&mut self) {
+        // Non-blocking receive of all pending results
+        while let Ok((worktree_name, issue)) = self.linear_issue_receiver.try_recv() {
+            self.linear_loading.remove(&worktree_name);
+            if let Some(issue) = issue {
+                self.linear_issues.insert(worktree_name, issue);
+            }
+        }
+    }
+
+    /// Check if a worktree's Linear issue is currently loading
+    pub fn is_linear_loading(&self, worktree_name: &str) -> bool {
+        self.linear_loading.contains(worktree_name)
     }
 
     /// Refresh Claude session states for all worktrees
@@ -306,14 +391,16 @@ impl Dashboard {
         let last_refresh = Instant::now();
 
         loop {
-            // Check for completed async GitHub PR fetches
+            // Check for completed async fetches
             self.poll_github_results();
+            self.poll_linear_results();
 
             terminal.draw(|f| self.render(f))?;
 
-            // Use short interval when animating or loading GitHub data
+            // Use short interval when animating or loading async data
             let has_pending_github = !self.github_loading.is_empty();
-            let poll_timeout = if self.has_active_claude || has_pending_github {
+            let has_pending_linear = !self.linear_loading.is_empty();
+            let poll_timeout = if self.has_active_claude || has_pending_github || has_pending_linear {
                 ANIMATION_INTERVAL
             } else {
                 // Calculate remaining time until next refresh
@@ -371,8 +458,9 @@ impl Dashboard {
         self.selected = new;
         self.list_state.select(Some(new));
 
-        // GitHub panel is always visible, so always fetch PR on selection change
+        // Both panels are always visible, so fetch data on selection change
         self.fetch_github_pr_for_selected();
+        self.fetch_linear_issue_for_selected();
     }
 
     fn filter_worktrees(&mut self) {
