@@ -59,8 +59,30 @@ fn run_dashboard_loop(
         match dashboard.run_with_terminal(terminal)? {
             DashboardResult::SwitchTo(wt) => {
                 let session = sesh::session_name(project_name, &wt.info.name);
+
+                // Auto-pull in pull workflow if branch is behind tracking
+                let pulled = if config.is_pull_workflow()
+                    && !wt.info.is_main
+                    && let Some(behind) = wt.tracking_behind
+                    && behind > 0
+                    && !wt.has_uncommitted_changes()
+                    && let Some(branch) = &wt.info.branch
+                {
+                    manager.pull_from_remote(&wt.info.path, branch).ok().map(|_| behind)
+                } else {
+                    None
+                };
+
                 tmux::switch_to_session(&session, wt.info.path.to_str().unwrap())?;
-                dashboard.show_result(true, format!("Switched to '{}'", wt.info.name));
+
+                if let Some(behind) = pulled {
+                    dashboard.show_result(
+                        true,
+                        format!("Pulled {} commit(s), switching to '{}'", behind, wt.info.name),
+                    );
+                } else {
+                    dashboard.show_result(true, format!("Switched to '{}'", wt.info.name));
+                }
                 let worktrees = manager.list_worktrees_with_stats()?;
                 dashboard.update_worktrees(worktrees);
             }
@@ -155,21 +177,15 @@ fn run_dashboard_loop(
                 let worktrees = manager.list_worktrees_with_stats()?;
                 dashboard.update_worktrees(worktrees);
             }
-            DashboardResult::Sync { worktree } => {
+            DashboardResult::SyncWithRemote { worktree } => {
                 let branch = worktree.info.branch.as_deref().unwrap_or(&worktree.info.name);
 
-                // Check if already up to date
-                if worktree.commits_behind == Some(0) {
-                    dashboard.show_result(
-                        true,
-                        format!("'{}' already synced with main", worktree.info.name),
-                    );
-                    let worktrees = manager.list_worktrees_with_stats()?;
-                    dashboard.update_worktrees(worktrees);
-                    continue;
-                }
+                // Determine sync action based on tracking branch status
+                let ahead = worktree.tracking_ahead.unwrap_or(0);
+                let behind = worktree.tracking_behind.unwrap_or(0);
+                let has_tracking = worktree.tracking_ahead.is_some();
 
-                // Check for uncommitted changes first
+                // Check for uncommitted changes first (applies to all operations)
                 if worktree.has_uncommitted_changes() {
                     dashboard.show_result(
                         false,
@@ -180,45 +196,84 @@ fn run_dashboard_loop(
                     continue;
                 }
 
-                // Check for conflicts first
-                match manager.check_sync_conflicts(branch) {
-                    Ok(Some(conflicts)) => {
-                        // Has conflicts - show error and refresh
-                        dashboard.show_result(
-                            false,
-                            format!(
-                                "Cannot sync: {} file(s) have conflicts",
-                                conflicts.len()
-                            ),
-                        );
-                        let worktrees = manager.list_worktrees_with_stats()?;
-                        dashboard.update_worktrees(worktrees);
-                        continue;
-                    }
-                    Ok(None) => {
-                        // No conflicts, proceed with sync
-                    }
-                    Err(e) => {
-                        // Error checking conflicts, warn but allow sync attempt
-                        eprintln!("Warning: Could not check for conflicts: {}", e);
-                    }
+                // Decide action based on state
+                if ahead > 0 && behind > 0 {
+                    // Both ahead and behind - needs manual resolution
+                    dashboard.show_result(
+                        false,
+                        format!(
+                            "Cannot sync: ↑{} ahead, ↓{} behind. Resolve manually",
+                            ahead, behind
+                        ),
+                    );
+                    let worktrees = manager.list_worktrees_with_stats()?;
+                    dashboard.update_worktrees(worktrees);
+                    continue;
                 }
 
-                let result = execute_sync(
-                    &manager,
-                    &worktree.info.path,
-                );
-
-                match result {
-                    Ok(()) => {
-                        dashboard.show_result(
-                            true,
-                            format!("Synced '{}' with main", worktree.info.name),
-                        );
+                if !has_tracking {
+                    // No tracking branch - push with -u to create it
+                    match manager.push_to_remote(&worktree.info.path, branch) {
+                        Ok(crate::git::PushResult::CreatedRemoteBranch) => {
+                            dashboard.show_result(
+                                true,
+                                format!("Created remote branch and pushed '{}'", worktree.info.name),
+                            );
+                        }
+                        Ok(crate::git::PushResult::Success) => {
+                            dashboard.show_result(
+                                true,
+                                format!("Pushed '{}' to origin", worktree.info.name),
+                            );
+                        }
+                        Ok(crate::git::PushResult::Rejected { reason: _ }) => {
+                            dashboard.show_result(
+                                false,
+                                "Push rejected. Pull first with 'P'".to_string(),
+                            );
+                        }
+                        Err(e) => {
+                            dashboard.show_result(false, format!("Failed to push: {}", e));
+                        }
                     }
-                    Err(e) => {
-                        dashboard.show_result(false, format!("Failed to sync: {}", e));
+                } else if behind > 0 {
+                    // Behind tracking - pull
+                    match manager.pull_from_remote(&worktree.info.path, branch) {
+                        Ok(()) => {
+                            dashboard.show_result(
+                                true,
+                                format!("Pulled {} commit(s) for '{}'", behind, worktree.info.name),
+                            );
+                        }
+                        Err(e) => {
+                            dashboard.show_result(false, format!("Failed to pull: {}", e));
+                        }
                     }
+                } else if ahead > 0 {
+                    // Ahead of tracking - push
+                    match manager.push_to_remote(&worktree.info.path, branch) {
+                        Ok(crate::git::PushResult::Success) | Ok(crate::git::PushResult::CreatedRemoteBranch) => {
+                            dashboard.show_result(
+                                true,
+                                format!("Pushed {} commit(s) for '{}'", ahead, worktree.info.name),
+                            );
+                        }
+                        Ok(crate::git::PushResult::Rejected { reason: _ }) => {
+                            dashboard.show_result(
+                                false,
+                                "Push rejected. Pull first with 'P'".to_string(),
+                            );
+                        }
+                        Err(e) => {
+                            dashboard.show_result(false, format!("Failed to push: {}", e));
+                        }
+                    }
+                } else {
+                    // Already synced
+                    dashboard.show_result(
+                        true,
+                        format!("'{}' already synced with remote", worktree.info.name),
+                    );
                 }
 
                 // Refresh worktrees
@@ -421,12 +476,3 @@ fn execute_merge(
     operations::merge_worktree_to_main(manager, cache_dir, project_name, name, path, branch, delete_branch)?;
     Ok(())
 }
-
-/// Execute sync with main using shared operations
-fn execute_sync(
-    manager: &WorktreeManager,
-    path: &std::path::Path,
-) -> Result<()> {
-    operations::sync_worktree_with_main(manager, path)
-}
-

@@ -62,6 +62,12 @@ pub enum GwtError {
 
     #[error("No GitHub PR associated with this worktree")]
     NoGitHubPR,
+
+    #[error("Push rejected by remote")]
+    PushRejected,
+
+    #[error("No tracking branch for '{branch}'")]
+    NoTrackingBranch { branch: String },
 }
 
 impl GwtError {
@@ -129,6 +135,12 @@ impl GwtError {
             }
             GwtError::NoGitHubPR => {
                 Some("Create a PR first with 'gh pr create' or push the branch".to_string())
+            }
+            GwtError::PushRejected => {
+                Some("Pull remote changes first with 'P' or 'git pull'".to_string())
+            }
+            GwtError::NoTrackingBranch { .. } => {
+                Some("Push first with 'p' to create a remote tracking branch".to_string())
             }
         }
     }

@@ -5,6 +5,17 @@ use std::process::Command;
 
 use crate::error::GwtError;
 
+/// Result of a push operation
+#[derive(Debug, Clone)]
+pub enum PushResult {
+    /// Push succeeded normally
+    Success,
+    /// Push succeeded and created a new remote branch with tracking
+    CreatedRemoteBranch,
+    /// Push was rejected (e.g., remote has new commits)
+    Rejected { reason: String },
+}
+
 /// Information about a git worktree
 #[derive(Debug, Clone)]
 pub struct WorktreeInfo {
@@ -529,6 +540,29 @@ impl WorktreeManager {
         }
     }
 
+    /// Get number of commits local main is ahead of origin/main
+    pub fn main_ahead_of_origin(&self) -> Option<u32> {
+        let main_branch = self.main_branch_name().ok()?;
+        let remote_main = self.remote_main_ref()?;
+
+        let output = Command::new("git")
+            .args([
+                "rev-list",
+                "--count",
+                &format!("{}..{}", remote_main, main_branch),
+            ])
+            .current_dir(&self.repo_root)
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.trim().parse().ok()
+        } else {
+            None
+        }
+    }
+
     /// Get the tracking branch for a given branch (origin/<branch>)
     /// Only returns a value if origin/<branch> exists - this ensures
     /// "vs self" compares to the same branch on the remote, not a
@@ -902,6 +936,149 @@ impl WorktreeManager {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             return Err(GwtError::GitCommandFailed {
                 command: format!("git merge {}", source_ref),
+                stderr,
+            }
+            .into());
+        }
+
+        Ok(())
+    }
+
+    /// Push a branch to its remote tracking branch (origin/<branch>)
+    /// If no tracking branch exists, creates one with -u flag
+    pub fn push_to_remote(&self, path: &Path, branch: &str) -> Result<PushResult> {
+        // Check if remote branch exists
+        let tracking_exists = self.get_tracking_branch(path, branch).is_some();
+
+        if tracking_exists {
+            // Push to existing tracking branch
+            let output = Command::new("git")
+                .args(["push"])
+                .current_dir(path)
+                .output()
+                .context("Failed to run git push")?;
+
+            if output.status.success() {
+                return Ok(PushResult::Success);
+            }
+
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+            // Check if rejected (non-fast-forward)
+            if stderr.contains("rejected")
+                || stderr.contains("non-fast-forward")
+                || stderr.contains("failed to push")
+            {
+                Ok(PushResult::Rejected { reason: stderr })
+            } else {
+                Err(GwtError::GitCommandFailed {
+                    command: "git push".to_string(),
+                    stderr,
+                }
+                .into())
+            }
+        } else {
+            // Create remote branch with tracking
+            let output = Command::new("git")
+                .args(["push", "-u", "origin", branch])
+                .current_dir(path)
+                .output()
+                .context("Failed to run git push -u")?;
+
+            if output.status.success() {
+                Ok(PushResult::CreatedRemoteBranch)
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                Err(GwtError::GitCommandFailed {
+                    command: format!("git push -u origin {}", branch),
+                    stderr,
+                }
+                .into())
+            }
+        }
+    }
+
+    /// Pull from the remote tracking branch into the current branch
+    pub fn pull_from_remote(&self, path: &Path, branch: &str) -> Result<()> {
+        // Check if tracking branch exists
+        if self.get_tracking_branch(path, branch).is_none() {
+            return Err(GwtError::NoTrackingBranch {
+                branch: branch.to_string(),
+            }
+            .into());
+        }
+
+        let output = Command::new("git")
+            .args(["pull"])
+            .current_dir(path)
+            .output()
+            .context("Failed to run git pull")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: "git pull".to_string(),
+                stderr,
+            }
+            .into());
+        }
+
+        Ok(())
+    }
+
+    /// Push the main branch to origin
+    pub fn push_main_to_remote(&self) -> Result<()> {
+        let main_branch = self.main_branch_name()?;
+
+        let output = Command::new("git")
+            .args(["push", "origin", &main_branch])
+            .current_dir(&self.repo_root)
+            .output()
+            .context("Failed to run git push")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: format!("git push origin {}", main_branch),
+                stderr,
+            }
+            .into());
+        }
+
+        Ok(())
+    }
+
+    /// Pull the main branch from origin
+    pub fn pull_main_from_remote(&self) -> Result<()> {
+        let main_branch = self.main_branch_name()?;
+
+        // Make sure we're on main branch
+        let output = Command::new("git")
+            .args(["checkout", &main_branch])
+            .current_dir(&self.repo_root)
+            .output()
+            .context("Failed to checkout main branch")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: format!("git checkout {}", main_branch),
+                stderr,
+            }
+            .into());
+        }
+
+        // Pull from origin
+        let output = Command::new("git")
+            .args(["pull", "origin", &main_branch])
+            .current_dir(&self.repo_root)
+            .output()
+            .context("Failed to run git pull")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(GwtError::GitCommandFailed {
+                command: format!("git pull origin {}", main_branch),
                 stderr,
             }
             .into());

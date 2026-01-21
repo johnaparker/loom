@@ -164,10 +164,10 @@ impl Dashboard {
                 None
             }
             KeyCode::Char('s') => {
-                // Sync - for all worktrees with branches (no confirmation needed)
+                // Sync with remote - contextual push/pull based on tracking branch status
                 if let Some(worktree) = self.get_selected_worktree() {
                     if worktree.info.branch.is_some() {
-                        return Some(DashboardResult::Sync { worktree });
+                        return Some(DashboardResult::SyncWithRemote { worktree });
                     }
                 }
                 None

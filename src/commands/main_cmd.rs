@@ -32,6 +32,23 @@ pub fn main_cmd() -> Result<()> {
         return Ok(());
     }
 
+    // Auto-pull from origin in pull workflow when main is behind
+    if config.is_pull_workflow() {
+        if let Some(behind) = manager.main_behind_origin() {
+            if behind > 0 {
+                println!(
+                    "{} Main is {} commit(s) behind origin, pulling...",
+                    "→".blue(),
+                    behind
+                );
+                match manager.pull_main_from_remote() {
+                    Ok(()) => println!("{} Pulled {} commit(s) from origin", "✓".green(), behind),
+                    Err(e) => eprintln!("{} Could not auto-pull: {}", "⚠".yellow(), e),
+                }
+            }
+        }
+    }
+
     println!("{} Switching to '{}'", "→".blue(), session_name.green());
     tmux::switch_to_session(&session_name, &main_path)?;
 

@@ -19,6 +19,9 @@ pub struct GlobalConfig {
     pub sesh: SeshConfig,
     #[serde(default)]
     pub linear: LinearConfig,
+    /// Workflow mode for automatic git sync behavior
+    #[serde(default)]
+    pub workflow: SyncWorkflow,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +73,21 @@ impl Default for LinearConfig {
     }
 }
 
+/// Workflow mode for git synchronization.
+///
+/// Determines automatic sync behavior based on how you work:
+/// - `push`: Local-first workflow. After merging to main, auto-push. Before `gwt new`, auto-push main if ahead.
+/// - `pull`: Team/PR-based workflow. Auto-pull main on switch, auto-pull branches when behind tracking.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SyncWorkflow {
+    /// Local-first workflow: auto-push after merge, push main before new if ahead
+    #[default]
+    Push,
+    /// Team/PR workflow: auto-fetch before new, auto-pull when behind
+    Pull,
+}
+
 fn default_worktree_root() -> String {
     "~/worktrees".to_string()
 }
@@ -103,6 +121,7 @@ impl Default for GlobalConfig {
             sync: SyncConfig::default(),
             sesh: SeshConfig::default(),
             linear: LinearConfig::default(),
+            workflow: SyncWorkflow::default(),
         }
     }
 }
