@@ -32,7 +32,7 @@ pub fn linear_cmd() -> Result<()> {
         .ok_or(GwtError::NoLinearIssue)?;
 
     if issue.url.is_empty() {
-        return Err(GwtError::NoLinearIssue.into());
+        Err(GwtError::NoLinearIssue)?;
     }
 
     println!(

@@ -24,7 +24,7 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
         })?;
 
     if worktree.is_main {
-        return Err(GwtError::CannotMergeMain.into());
+        Err(GwtError::CannotMergeMain)?;
     }
 
     let branch = worktree

@@ -68,6 +68,12 @@ pub enum GwtError {
 
     #[error("No tracking branch for '{branch}'")]
     NoTrackingBranch { branch: String },
+
+    #[error("Cannot review main worktree")]
+    CannotReviewMain,
+
+    #[error("Dry run requires a worktree name for '{command}'")]
+    DryRunRequiresName { command: String },
 }
 
 impl GwtError {
@@ -141,6 +147,12 @@ impl GwtError {
             }
             GwtError::NoTrackingBranch { .. } => {
                 Some("Push first with 'p' to create a remote tracking branch".to_string())
+            }
+            GwtError::CannotReviewMain => {
+                Some("Switch to a feature worktree first - main has no changes to compare".to_string())
+            }
+            GwtError::DryRunRequiresName { command } => {
+                Some(format!("Usage: gwt {} <name> --dry-run", command))
             }
         }
     }

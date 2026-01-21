@@ -29,8 +29,7 @@ pub fn resolve_input(
         (Some(prefix), None) if is_issue_id(name, prefix) => {
             Err(GwtError::LinearApiKeyRequired {
                 issue_id: name.to_string(),
-            }
-            .into())
+            })?
         }
         // Case 3: Have prefix and API key, input contains issue ID in branch name
         // Fetch issue metadata so we can cache it

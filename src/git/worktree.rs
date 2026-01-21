@@ -82,7 +82,7 @@ impl WorktreeManager {
             .context("Failed to run git rev-parse")?;
 
         if !output.status.success() {
-            return Err(GwtError::NotGitRepo.into());
+            Err(GwtError::NotGitRepo)?;
         }
 
         let common_dir = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
@@ -131,7 +131,7 @@ impl WorktreeManager {
                 return Ok(name.strip_prefix("origin/").unwrap().to_string());
             }
         }
-        Err(GwtError::NoMainBranch.into())
+        Err(GwtError::NoMainBranch)?
     }
 
     /// List all worktrees for this repository
@@ -211,11 +211,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: "git fetch origin".to_string(),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())
@@ -278,11 +277,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: "git worktree add".to_string(),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())
@@ -321,11 +319,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: "git worktree add".to_string(),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         // Set up tracking (in case git worktree add didn't do it automatically)
@@ -369,11 +366,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: "git worktree remove".to_string(),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())
@@ -398,11 +394,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: format!("git checkout {}", main_branch),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         // Merge the branch
@@ -420,11 +415,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: format!("git merge {}", branch),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())
@@ -441,11 +435,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: format!("git branch {} {}", flag, branch),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())
@@ -934,11 +927,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: format!("git merge {}", source_ref),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())
@@ -974,8 +966,7 @@ impl WorktreeManager {
                 Err(GwtError::GitCommandFailed {
                     command: "git push".to_string(),
                     stderr,
-                }
-                .into())
+                })?
             }
         } else {
             // Create remote branch with tracking
@@ -992,8 +983,7 @@ impl WorktreeManager {
                 Err(GwtError::GitCommandFailed {
                     command: format!("git push -u origin {}", branch),
                     stderr,
-                }
-                .into())
+                })?
             }
         }
     }
@@ -1002,10 +992,9 @@ impl WorktreeManager {
     pub fn pull_from_remote(&self, path: &Path, branch: &str) -> Result<()> {
         // Check if tracking branch exists
         if self.get_tracking_branch(path, branch).is_none() {
-            return Err(GwtError::NoTrackingBranch {
+            Err(GwtError::NoTrackingBranch {
                 branch: branch.to_string(),
-            }
-            .into());
+            })?;
         }
 
         let output = Command::new("git")
@@ -1016,11 +1005,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: "git pull".to_string(),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())
@@ -1038,11 +1026,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: format!("git push origin {}", main_branch),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())
@@ -1061,11 +1048,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: format!("git checkout {}", main_branch),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         // Pull from origin
@@ -1077,11 +1063,10 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(GwtError::GitCommandFailed {
+            Err(GwtError::GitCommandFailed {
                 command: format!("git pull origin {}", main_branch),
                 stderr,
-            }
-            .into());
+            })?;
         }
 
         Ok(())

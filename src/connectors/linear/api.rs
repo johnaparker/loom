@@ -40,10 +40,9 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
         .send()?;
 
     if !response.status().is_success() {
-        return Err(GwtError::LinearApiError {
+        Err(GwtError::LinearApiError {
             message: format!("API returned status {}", response.status()),
-        }
-        .into());
+        })?;
     }
 
     let body: serde_json::Value = response.json()?;
@@ -51,10 +50,9 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
     // Check for GraphQL errors
     if let Some(errors) = body.get("errors") {
         if errors.as_array().and_then(|arr| arr.first()).is_some() {
-            return Err(GwtError::LinearIssueNotFound {
+            Err(GwtError::LinearIssueNotFound {
                 issue_id: issue_id.to_string(),
-            }
-            .into());
+            })?;
         }
     }
 
@@ -66,10 +64,9 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
         })?;
 
     if issue_data.is_null() {
-        return Err(GwtError::LinearIssueNotFound {
+        Err(GwtError::LinearIssueNotFound {
             issue_id: issue_id.to_string(),
-        }
-        .into());
+        })?;
     }
 
     let branch_name = issue_data
@@ -150,10 +147,9 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         .send()?;
 
     if !response.status().is_success() {
-        return Err(GwtError::LinearApiError {
+        Err(GwtError::LinearApiError {
             message: format!("API returned status {}", response.status()),
-        }
-        .into());
+        })?;
     }
 
     let body: serde_json::Value = response.json()?;
@@ -165,10 +161,9 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
                 .get("message")
                 .and_then(|m| m.as_str())
                 .unwrap_or("Unknown error");
-            return Err(GwtError::LinearApiError {
+            Err(GwtError::LinearApiError {
                 message: msg.to_string(),
-            }
-            .into());
+            })?;
         }
     }
 
@@ -180,10 +175,9 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         })?;
 
     if issue_data.is_null() {
-        return Err(GwtError::LinearIssueNotFound {
+        Err(GwtError::LinearIssueNotFound {
             issue_id: issue_id.to_string(),
-        }
-        .into());
+        })?;
     }
 
     // Get the issue's UUID (not the identifier like JOH-123)
@@ -257,10 +251,9 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         .send()?;
 
     if !update_response.status().is_success() {
-        return Err(GwtError::LinearApiError {
+        Err(GwtError::LinearApiError {
             message: format!("API returned status {}", update_response.status()),
-        }
-        .into());
+        })?;
     }
 
     let update_body: serde_json::Value = update_response.json()?;
@@ -272,10 +265,9 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
                 .get("message")
                 .and_then(|m| m.as_str())
                 .unwrap_or("Unknown error");
-            return Err(GwtError::LinearApiError {
+            Err(GwtError::LinearApiError {
                 message: msg.to_string(),
-            }
-            .into());
+            })?;
         }
     }
 
@@ -288,10 +280,9 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         .unwrap_or(false);
 
     if !success {
-        return Err(GwtError::LinearApiError {
+        Err(GwtError::LinearApiError {
             message: "Issue update failed".to_string(),
-        }
-        .into());
+        })?;
     }
 
     Ok(())

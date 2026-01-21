@@ -67,7 +67,7 @@ pub fn sync(name: Option<&str>, dry_run: bool) -> Result<()> {
     // Check for uncommitted changes
     let (uncommitted_added, uncommitted_removed) = manager.uncommitted_stats(&worktree.path);
     if uncommitted_added > 0 || uncommitted_removed > 0 {
-        return Err(GwtError::UncommittedChanges.into());
+        Err(GwtError::UncommittedChanges)?;
     }
 
     // Fetch from origin first
