@@ -12,7 +12,7 @@ mod types;
 mod url;
 
 // Re-export types
-pub use types::{ChecksStatus, GitHubPR, GitHubUrlInfo, GitHubUrlType, PRComment};
+pub use types::{CachedPRState, ChecksStatus, GitHubPR, GitHubUrlInfo, GitHubUrlType, PRComment};
 
 // Re-export URL functions
 pub use url::{get_create_pr_url, is_github_url, parse_github_url};
@@ -24,4 +24,4 @@ pub use cli::{
 };
 
 // Re-export cache functions
-pub use cache::{delete_pr_cache, read_pr_cache, write_pr_cache};
+pub use cache::{read_pr_cache, write_pr_cache};

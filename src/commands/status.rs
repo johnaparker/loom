@@ -409,7 +409,7 @@ fn run_dashboard_loop(
                     match github::get_pr_for_branch(manager.repo_root(), branch) {
                         Ok(Some(pr)) => {
                             // Cache the PR info and open it
-                            let _ = github::write_pr_cache(cache_dir, project_name, &worktree.info.name, &pr);
+                            let _ = github::write_pr_cache(cache_dir, project_name, &worktree.info.name, &github::CachedPRState::Found(pr.clone()));
                             if let Err(e) = github::open_url(&pr.url) {
                                 dashboard.show_result(false, format!("Failed to open URL: {}", e));
                             } else {

@@ -2,6 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Cached state for GitHub PR lookup
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "state", content = "data")]
+pub enum CachedPRState {
+    Found(GitHubPR),
+    NotFound,
+}
+
 /// GitHub PR information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitHubPR {
