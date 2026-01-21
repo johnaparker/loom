@@ -7,11 +7,11 @@ use std::thread;
 
 use crate::claude::{self, ClaudeSession, ClaudeState};
 use crate::git::WorktreeStats;
-use crate::github::{self, GitHubPR};
+use crate::github::{self, CachedPRState};
 use crate::linear::{self, LinearIssue};
 
 /// Result of async GitHub PR fetch
-pub type GitHubPRResult = (String, Option<GitHubPR>); // (worktree_name, pr)
+pub type GitHubPRResult = (String, CachedPRState); // (worktree_name, cached_state)
 
 /// Result of async Linear issue fetch
 pub type LinearIssueResult = (String, Option<LinearIssue>); // (worktree_name, issue)
@@ -36,16 +36,16 @@ pub fn load_linear_issues(
     issues
 }
 
-/// Load GitHub PRs from cache only (lazy loading - API fetch happens when panel is viewed)
+/// Load GitHub PR states from cache only (lazy loading - API fetch happens when panel is viewed)
 pub fn load_github_prs_from_cache(
     cache_dir: &Path,
     project_name: &str,
     worktrees: &[WorktreeStats],
-) -> HashMap<String, GitHubPR> {
+) -> HashMap<String, CachedPRState> {
     let mut prs = HashMap::new();
     for wt in worktrees {
-        if let Ok(Some(pr)) = github::read_pr_cache(cache_dir, project_name, &wt.info.name) {
-            prs.insert(wt.info.name.clone(), pr);
+        if let Ok(Some(state)) = github::read_pr_cache(cache_dir, project_name, &wt.info.name) {
+            prs.insert(wt.info.name.clone(), state);
         }
     }
     prs
@@ -63,15 +63,17 @@ pub fn fetch_github_pr_async(
     thread::spawn(move || {
         let pr = github::get_pr_for_branch(&repo_root, &branch).ok().flatten();
 
-        // Cache the result
-        if let Some(ref pr) = pr {
-            let _ = github::write_pr_cache(&cache_dir, &project_name, &worktree_name, pr);
-        } else {
-            let _ = github::delete_pr_cache(&cache_dir, &project_name, &worktree_name);
-        }
+        // Convert to cached state
+        let state = match pr {
+            Some(pr) => CachedPRState::Found(pr),
+            None => CachedPRState::NotFound,
+        };
+
+        // Cache the result (both Found and NotFound)
+        let _ = github::write_pr_cache(&cache_dir, &project_name, &worktree_name, &state);
 
         // Send result back (ignore error if receiver is gone)
-        let _ = sender.send((worktree_name, pr));
+        let _ = sender.send((worktree_name, state));
     });
 }
 

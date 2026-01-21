@@ -4,21 +4,16 @@ use anyhow::Result;
 use std::path::Path;
 
 use crate::connectors::cache as shared_cache;
-use super::types::GitHubPR;
+use super::types::CachedPRState;
 
 const CACHE_FILENAME: &str = "github.json";
 
-/// Write GitHub PR metadata to cache directory
-pub fn write_pr_cache(base: &Path, project_name: &str, worktree_name: &str, pr: &GitHubPR) -> Result<()> {
-    shared_cache::write_json(base, project_name, worktree_name, CACHE_FILENAME, pr)
+/// Write GitHub PR state to cache directory
+pub fn write_pr_cache(base: &Path, project_name: &str, worktree_name: &str, state: &CachedPRState) -> Result<()> {
+    shared_cache::write_json(base, project_name, worktree_name, CACHE_FILENAME, state)
 }
 
-/// Read GitHub PR metadata from cache directory
-pub fn read_pr_cache(base: &Path, project_name: &str, worktree_name: &str) -> Result<Option<GitHubPR>> {
+/// Read GitHub PR state from cache directory
+pub fn read_pr_cache(base: &Path, project_name: &str, worktree_name: &str) -> Result<Option<CachedPRState>> {
     shared_cache::read_json(base, project_name, worktree_name, CACHE_FILENAME)
-}
-
-/// Delete GitHub PR metadata from cache directory
-pub fn delete_pr_cache(base: &Path, project_name: &str, worktree_name: &str) -> Result<()> {
-    shared_cache::delete_file(base, project_name, worktree_name, CACHE_FILENAME)
 }

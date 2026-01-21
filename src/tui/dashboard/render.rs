@@ -7,7 +7,7 @@ use ratatui::{
 
 use crate::claude::{self, ClaudeState};
 use crate::git::WorktreeStats;
-use crate::github::GitHubPR;
+use crate::github::{CachedPRState, GitHubPR};
 use crate::tui::modals::render_modal_overlay;
 
 use super::state::DashboardMode;
@@ -164,7 +164,12 @@ impl Dashboard {
                     .linear_issues
                     .get(&wt.info.name)
                     .map(|issue| issue.title.as_str());
-                let github_pr = self.github_prs.get(&wt.info.name);
+                let github_pr = self.github_prs.get(&wt.info.name).and_then(|state| {
+                    match state {
+                        CachedPRState::Found(pr) => Some(pr),
+                        CachedPRState::NotFound => None,
+                    }
+                });
                 let claude_state = self
                     .claude_states
                     .get(&wt.info.name)
@@ -744,7 +749,7 @@ impl Dashboard {
         // Get the selected worktree info
         let worktree = self.get_selected_worktree();
         let worktree_name = worktree.as_ref().map(|wt| wt.info.name.as_str());
-        let pr = worktree
+        let cached_state = worktree
             .as_ref()
             .and_then(|wt| self.github_prs.get(&wt.info.name));
         let is_loading = worktree_name
@@ -765,15 +770,16 @@ impl Dashboard {
                 "Main branch - no PR",
                 Style::default().fg(Color::DarkGray).italic(),
             )
-        } else if is_loading && pr.is_none() {
+        } else if is_loading && cached_state.is_none() {
+            // Only show "Loading..." when there's no cached state at all (first load)
             Text::styled(
                 "Loading...",
                 Style::default().fg(Color::Yellow).italic(),
             )
         } else {
-            match pr {
-                Some(pr) => self.format_github_pr_content(pr, inner.width),
-                None => Text::styled(
+            match cached_state {
+                Some(CachedPRState::Found(pr)) => self.format_github_pr_content(pr, inner.width),
+                Some(CachedPRState::NotFound) | None => Text::styled(
                     "No PR found\n\nPress 'g' to create a PR",
                     Style::default().fg(Color::DarkGray).italic(),
                 ),

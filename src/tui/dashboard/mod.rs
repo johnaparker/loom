@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 use crate::claude::ClaudeSession;
 use crate::core::FuzzyMatcher;
 use crate::git::WorktreeStats;
-use crate::github::GitHubPR;
+use crate::github::CachedPRState;
 use crate::linear::LinearIssue;
 
 pub use state::{DashboardMode, DashboardResult};
@@ -56,8 +56,8 @@ pub struct Dashboard {
     status_message: Option<(bool, String)>,
     /// Cached Linear issues by worktree name
     linear_issues: HashMap<String, LinearIssue>,
-    /// Cached GitHub PRs by worktree name
-    github_prs: HashMap<String, GitHubPR>,
+    /// Cached GitHub PR states by worktree name
+    github_prs: HashMap<String, CachedPRState>,
     /// Cached Claude session states by worktree name
     claude_states: HashMap<String, ClaudeSession>,
     /// Animation frame counter (wraps around 0-255)
@@ -213,13 +213,10 @@ impl Dashboard {
     /// Check for completed async GitHub PR fetches and update state
     pub fn poll_github_results(&mut self) {
         // Non-blocking receive of all pending results
-        while let Ok((worktree_name, pr)) = self.github_pr_receiver.try_recv() {
+        while let Ok((worktree_name, state)) = self.github_pr_receiver.try_recv() {
             self.github_loading.remove(&worktree_name);
-            if let Some(pr) = pr {
-                self.github_prs.insert(worktree_name, pr);
-            } else {
-                self.github_prs.remove(&worktree_name);
-            }
+            // Always insert the state (Found or NotFound)
+            self.github_prs.insert(worktree_name, state);
         }
     }
 

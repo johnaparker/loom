@@ -41,7 +41,7 @@ pub fn github_cmd() -> Result<()> {
     // Try to get PR info and cache it
     if let Ok(Some(pr)) = github::get_pr_for_branch(manager.repo_root(), &branch) {
         // Cache the PR info
-        let _ = github::write_pr_cache(&cache_dir, &project_name, &worktree.name, &pr);
+        let _ = github::write_pr_cache(&cache_dir, &project_name, &worktree.name, &github::CachedPRState::Found(pr.clone()));
         github::open_url(&pr.url)?;
         println!("{} Opening PR #{}: {}", "✓".green(), pr.number, pr.title);
     } else {
