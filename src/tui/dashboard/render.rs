@@ -557,17 +557,7 @@ impl Dashboard {
             .map(|wt| wt.info.is_main)
             .unwrap_or(true);
 
-        // Build title with loading indicator
-        let title = if is_loading {
-            Line::from(vec![
-                Span::styled(" Linear ", Style::default().fg(Color::White)),
-                Span::styled("⟳", Style::default().fg(Color::Yellow)),
-            ])
-        } else {
-            Line::from(" Linear ")
-        };
-
-        let block = Block::default().borders(Borders::ALL).title(title);
+        let block = Block::default().borders(Borders::ALL).title(" Linear ");
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -650,17 +640,7 @@ impl Dashboard {
             .map(|wt| wt.info.is_main)
             .unwrap_or(true);
 
-        // Build title with loading indicator
-        let title = if is_loading {
-            Line::from(vec![
-                Span::styled(" GitHub ", Style::default().fg(Color::White)),
-                Span::styled("⟳", Style::default().fg(Color::Yellow)),
-            ])
-        } else {
-            Line::from(" GitHub ")
-        };
-
-        let block = Block::default().borders(Borders::ALL).title(title);
+        let block = Block::default().borders(Borders::ALL).title(" GitHub ");
         let inner = block.inner(area);
         f.render_widget(block, area);
 
