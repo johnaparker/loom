@@ -35,6 +35,7 @@ pub fn status() -> Result<()> {
         cache_dir,
         linear_api_key,
         linear_prefix,
+        config.is_pull_workflow(),
     );
     dashboard.set_main_branch(main_branch);
 

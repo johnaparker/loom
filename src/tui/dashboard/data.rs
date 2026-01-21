@@ -16,6 +16,9 @@ pub type GitHubPRResult = (String, Option<GitHubPR>); // (worktree_name, pr)
 /// Result of async Linear issue fetch
 pub type LinearIssueResult = (String, Option<LinearIssue>); // (worktree_name, issue)
 
+/// Result of async git fetch
+pub type GitFetchResult = Result<(), String>;
+
 /// Load Linear issues from cache for all worktrees
 pub fn load_linear_issues(
     cache_dir: &Path,
@@ -119,4 +122,21 @@ pub fn load_claude_states(
     });
 
     (states, has_active)
+}
+
+/// Spawn async git fetch for origin (non-blocking)
+pub fn fetch_origin_async(repo_root: PathBuf, sender: Sender<GitFetchResult>) {
+    thread::spawn(move || {
+        let result = std::process::Command::new("git")
+            .args(["fetch", "origin"])
+            .current_dir(&repo_root)
+            .output();
+
+        let fetch_result = match result {
+            Ok(output) if output.status.success() => Ok(()),
+            Ok(output) => Err(String::from_utf8_lossy(&output.stderr).to_string()),
+            Err(e) => Err(e.to_string()),
+        };
+        let _ = sender.send(fetch_result);
+    });
 }
