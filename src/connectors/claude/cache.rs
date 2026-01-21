@@ -8,17 +8,14 @@ use super::types::ClaudeSession;
 
 const CACHE_FILENAME: &str = "claude.json";
 
-/// Read the Claude session state from cache
+/// Read the Claude session state from cache.
+/// Returns None if the cache file doesn't exist or is corrupted.
+/// Errors are silently ignored since cache corruption is transient -
+/// the next hook event will write a fresh state.
 pub fn read_state(base: &Path, project: &str, worktree: &str) -> Option<ClaudeSession> {
-    match shared_cache::read_json(base, project, worktree, CACHE_FILENAME) {
-        Ok(session) => session,
-        Err(e) => {
-            // Log read errors for debugging. This can happen due to corrupt files,
-            // though with atomic writes it should be rare.
-            eprintln!("gwt: Warning: Failed to read claude cache for {}/{}: {}", project, worktree, e);
-            None
-        }
-    }
+    shared_cache::read_json(base, project, worktree, CACHE_FILENAME)
+        .ok()
+        .flatten()
 }
 
 /// Write the Claude session state to cache
