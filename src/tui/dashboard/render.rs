@@ -357,55 +357,41 @@ impl Dashboard {
     }
 
     /// Render the "vs main" bracket: [↑N ↓N +X -Y vs main]
-    /// For main branch: shows [↓N vs origin] if behind origin/main
+    /// For main branch: shows [↑N ↓N vs origin/main] comparing to origin/main
     /// For other branches: shows commits ahead/behind main and diff stats
     fn render_vs_main_bracket(wt: &WorktreeStats) -> Vec<Span<'static>> {
         let mut spans = Vec::new();
         let mut has_content = false;
 
-        if wt.info.is_main {
-            // Main branch: show if behind origin/main
-            if let Some(behind) = wt.commits_behind
-                && behind > 0
-            {
-                spans.push(Span::styled("[", Style::default().fg(Color::DarkGray)));
-                spans.push(Span::styled(
-                    format!("\u{2193}{}", behind),
-                    Style::default().fg(Color::Magenta),
-                ));
-                spans.push(Span::styled(" vs origin", Style::default().fg(Color::DarkGray)));
-                spans.push(Span::styled("]", Style::default().fg(Color::DarkGray)));
-            }
-        } else {
-            // Non-main branches: show commits ahead/behind main and diff
-            spans.push(Span::styled("[", Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled("[", Style::default().fg(Color::DarkGray)));
 
-            // Commits ahead of main (↑)
-            if let Some(ahead) = wt.commits_ahead
-                && ahead > 0
-            {
-                spans.push(Span::styled(
-                    format!("\u{2191}{}", ahead),
-                    Style::default().fg(Color::Yellow),
-                ));
-                has_content = true;
-            }
+        // Commits ahead (↑)
+        if let Some(ahead) = wt.commits_ahead
+            && ahead > 0
+        {
+            spans.push(Span::styled(
+                format!("\u{2191}{}", ahead),
+                Style::default().fg(Color::Yellow),
+            ));
+            has_content = true;
+        }
 
-            // Commits behind main (↓)
-            if let Some(behind) = wt.commits_behind
-                && behind > 0
-            {
-                if has_content {
-                    spans.push(Span::raw(" "));
-                }
-                spans.push(Span::styled(
-                    format!("\u{2193}{}", behind),
-                    Style::default().fg(Color::Magenta),
-                ));
-                has_content = true;
+        // Commits behind (↓)
+        if let Some(behind) = wt.commits_behind
+            && behind > 0
+        {
+            if has_content {
+                spans.push(Span::raw(" "));
             }
+            spans.push(Span::styled(
+                format!("\u{2193}{}", behind),
+                Style::default().fg(Color::Magenta),
+            ));
+            has_content = true;
+        }
 
-            // Diff vs main
+        // Diff vs main (only for non-main branches)
+        if !wt.info.is_main {
             if let (Some(added), Some(removed)) = (wt.diff_added, wt.diff_removed) {
                 if added > 0 || removed > 0 {
                     if has_content {
@@ -422,17 +408,22 @@ impl Dashboard {
                     has_content = true;
                 }
             }
-
-            if has_content {
-                spans.push(Span::styled(" vs main", Style::default().fg(Color::DarkGray)));
-                spans.push(Span::styled("]", Style::default().fg(Color::DarkGray)));
-            } else {
-                // No content - return empty, don't show empty bracket
-                return Vec::new();
-            }
         }
 
-        spans
+        if has_content {
+            // Use different label for main branch vs other branches
+            let label = if wt.info.is_main {
+                " vs origin/main"
+            } else {
+                " vs main"
+            };
+            spans.push(Span::styled(label, Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled("]", Style::default().fg(Color::DarkGray)));
+            spans
+        } else {
+            // No content - return empty, don't show empty bracket
+            Vec::new()
+        }
     }
 
     /// Render the "vs self" bracket: [↑N ↓N +X -Y vs self]

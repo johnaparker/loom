@@ -137,10 +137,31 @@ pub struct PaneLocation {
     pub pane_index: u32,
 }
 
+/// Check if a character is in the Braille Unicode range (U+2800-U+28FF)
+fn is_braille_char(c: char) -> bool {
+    ('\u{2800}'..='\u{28FF}').contains(&c)
+}
+
 /// Find a pane in a session with a title containing the given text.
 /// Searches ALL panes across ALL windows (regardless of window name).
 /// Returns window and pane indices if found.
 pub fn find_pane_with_title(session_name: &str, title_contains: &str) -> Option<PaneLocation> {
+    find_pane_matching(session_name, |title| title.contains(title_contains))
+}
+
+/// Find a pane in a session with a title starting with any Braille character.
+/// Claude Code uses various Braille patterns in its status line (U+2800-U+28FF).
+pub fn find_pane_with_braille_title(session_name: &str) -> Option<PaneLocation> {
+    find_pane_matching(session_name, |title| {
+        title.chars().next().map_or(false, is_braille_char)
+    })
+}
+
+/// Find a pane in a session matching a predicate on the pane title.
+fn find_pane_matching<F>(session_name: &str, predicate: F) -> Option<PaneLocation>
+where
+    F: Fn(&str) -> bool,
+{
     // List all panes with format: window_index:pane_index:pane_title
     let output = Command::new("tmux")
         .args([
@@ -161,7 +182,7 @@ pub fn find_pane_with_title(session_name: &str, title_contains: &str) -> Option<
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
         let parts: Vec<&str> = line.splitn(3, ':').collect();
-        if parts.len() == 3 && parts[2].contains(title_contains) {
+        if parts.len() == 3 && predicate(parts[2]) {
             let window_index = parts[0].parse().ok()?;
             let pane_index = parts[1].parse().ok()?;
             return Some(PaneLocation {

@@ -464,12 +464,16 @@ impl WorktreeManager {
     /// Get number of commits ahead of main branch
     fn commits_ahead_of_main(&self, path: &Path, branch: &str) -> Option<u32> {
         let main_branch = self.main_branch_name().ok()?;
-        if branch == main_branch {
-            return Some(0);
-        }
+
+        // For main branch: compare to origin/main to show unpushed commits
+        let target = if branch == main_branch {
+            self.remote_main_ref()?
+        } else {
+            main_branch
+        };
 
         let output = Command::new("git")
-            .args(["rev-list", "--count", &format!("{}..{}", main_branch, branch)])
+            .args(["rev-list", "--count", &format!("{}..{}", target, branch)])
             .current_dir(path)
             .output()
             .ok()?;
