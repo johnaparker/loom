@@ -248,6 +248,55 @@ Current coverage: Unit tests for fuzzy matching, URL parsing, cache operations.
 3. Export from `tui/widgets/mod.rs`
 4. Keep widgets pure: take data in, render out, no side effects
 
+### Adding a periodic async task
+
+For background tasks that run periodically (e.g., git fetch, API polling):
+
+1. **Define result type in `data.rs`**:
+   ```rust
+   pub type MyTaskResult = Result<Data, String>;
+   ```
+
+2. **Add async function in `data.rs`**:
+   ```rust
+   pub fn run_task_async(params: Params, sender: Sender<MyTaskResult>) {
+       thread::spawn(move || {
+           let result = do_work(&params);
+           let _ = sender.send(result);
+       });
+   }
+   ```
+
+3. **Add fields to Dashboard struct (`mod.rs`)**:
+   ```rust
+   task_receiver: Receiver<MyTaskResult>,
+   task_sender: Sender<MyTaskResult>,
+   task_in_progress: bool,
+   last_task_time: Option<Instant>,
+   ```
+
+4. **Add interval constant**:
+   ```rust
+   const TASK_INTERVAL: Duration = Duration::from_secs(15);
+   ```
+
+5. **Add methods to Dashboard**:
+   - `start_task()` - spawns async task if not already in progress
+   - `poll_task_results()` - checks for completion via `try_recv()`
+   - `should_run_task()` - checks if interval has elapsed
+
+6. **Integrate into event loop**:
+   - Poll for results at start of loop (before `terminal.draw()`)
+   - Return `DashboardResult::Refresh` when task completes
+   - Check `should_run_task()` and start if due
+   - Include `task_in_progress` in poll timeout calculation
+
+**Key principles:**
+- Never block the event loop - always use channels and `try_recv()`
+- Silently ignore errors for non-critical tasks (e.g., git fetch)
+- Return `DashboardResult::Refresh` to trigger worktree stats update
+- Consider workflow modes - some tasks only make sense for certain workflows (e.g., git fetch only needed for pull-based workflows)
+
 ### Linear project management
 
 When creating Linear issues for this project, use:

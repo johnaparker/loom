@@ -28,10 +28,13 @@ use crate::github::GitHubPR;
 use crate::linear::LinearIssue;
 
 pub use state::{DashboardMode, DashboardResult};
-use data::{GitHubPRResult, LinearIssueResult, fetch_github_pr_async, fetch_linear_issue_async, load_claude_states, load_github_prs_from_cache, load_linear_issues};
+use data::{GitFetchResult, GitHubPRResult, LinearIssueResult, fetch_github_pr_async, fetch_linear_issue_async, fetch_origin_async, load_claude_states, load_github_prs_from_cache, load_linear_issues};
 
 /// Braille spinner frames for smooth rotation animation
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/// Interval between periodic git fetch operations
+const GIT_FETCH_INTERVAL: Duration = Duration::from_secs(15);
 
 /// Interactive dashboard for worktree status
 pub struct Dashboard {
@@ -77,6 +80,16 @@ pub struct Dashboard {
     linear_api_key: Option<String>,
     /// Linear team prefix from config
     linear_prefix: Option<String>,
+    /// Channel for receiving git fetch completion
+    git_fetch_receiver: Receiver<GitFetchResult>,
+    /// Sender for spawning git fetch
+    git_fetch_sender: Sender<GitFetchResult>,
+    /// Whether a git fetch is currently in progress
+    git_fetch_in_progress: bool,
+    /// Last fetch time (for periodic fetching)
+    last_fetch_time: Option<Instant>,
+    /// Whether to run periodic git fetch (only needed for pull-based workflows)
+    pull_workflow: bool,
 }
 
 impl Dashboard {
@@ -87,6 +100,7 @@ impl Dashboard {
         cache_dir: PathBuf,
         linear_api_key: Option<String>,
         linear_prefix: Option<String>,
+        pull_workflow: bool,
     ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
         let mut list_state = ListState::default();
@@ -105,6 +119,9 @@ impl Dashboard {
 
         // Create channel for async Linear issue fetches
         let (linear_issue_sender, linear_issue_receiver) = mpsc::channel();
+
+        // Create channel for async git fetch
+        let (git_fetch_sender, git_fetch_receiver) = mpsc::channel();
 
         // Load initial Claude states
         let (claude_states, has_active_claude) = load_claude_states(&cache_dir, &project_name, &worktrees);
@@ -136,6 +153,11 @@ impl Dashboard {
             linear_loading: std::collections::HashSet::new(),
             linear_api_key,
             linear_prefix,
+            git_fetch_receiver,
+            git_fetch_sender,
+            git_fetch_in_progress: false,
+            last_fetch_time: None,
+            pull_workflow,
         };
 
         // GitHub panel is always visible, so fetch PR data for initial selection
@@ -143,6 +165,11 @@ impl Dashboard {
 
         // Linear panel is always visible, so fetch issue data for initial selection
         dashboard.fetch_linear_issue_for_selected();
+
+        // Start initial git fetch to get fresh remote refs (only for pull-based workflows)
+        if pull_workflow {
+            dashboard.start_git_fetch();
+        }
 
         dashboard
     }
@@ -261,6 +288,33 @@ impl Dashboard {
     /// Check if a worktree's Linear issue is currently loading
     pub fn is_linear_loading(&self, worktree_name: &str) -> bool {
         self.linear_loading.contains(worktree_name)
+    }
+
+    /// Start an async git fetch (if not already in progress)
+    fn start_git_fetch(&mut self) {
+        if self.git_fetch_in_progress {
+            return;
+        }
+        self.git_fetch_in_progress = true;
+        fetch_origin_async(self.repo_root.clone(), self.git_fetch_sender.clone());
+    }
+
+    /// Check for completed git fetch and return true if fetch completed (triggers refresh)
+    fn poll_git_fetch_results(&mut self) -> bool {
+        if let Ok(_result) = self.git_fetch_receiver.try_recv() {
+            self.git_fetch_in_progress = false;
+            self.last_fetch_time = Some(Instant::now());
+            // Silently ignore errors - fetch failures shouldn't disrupt the UI
+            return true;
+        }
+        false
+    }
+
+    /// Check if a periodic git fetch is due
+    fn should_fetch(&self) -> bool {
+        self.last_fetch_time
+            .map(|t| t.elapsed() >= GIT_FETCH_INTERVAL)
+            .unwrap_or(true)
     }
 
     /// Refresh Claude session states for all worktrees
@@ -395,12 +449,23 @@ impl Dashboard {
             self.poll_github_results();
             self.poll_linear_results();
 
+            // Check for completed git fetch and trigger refresh if completed
+            if self.poll_git_fetch_results() {
+                return Ok(DashboardResult::Refresh);
+            }
+
+            // Start periodic git fetch if due (only for pull-based workflows)
+            if self.pull_workflow && self.should_fetch() && !self.git_fetch_in_progress {
+                self.start_git_fetch();
+            }
+
             terminal.draw(|f| self.render(f))?;
 
             // Use short interval when animating or loading async data
             let has_pending_github = !self.github_loading.is_empty();
             let has_pending_linear = !self.linear_loading.is_empty();
-            let poll_timeout = if self.has_active_claude || has_pending_github || has_pending_linear {
+            let has_pending_git_fetch = self.git_fetch_in_progress;
+            let poll_timeout = if self.has_active_claude || has_pending_github || has_pending_linear || has_pending_git_fetch {
                 ANIMATION_INTERVAL
             } else {
                 // Calculate remaining time until next refresh
