@@ -258,8 +258,42 @@ fn handle_tool_use(
         .or_else(|| json["tool"].as_str())
         .map(|s| s.to_string());
 
-    // Extract detailed info from tool_input based on tool type
-    // Store up to 200 chars - dashboard will truncate to fit display width
+    // Check if we're in a subagent context
+    let in_subagent = crate::claude::is_in_subagent(cache_dir, project, worktree);
+
+    // For Task tool: always log the event and increment depth
+    if tool_name.as_deref() == Some("Task") {
+        let tool_input = &json["tool_input"];
+        let detail = tool_input["description"]
+            .as_str()
+            .map(|d| truncate_str(d, 200));
+
+        let event = ClaudeEvent {
+            event_type: "ToolUse".to_string(),
+            timestamp: now_iso8601(),
+            prompt_preview: tool_name,
+            kind: None,
+            message: detail,
+        };
+
+        // Log the Task event first, then increment depth
+        crate::claude::update_state_from_event(
+            cache_dir,
+            project,
+            worktree,
+            event,
+            session_id,
+            ClaudeState::Working,
+        )?;
+        return crate::claude::increment_subagent_depth(cache_dir, project, worktree, session_id);
+    }
+
+    // If we're inside a subagent, just touch the session to keep it fresh
+    if in_subagent {
+        return crate::claude::touch_session(cache_dir, project, worktree, session_id);
+    }
+
+    // Normal logging for top-level tools
     let tool_input = &json["tool_input"];
     let detail = match tool_name.as_deref() {
         Some("Read") => tool_input["file_path"]
@@ -280,9 +314,6 @@ fn handle_tool_use(
         Some("Glob") => tool_input["pattern"]
             .as_str()
             .map(|p| truncate_str(p, 200)),
-        Some("Task") => tool_input["description"]
-            .as_str()
-            .map(|d| truncate_str(d, 200)),
         Some("WebFetch") => tool_input["url"]
             .as_str()
             .map(|u| truncate_str(u, 200)),
@@ -295,9 +326,9 @@ fn handle_tool_use(
     let event = ClaudeEvent {
         event_type: "ToolUse".to_string(),
         timestamp: now_iso8601(),
-        prompt_preview: tool_name, // Store tool name in prompt_preview field
+        prompt_preview: tool_name,
         kind: None,
-        message: detail, // Store detail in message field
+        message: detail,
     };
 
     crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
@@ -334,13 +365,25 @@ fn handle_tool_result(
     // Extract tool name if available
     let tool_name = json["tool_name"]
         .as_str()
-        .or_else(|| json["tool"].as_str())
-        .map(|s| s.to_string());
+        .or_else(|| json["tool"].as_str());
 
+    // For Task tool result: decrement depth, don't log (ToolResult events are filtered anyway)
+    if tool_name == Some("Task") {
+        return crate::claude::decrement_subagent_depth(cache_dir, project, worktree, session_id);
+    }
+
+    // Check if we're in a subagent context - if so, just touch the session
+    let in_subagent = crate::claude::is_in_subagent(cache_dir, project, worktree);
+    if in_subagent {
+        return crate::claude::touch_session(cache_dir, project, worktree, session_id);
+    }
+
+    // ToolResult events are already filtered out in render, but we still need to update
+    // the session timestamp and state for state machine purposes
     let event = ClaudeEvent {
         event_type: "ToolResult".to_string(),
         timestamp: now_iso8601(),
-        prompt_preview: tool_name,
+        prompt_preview: tool_name.map(|s| s.to_string()),
         kind: None,
         message: None,
     };

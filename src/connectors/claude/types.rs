@@ -46,6 +46,10 @@ pub struct ClaudeSession {
     pub state: ClaudeState,
     pub last_updated: String,
     pub events: Vec<ClaudeEvent>,
+    /// Track nested subagent calls (Task tool depth)
+    /// When > 0, we're inside a subagent and should filter events
+    #[serde(default)]
+    pub subagent_depth: u32,
 }
 
 impl ClaudeSession {
@@ -56,6 +60,7 @@ impl ClaudeSession {
             state,
             last_updated: now_iso8601(),
             events: Vec::new(),
+            subagent_depth: 0,
         }
     }
 
