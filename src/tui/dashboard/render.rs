@@ -448,21 +448,24 @@ impl Dashboard {
             ));
         }
 
-        // First assignee (truncated if needed)
-        if let Some(assignee) = pr.assignees.first() {
+        // First assignee, or author as fallback (truncated if needed)
+        let user = pr.assignees.first().map(|s| s.as_str()).unwrap_or_else(|| {
+            if pr.author.is_empty() { "" } else { &pr.author }
+        });
+        if !user.is_empty() {
             spans.push(Span::raw("  "));
             // Calculate how much space we have left
             let current_len: usize = spans.iter().map(|s| s.content.len()).sum();
-            let max_assignee_len = width.saturating_sub(current_len + 1); // +1 for @
+            let max_user_len = width.saturating_sub(current_len + 1); // +1 for @
 
-            let display_name = if assignee.len() > max_assignee_len {
-                if max_assignee_len > 3 {
-                    format!("@{}...", &assignee[..max_assignee_len.saturating_sub(3)])
+            let display_name = if user.len() > max_user_len {
+                if max_user_len > 3 {
+                    format!("@{}...", &user[..max_user_len.saturating_sub(3)])
                 } else {
-                    format!("@{}", &assignee[..max_assignee_len])
+                    format!("@{}", &user[..max_user_len])
                 }
             } else {
-                format!("@{}", assignee)
+                format!("@{}", user)
             };
 
             spans.push(Span::styled(

@@ -14,6 +14,9 @@ pub struct GitHubPR {
     pub base_branch: String,
     pub checks_status: Option<ChecksStatus>,
     pub comments: Vec<PRComment>,
+    /// Username of the PR author/creator
+    #[serde(default)]
+    pub author: String,
     /// Usernames of assignees
     pub assignees: Vec<String>,
     /// Usernames of requested reviewers
