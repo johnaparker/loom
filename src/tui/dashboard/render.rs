@@ -1092,6 +1092,20 @@ impl Dashboard {
                     }
                     spans
                 }
+                "ToolResult" => {
+                    let tool = event.prompt_preview.as_deref().unwrap_or("unknown");
+                    vec![
+                        Span::styled(
+                            format!("{:>8} ", time_str),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                        Span::styled("\u{2713} ", Style::default().fg(Color::Green)), // ✓
+                        Span::styled(
+                            format!("{} completed", tool),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    ]
+                }
                 "SessionStart" => {
                     vec![
                         Span::styled(

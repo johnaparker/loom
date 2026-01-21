@@ -39,6 +39,7 @@ pub fn hook(event: &str) -> Result<()> {
         "session-start" => handle_session_start(&cache_dir, &project, &worktree, session_id, &json)?,
         "session-end" => handle_session_end(&cache_dir, &project, &worktree, session_id, &json)?,
         "tool-use" => handle_tool_use(&cache_dir, &project, &worktree, session_id, &json)?,
+        "tool-result" => handle_tool_result(&cache_dir, &project, &worktree, session_id, &json)?,
         "permission-request" => handle_permission_request(&cache_dir, &project, &worktree, session_id, &json)?,
         _ => {
             // Unknown event type, ignore
@@ -321,6 +322,30 @@ fn handle_permission_request(
     };
 
     crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::WaitingPermission)
+}
+
+fn handle_tool_result(
+    cache_dir: &Path,
+    project: &str,
+    worktree: &str,
+    session_id: &str,
+    json: &serde_json::Value,
+) -> Result<()> {
+    // Extract tool name if available
+    let tool_name = json["tool_name"]
+        .as_str()
+        .or_else(|| json["tool"].as_str())
+        .map(|s| s.to_string());
+
+    let event = ClaudeEvent {
+        event_type: "ToolResult".to_string(),
+        timestamp: now_iso8601(),
+        prompt_preview: tool_name,
+        kind: None,
+        message: None,
+    };
+
+    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
 }
 
 /// Shorten a file path by replacing home dir with ~ and keeping basename visible
