@@ -183,22 +183,14 @@ fn run_dashboard_loop(
                     &worktree.info.path,
                     branch,
                     delete_branch,
+                    linear_issue.as_ref(),
+                    config.linear_api_key(),
+                    config.linear_auto_update_status(),
                 );
 
                 match result {
-                    Ok(()) => {
-                        // Update Linear issue to "Done" (non-critical)
-                        let linear_updated = if config.linear_auto_update_status() {
-                            config.linear_api_key().and_then(|api_key| {
-                                linear_issue.as_ref().and_then(|issue| {
-                                    linear::update_issue_status(api_key, &issue.id, "completed").ok()
-                                })
-                            })
-                        } else {
-                            None
-                        };
-
-                        let msg = if linear_updated.is_some() {
+                    Ok(cleanup_result) => {
+                        let msg = if cleanup_result.linear_updated {
                             format!("Merged '{}' to main, Linear updated", worktree.info.name)
                         } else {
                             format!("Merged '{}' to main", worktree.info.name)
@@ -509,7 +501,20 @@ fn execute_merge(
     path: &std::path::Path,
     branch: &str,
     delete_branch: bool,
-) -> Result<()> {
-    operations::merge_worktree_to_main(manager, cache_dir, project_name, name, path, branch, delete_branch)?;
-    Ok(())
+    linear_issue: Option<&linear::LinearIssue>,
+    linear_api_key: Option<&str>,
+    linear_auto_update: bool,
+) -> Result<operations::CleanupResult> {
+    operations::merge_worktree_to_main(
+        manager,
+        cache_dir,
+        project_name,
+        name,
+        path,
+        branch,
+        delete_branch,
+        linear_issue,
+        linear_api_key,
+        linear_auto_update,
+    )
 }
