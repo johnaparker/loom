@@ -39,6 +39,7 @@ pub fn hook(event: &str) -> Result<()> {
         "session-start" => handle_session_start(&cache_dir, &project, &worktree, session_id, &json)?,
         "session-end" => handle_session_end(&cache_dir, &project, &worktree, session_id, &json)?,
         "tool-use" => handle_tool_use(&cache_dir, &project, &worktree, session_id, &json)?,
+        "permission-request" => handle_permission_request(&cache_dir, &project, &worktree, session_id, &json)?,
         _ => {
             // Unknown event type, ignore
         }
@@ -149,6 +150,8 @@ fn handle_notification(
             if let Some(msg) = message_raw {
                 if msg.contains("permission") || msg.contains("Permission")
                     || msg.contains("approval") || msg.contains("Approval")
+                    || msg.contains("needs your attention")
+                    || msg.contains("waiting for")
                 {
                     (ClaudeState::WaitingPermission, Some("permission".to_string()))
                 } else if msg.contains("waiting for your input") {
@@ -297,6 +300,27 @@ fn handle_tool_use(
     };
 
     crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
+}
+
+fn handle_permission_request(
+    cache_dir: &Path,
+    project: &str,
+    worktree: &str,
+    session_id: &str,
+    json: &serde_json::Value,
+) -> Result<()> {
+    // Extract message if available
+    let message = json["message"].as_str().map(|s| truncate_str(s, 200));
+
+    let event = ClaudeEvent {
+        event_type: "PermissionRequest".to_string(),
+        timestamp: now_iso8601(),
+        prompt_preview: None,
+        kind: Some("permission".to_string()),
+        message,
+    };
+
+    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::WaitingPermission)
 }
 
 /// Shorten a file path by replacing home dir with ~ and keeping basename visible
