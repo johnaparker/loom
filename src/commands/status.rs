@@ -127,6 +127,11 @@ fn run_dashboard_loop(
             } => {
                 let branch = worktree.info.branch.as_deref().unwrap_or(&worktree.info.name);
 
+                // Read Linear metadata BEFORE merge (merge deletes the cache)
+                let linear_issue = linear::read_metadata(cache_dir, project_name, &worktree.info.name)
+                    .ok()
+                    .flatten();
+
                 // Check for conflicts first
                 match manager.check_merge_conflicts(branch) {
                     Ok(Some(conflicts)) => {
@@ -163,10 +168,23 @@ fn run_dashboard_loop(
 
                 match result {
                     Ok(()) => {
-                        dashboard.show_result(
-                            true,
-                            format!("Merged '{}' to main", worktree.info.name),
-                        );
+                        // Update Linear issue to "Done" (non-critical)
+                        let linear_updated = if config.linear_auto_update_status() {
+                            config.linear_api_key().and_then(|api_key| {
+                                linear_issue.as_ref().and_then(|issue| {
+                                    linear::update_issue_status(api_key, &issue.id, "completed").ok()
+                                })
+                            })
+                        } else {
+                            None
+                        };
+
+                        let msg = if linear_updated.is_some() {
+                            format!("Merged '{}' to main, Linear updated", worktree.info.name)
+                        } else {
+                            format!("Merged '{}' to main", worktree.info.name)
+                        };
+                        dashboard.show_result(true, msg);
                     }
                     Err(e) => {
                         dashboard.show_result(false, format!("Failed to merge: {}", e));
