@@ -436,9 +436,12 @@ impl Dashboard {
         spans.push(Span::styled("[", Style::default().fg(Color::DarkGray)));
 
         // For non-main branches, show tracking info (ahead/behind origin/<branch>)
+        // When no tracking branch exists, fall back to commits_ahead (vs main)
+        // since those commits would all be pushed when creating the remote branch
         if !wt.info.is_main {
-            // Unpushed commits (ahead of tracking branch)
-            if let Some(ahead) = wt.tracking_ahead
+            // Unpushed commits: prefer tracking_ahead, fall back to commits_ahead if no tracking
+            let unpushed = wt.tracking_ahead.or(wt.commits_ahead);
+            if let Some(ahead) = unpushed
                 && ahead > 0
             {
                 spans.push(Span::styled(
@@ -448,7 +451,7 @@ impl Dashboard {
                 has_content = true;
             }
 
-            // Behind tracking branch
+            // Behind tracking branch (only shown if tracking exists)
             if let Some(behind) = wt.tracking_behind
                 && behind > 0
             {
