@@ -19,22 +19,28 @@ use crate::tmux;
 /// Clean up all resources associated with a worktree.
 ///
 /// This handles:
-/// - Killing the tmux session if it exists
 /// - Unregistering from sesh
 /// - Deleting Linear metadata cache
+/// - Killing the tmux session if it exists (LAST - may terminate current process)
 ///
 /// Call this AFTER removing the worktree itself.
+/// IMPORTANT: tmux kill is done last because if running from within the tmux session
+/// being killed, the process will terminate and nothing after will execute.
 pub fn cleanup_worktree_resources(cache_dir: &Path, project_name: &str, worktree_name: &str) -> Result<CleanupResult> {
     let session_name = sesh::session_name(project_name, worktree_name);
 
-    let tmux_killed = tmux::kill_session(&session_name);
+    // Do these BEFORE killing tmux - tmux kill may terminate this process
     let sesh_unregistered = sesh::unregister_worktree(project_name, worktree_name)?;
     let linear_deleted = linear::delete_metadata(cache_dir, project_name, worktree_name).is_ok();
+
+    // Kill tmux LAST - this may kill the current process if running from within the session
+    let tmux_killed = tmux::kill_session(&session_name);
 
     Ok(CleanupResult {
         tmux_killed,
         sesh_unregistered,
         linear_deleted,
+        linear_updated: false,
     })
 }
 
@@ -45,6 +51,8 @@ pub struct CleanupResult {
     pub tmux_killed: bool,
     pub sesh_unregistered: bool,
     pub linear_deleted: bool,
+    /// Whether Linear issue status was updated (e.g., to "Done" on merge)
+    pub linear_updated: bool,
 }
 
 /// Delete a worktree and clean up all associated resources.
@@ -79,6 +87,9 @@ pub fn delete_worktree(
 /// Merge a worktree's branch to main and clean up.
 ///
 /// This is the complete merge operation used by both CLI and TUI.
+///
+/// Linear status is updated BEFORE cleanup because cleanup kills the tmux session,
+/// which may terminate the process if running from within that session.
 pub fn merge_worktree_to_main(
     manager: &WorktreeManager,
     cache_dir: &Path,
@@ -87,6 +98,9 @@ pub fn merge_worktree_to_main(
     worktree_path: &Path,
     branch: &str,
     delete_branch: bool,
+    linear_issue: Option<&LinearIssue>,
+    linear_api_key: Option<&str>,
+    linear_auto_update: bool,
 ) -> Result<CleanupResult> {
     // Merge to main
     manager.merge_to_main(branch)?;
@@ -94,13 +108,25 @@ pub fn merge_worktree_to_main(
     // Remove the worktree
     manager.remove_worktree(worktree_path, false)?;
 
-    // Clean up associated resources
-    let result = cleanup_worktree_resources(cache_dir, project_name, worktree_name)?;
-
-    // Delete branch if requested
+    // Delete branch if requested (before cleanup in case we get killed)
     if delete_branch {
         manager.delete_branch(branch, true)?;
     }
+
+    // Update Linear issue to "Done" BEFORE cleanup (cleanup may kill our process)
+    let linear_updated = if linear_auto_update {
+        linear_api_key.and_then(|api_key| {
+            linear_issue.and_then(|issue| {
+                linear::update_issue_status(api_key, &issue.id, "completed").ok()
+            })
+        }).is_some()
+    } else {
+        false
+    };
+
+    // Clean up associated resources (tmux kill is LAST and may terminate this process)
+    let mut result = cleanup_worktree_resources(cache_dir, project_name, worktree_name)?;
+    result.linear_updated = linear_updated;
 
     Ok(result)
 }
