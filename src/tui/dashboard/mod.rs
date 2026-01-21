@@ -27,7 +27,7 @@ use crate::git::WorktreeStats;
 use crate::github::GitHubPR;
 use crate::linear::LinearIssue;
 
-pub use state::{DashboardMode, DashboardResult, RightPanelView};
+pub use state::{DashboardMode, DashboardResult};
 use data::{GitHubPRResult, fetch_github_pr_async, load_claude_states, load_github_prs_from_cache, load_linear_issues};
 
 /// Braille spinner frames for smooth rotation animation
@@ -61,8 +61,6 @@ pub struct Dashboard {
     animation_frame: u8,
     /// Whether any worktree has an active animation state
     has_active_claude: bool,
-    /// Current view for the right panel (Commits or Linear)
-    right_panel_view: RightPanelView,
     /// Channel for receiving async GitHub PR results
     github_pr_receiver: Receiver<GitHubPRResult>,
     /// Sender for spawning async GitHub PR fetches
@@ -96,7 +94,7 @@ impl Dashboard {
         // Load initial Claude states
         let (claude_states, has_active_claude) = load_claude_states(&cache_dir, &project_name, &worktrees);
 
-        Self {
+        let mut dashboard = Self {
             worktrees,
             filtered_indices,
             selected: 0,
@@ -115,11 +113,15 @@ impl Dashboard {
             claude_states,
             animation_frame: 0,
             has_active_claude,
-            right_panel_view: RightPanelView::default(),
             github_pr_receiver,
             github_pr_sender,
             github_loading: std::collections::HashSet::new(),
-        }
+        };
+
+        // GitHub panel is always visible, so fetch PR data for initial selection
+        dashboard.fetch_github_pr_for_selected();
+
+        dashboard
     }
 
     /// Spawn async fetch of GitHub PR for the selected worktree (non-blocking)
@@ -369,10 +371,8 @@ impl Dashboard {
         self.selected = new;
         self.list_state.select(Some(new));
 
-        // Fetch GitHub PR when selection changes while on GitHub panel
-        if matches!(self.right_panel_view, RightPanelView::GitHub) {
-            self.fetch_github_pr_for_selected();
-        }
+        // GitHub panel is always visible, so always fetch PR on selection change
+        self.fetch_github_pr_for_selected();
     }
 
     fn filter_worktrees(&mut self) {

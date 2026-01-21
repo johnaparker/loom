@@ -9,25 +9,28 @@ use crate::claude::{self, ClaudeState};
 use crate::git::WorktreeStats;
 use crate::tui::modals::render_modal_overlay;
 
-use super::state::{DashboardMode, RightPanelView};
+use super::state::DashboardMode;
 use super::{Dashboard, SPINNER_FRAMES};
 
 impl Dashboard {
     pub(super) fn render(&mut self, f: &mut Frame) {
         let is_search_mode = matches!(self.mode, DashboardMode::Search);
 
+        // Layout: Title | [Search] | Top row (50%) | Bottom row (50%) | Help
         let constraints = if is_search_mode {
             vec![
-                Constraint::Length(1), // Title bar
-                Constraint::Length(3), // Search bar
-                Constraint::Min(1),    // Main content
-                Constraint::Length(1), // Help bar
+                Constraint::Length(1),    // Title bar
+                Constraint::Length(3),    // Search bar
+                Constraint::Percentage(50), // Top row (Worktrees + Claude)
+                Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
+                Constraint::Length(1),    // Help bar
             ]
         } else {
             vec![
-                Constraint::Length(1), // Title bar
-                Constraint::Min(1),    // Main content
-                Constraint::Length(1), // Help bar
+                Constraint::Length(1),    // Title bar
+                Constraint::Percentage(50), // Top row (Worktrees + Claude)
+                Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
+                Constraint::Length(1),    // Help bar
             ]
         };
 
@@ -36,10 +39,10 @@ impl Dashboard {
             .constraints(constraints.clone())
             .split(f.area());
 
-        let (title_area, main_area, help_area) = if is_search_mode {
-            (chunks[0], chunks[2], chunks[3])
+        let (title_area, top_row_area, bottom_row_area, help_area) = if is_search_mode {
+            (chunks[0], chunks[2], chunks[3], chunks[4])
         } else {
-            (chunks[0], chunks[1], chunks[2])
+            (chunks[0], chunks[1], chunks[2], chunks[3])
         };
 
         self.render_title_bar(f, title_area);
@@ -48,30 +51,32 @@ impl Dashboard {
             self.render_search_bar(f, chunks[1]);
         }
 
-        // Main content - worktrees on left, preview/linear on right
+        // Main content
         if self.filtered_indices.is_empty() {
-            self.render_empty(f, main_area);
+            self.render_empty(f, top_row_area);
         } else {
-            let main_chunks = Layout::default()
+            // Top row: Worktrees (50%) | Claude (50%)
+            let top_chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-                .split(main_area);
-
-            self.render_worktree_list(f, main_chunks[0]);
-
-            // Split right panel: commits/linear (top 50%) and claude pane (bottom 50%)
-            let right_chunks = Layout::default()
-                .direction(Direction::Vertical)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .split(main_chunks[1]);
+                .split(top_row_area);
 
-            // Render top panel based on toggle state
-            match self.right_panel_view {
-                RightPanelView::Commits => self.render_commit_preview(f, right_chunks[0]),
-                RightPanelView::Linear => self.render_linear_panel(f, right_chunks[0]),
-                RightPanelView::GitHub => self.render_github_panel(f, right_chunks[0]),
-            }
-            self.render_claude_pane(f, right_chunks[1]);
+            self.render_worktree_list(f, top_chunks[0]);
+            self.render_claude_pane(f, top_chunks[1]);
+
+            // Bottom row: Commits (33%) | GitHub (33%) | Linear (34%)
+            let bottom_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(33),
+                    Constraint::Percentage(33),
+                    Constraint::Percentage(34),
+                ])
+                .split(bottom_row_area);
+
+            self.render_commit_preview(f, bottom_chunks[0]);
+            self.render_github_panel(f, bottom_chunks[1]);
+            self.render_linear_panel(f, bottom_chunks[2]);
         }
 
         self.render_help(f, help_area);
@@ -531,16 +536,7 @@ impl Dashboard {
                 .collect()
         };
 
-        // Build title with tab toggle indicator
-        let title = Line::from(vec![
-            Span::styled(" Commits", Style::default().fg(Color::White)),
-            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("Linear", Style::default().fg(Color::DarkGray)),
-            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("GitHub ", Style::default().fg(Color::DarkGray)),
-        ]);
-
-        let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
+        let list = List::new(items).block(Block::default().borders(Borders::ALL).title(" Commits "));
 
         f.render_widget(list, area);
     }
@@ -551,16 +547,7 @@ impl Dashboard {
             .get_selected_worktree()
             .and_then(|wt| self.linear_issues.get(&wt.info.name));
 
-        // Build title with tab toggle indicator
-        let title = Line::from(vec![
-            Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
-            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("Linear", Style::default().fg(Color::White)),
-            Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("GitHub ", Style::default().fg(Color::DarkGray)),
-        ]);
-
-        let block = Block::default().borders(Borders::ALL).title(title);
+        let block = Block::default().borders(Borders::ALL).title(" Linear ");
         let inner = block.inner(area);
         f.render_widget(block, area);
 
@@ -631,24 +618,14 @@ impl Dashboard {
             .map(|wt| wt.info.is_main)
             .unwrap_or(true);
 
-        // Build title with tab toggle indicator and loading state
+        // Build title with loading indicator
         let title = if is_loading {
             Line::from(vec![
-                Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
-                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-                Span::styled("Linear", Style::default().fg(Color::DarkGray)),
-                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-                Span::styled("GitHub ", Style::default().fg(Color::White)),
+                Span::styled(" GitHub ", Style::default().fg(Color::White)),
                 Span::styled("⟳", Style::default().fg(Color::Yellow)),
             ])
         } else {
-            Line::from(vec![
-                Span::styled(" Commits", Style::default().fg(Color::DarkGray)),
-                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-                Span::styled("Linear", Style::default().fg(Color::DarkGray)),
-                Span::styled(" • ", Style::default().fg(Color::DarkGray)),
-                Span::styled("GitHub ", Style::default().fg(Color::White)),
-            ])
+            Line::from(" GitHub ")
         };
 
         let block = Block::default().borders(Borders::ALL).title(title);
@@ -1095,12 +1072,6 @@ impl Dashboard {
                         Span::styled(": github  ", Style::default().fg(Color::DarkGray)),
                     ]);
                 }
-
-                // Tab to toggle panel view
-                spans.extend(vec![
-                    Span::styled("Tab", Style::default().fg(Color::Cyan)),
-                    Span::styled(": panel  ", Style::default().fg(Color::DarkGray)),
-                ]);
 
                 spans.extend(vec![
                     Span::styled("q", Style::default().fg(Color::Cyan)),

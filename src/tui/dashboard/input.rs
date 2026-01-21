@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::tui::modals::{ActionResultModal, DeleteConfirmModal, MergeConfirmModal, Modal, ModalAction, NewWorktreeModal};
 
-use super::state::{DashboardMode, DashboardResult, RightPanelView};
+use super::state::{DashboardMode, DashboardResult};
 use super::Dashboard;
 
 impl Dashboard {
@@ -203,19 +203,6 @@ impl Dashboard {
                     if !worktree.info.is_main && worktree.info.branch.is_some() {
                         return Some(DashboardResult::GitHub { worktree });
                     }
-                }
-                None
-            }
-            KeyCode::Tab => {
-                // Cycle right panel between Commits, Linear, and GitHub views
-                self.right_panel_view = match self.right_panel_view {
-                    RightPanelView::Commits => RightPanelView::Linear,
-                    RightPanelView::Linear => RightPanelView::GitHub,
-                    RightPanelView::GitHub => RightPanelView::Commits,
-                };
-                // Fetch GitHub PR when switching to GitHub panel
-                if matches!(self.right_panel_view, RightPanelView::GitHub) {
-                    self.fetch_github_pr_for_selected();
                 }
                 None
             }

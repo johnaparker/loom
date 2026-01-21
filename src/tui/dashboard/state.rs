@@ -52,12 +52,3 @@ pub enum DashboardMode {
     /// Showing action result
     ActionResult(ActionResultModal),
 }
-
-/// Right panel view toggle
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum RightPanelView {
-    #[default]
-    Commits,
-    Linear,
-    GitHub,
-}
