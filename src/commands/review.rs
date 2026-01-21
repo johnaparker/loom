@@ -20,9 +20,7 @@ pub fn review() -> Result<()> {
 
     // Can't review main worktree
     if worktree.is_main {
-        return Err(anyhow::anyhow!(
-            "Cannot review main worktree - no changes to compare against itself"
-        ));
+        Err(GwtError::CannotReviewMain)?;
     }
 
     let session = sesh::session_name(&project_name, &worktree.name);

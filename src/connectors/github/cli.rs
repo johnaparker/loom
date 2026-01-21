@@ -17,7 +17,7 @@ pub fn check_gh_cli() -> Result<()> {
         .map_err(|_| GwtError::GitHubCliNotFound)?;
 
     if !output.status.success() {
-        return Err(GwtError::GitHubCliNotFound.into());
+        Err(GwtError::GitHubCliNotFound)?;
     }
 
     // Check if gh is authenticated
@@ -27,7 +27,7 @@ pub fn check_gh_cli() -> Result<()> {
         .map_err(|_| GwtError::GitHubCliNotFound)?;
 
     if !output.status.success() {
-        return Err(GwtError::GitHubNotAuthenticated.into());
+        Err(GwtError::GitHubNotAuthenticated)?;
     }
 
     Ok(())
@@ -55,18 +55,16 @@ pub fn get_pr_branch(repo_path: &Path, pr_number: u32) -> Result<String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(GwtError::GitHubApiError {
+        Err(GwtError::GitHubApiError {
             message: stderr.to_string(),
-        }
-        .into());
+        })?;
     }
 
     let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if branch.is_empty() {
-        return Err(GwtError::GitHubApiError {
+        Err(GwtError::GitHubApiError {
             message: format!("PR #{} not found or has no branch", pr_number),
-        }
-        .into());
+        })?;
     }
 
     Ok(branch)
@@ -112,10 +110,9 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         if stderr.contains("no pull requests found") || stderr.contains("Could not resolve") {
             return Ok(None);
         }
-        return Err(GwtError::GitHubApiError {
+        Err(GwtError::GitHubApiError {
             message: stderr.to_string(),
-        }
-        .into());
+        })?;
     }
 
     let json_str = String::from_utf8_lossy(&output.stdout);
@@ -253,13 +250,13 @@ pub fn get_repo_info(repo_path: &Path) -> Result<(String, String)> {
         })?;
 
     if !output.status.success() {
-        return Err(GwtError::NoGitHubRemote.into());
+        Err(GwtError::NoGitHubRemote)?;
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parts: Vec<&str> = stdout.trim().split('\n').collect();
     if parts.len() != 2 {
-        return Err(GwtError::NoGitHubRemote.into());
+        Err(GwtError::NoGitHubRemote)?;
     }
 
     Ok((parts[0].to_string(), parts[1].to_string()))

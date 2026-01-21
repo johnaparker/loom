@@ -69,9 +69,9 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     } else {
         // Show picker (skip in dry run mode - require name for dry run)
         if dry_run {
-            return Err(anyhow::anyhow!(
-                "Dry run requires a worktree name. Usage: gwt remove <name> --dry-run"
-            ));
+            Err(GwtError::DryRunRequiresName {
+                command: "remove".to_string(),
+            })?;
         }
 
         let items: Vec<(String, String, String)> = removable
@@ -220,7 +220,6 @@ fn fuzzy_match_worktree(worktrees: &[WorktreeInfo], query: &str) -> Result<Workt
         Some(idx) => Ok(worktrees[idx].clone()),
         None => Err(GwtError::NoMatch {
             query: query.to_string(),
-        }
-        .into()),
+        })?,
     }
 }
