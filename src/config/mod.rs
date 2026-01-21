@@ -1,7 +1,7 @@
 mod global;
 mod project;
 
-pub use global::GlobalConfig;
+pub use global::{GlobalConfig, SyncWorkflow};
 pub use project::ProjectConfig;
 
 use anyhow::Result;
@@ -101,5 +101,20 @@ impl Config {
         } else {
             Ok(PathBuf::from(dir))
         }
+    }
+
+    /// Get the current workflow mode
+    pub fn workflow(&self) -> global::SyncWorkflow {
+        self.global.workflow
+    }
+
+    /// Whether we're in push workflow mode (local-first)
+    pub fn is_push_workflow(&self) -> bool {
+        self.global.workflow == global::SyncWorkflow::Push
+    }
+
+    /// Whether we're in pull workflow mode (team/PR-based)
+    pub fn is_pull_workflow(&self) -> bool {
+        self.global.workflow == global::SyncWorkflow::Pull
     }
 }

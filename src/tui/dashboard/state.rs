@@ -21,8 +21,8 @@ pub enum DashboardResult {
         worktree: WorktreeStats,
         delete_branch: bool,
     },
-    /// Sync a worktree with main
-    Sync { worktree: WorktreeStats },
+    /// Sync a worktree with its remote tracking branch (contextual push/pull)
+    SyncWithRemote { worktree: WorktreeStats },
     /// Review a worktree's changes vs main
     Review { worktree: WorktreeStats },
     /// Open Claude in the worktree

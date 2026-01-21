@@ -105,25 +105,6 @@ pub fn merge_worktree_to_main(
     Ok(result)
 }
 
-/// Sync a worktree with main branch.
-pub fn sync_worktree_with_main(
-    manager: &WorktreeManager,
-    worktree_path: &Path,
-) -> Result<()> {
-    // Fetch from origin first
-    let _ = manager.fetch_origin(); // Ignore errors - we can still try sync
-
-    // Get sync source ref
-    let source_ref = manager
-        .get_sync_source_ref()
-        .ok_or_else(|| anyhow::anyhow!("No main branch found to sync from"))?;
-
-    // Perform sync
-    manager.sync_branch_with_main(worktree_path, &source_ref)?;
-
-    Ok(())
-}
-
 /// Result of worktree creation for reporting.
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -148,12 +129,15 @@ pub struct CreateWorktreeResult {
     pub direnv_allowed: bool,
     /// Whether registered with sesh
     pub sesh_registered: bool,
+    /// Number of commits main was pushed (push workflow)
+    pub main_pushed_commits: Option<u32>,
 }
 
 /// Create a new worktree with all associated setup.
 ///
 /// This is the complete create operation used by both CLI and TUI.
 /// It handles:
+/// - Workflow-aware pre-sync (push main if ahead in push workflow, fetch in pull workflow)
 /// - Resolving Linear issue IDs to branch names
 /// - Creating the worktree (tracking remote or new branch)
 /// - Writing Linear metadata cache
@@ -175,7 +159,23 @@ pub fn create_worktree(
 ) -> Result<CreateWorktreeResult> {
     let worktree_root = config.worktree_root()?;
 
+    // Workflow-aware pre-sync before creating worktree
+    let mut main_pushed_commits = None;
+
+    if config.is_push_workflow() {
+        // Push workflow: If local main is ahead of origin/main, auto-push main first
+        // This ensures new worktrees branch from the latest pushed state
+        if let Some(ahead) = manager.main_ahead_of_origin() {
+            if ahead > 0 {
+                if manager.push_main_to_remote().is_ok() {
+                    main_pushed_commits = Some(ahead);
+                }
+            }
+        }
+    }
+
     // Fetch from origin to ensure we have the latest refs
+    // This is important for pull workflow, and also useful for push workflow
     let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
 
     // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
@@ -267,5 +267,6 @@ pub fn create_worktree(
         synced_files,
         direnv_allowed,
         sesh_registered,
+        main_pushed_commits,
     })
 }

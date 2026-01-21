@@ -1074,7 +1074,7 @@ impl Dashboard {
                     ]);
                 }
 
-                // Show s: sync for all worktrees (including main)
+                // Show s: sync for all worktrees (contextual push/pull with remote)
                 spans.extend(vec![
                     Span::styled("s", Style::default().fg(Color::Cyan)),
                     Span::styled(": sync  ", Style::default().fg(Color::DarkGray)),

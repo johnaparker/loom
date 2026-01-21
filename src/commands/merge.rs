@@ -76,6 +76,15 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     manager.merge_to_main(&branch)?;
     println!("{} Merged successfully", "✓".green());
 
+    // Auto-push to origin in push workflow
+    if config.is_push_workflow() {
+        println!("{} Pushing to origin...", "→".blue());
+        match manager.push_main_to_remote() {
+            Ok(()) => println!("{} Pushed to origin", "✓".green()),
+            Err(e) => eprintln!("{} Could not auto-push: {}", "⚠".yellow(), e),
+        }
+    }
+
     // Update Linear issue to "Done" (non-critical)
     if config.linear_auto_update_status() {
         if let Some(api_key) = config.linear_api_key() {
