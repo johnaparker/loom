@@ -98,7 +98,7 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
             "view",
             branch,
             "--json",
-            "number,title,url,state,isDraft,headRefName,baseRefName,statusCheckRollup,comments,assignees,reviewRequests,reviewDecision",
+            "number,title,url,state,isDraft,headRefName,baseRefName,statusCheckRollup,comments,author,assignees,reviewRequests,reviewDecision",
         ])
         .current_dir(repo_path)
         .output()
@@ -194,6 +194,12 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         Vec::new()
     };
 
+    // Parse author
+    let author = json["author"]["login"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+
     // Parse assignees
     let assignees: Vec<String> = json["assignees"]
         .as_array()
@@ -227,6 +233,7 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         base_branch,
         checks_status,
         comments,
+        author,
         assignees,
         reviewers,
         review_decision,
