@@ -128,9 +128,17 @@ fn run_dashboard_loop(
                 let branch = worktree.info.branch.as_deref().unwrap_or(&worktree.info.name);
 
                 // Read Linear metadata BEFORE merge (merge deletes the cache)
+                // Fallback: if no cache, try to extract issue from branch name
                 let linear_issue = linear::read_metadata(cache_dir, project_name, &worktree.info.name)
                     .ok()
-                    .flatten();
+                    .flatten()
+                    .or_else(|| {
+                        let branch = worktree.info.branch.as_deref()?;
+                        let prefix = config.linear_prefix()?;
+                        let api_key = config.linear_api_key()?;
+                        let issue_id = linear::extract_issue_id(branch, prefix)?;
+                        linear::get_issue(api_key, &issue_id).ok()
+                    });
 
                 // Check for conflicts first
                 match manager.check_merge_conflicts(branch) {

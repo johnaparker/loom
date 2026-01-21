@@ -37,7 +37,17 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     let session_name = sesh::session_name(&project_name, name);
 
     // Check for Linear issue metadata (used for status updates)
-    let linear_issue = linear::read_metadata(&cache_dir, &project_name, name).ok().flatten();
+    // Fallback: if no cache, try to extract issue from branch name
+    let linear_issue = linear::read_metadata(&cache_dir, &project_name, name)
+        .ok()
+        .flatten()
+        .or_else(|| {
+            let branch = worktree.branch.as_deref()?;
+            let prefix = config.linear_prefix()?;
+            let api_key = config.linear_api_key()?;
+            let issue_id = linear::extract_issue_id(branch, prefix)?;
+            linear::get_issue(api_key, &issue_id).ok()
+        });
 
     // Dry run mode - preview actions
     if dry_run {
