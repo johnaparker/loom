@@ -7,6 +7,7 @@ use ratatui::{
 
 use crate::claude::{self, ClaudeState};
 use crate::git::WorktreeStats;
+use crate::github::GitHubPR;
 use crate::tui::modals::render_modal_overlay;
 
 use super::state::DashboardMode;
@@ -163,6 +164,7 @@ impl Dashboard {
                     .linear_issues
                     .get(&wt.info.name)
                     .map(|issue| issue.title.as_str());
+                let github_pr = self.github_prs.get(&wt.info.name);
                 let claude_state = self
                     .claude_states
                     .get(&wt.info.name)
@@ -171,6 +173,7 @@ impl Dashboard {
                     wt,
                     content_width,
                     linear_title,
+                    github_pr,
                     claude_state,
                     animation_frame,
                 )
@@ -196,6 +199,7 @@ impl Dashboard {
         wt: &WorktreeStats,
         width: usize,
         linear_title: Option<&str>,
+        github_pr: Option<&GitHubPR>,
         claude_state: Option<ClaudeState>,
         animation_frame: u8,
     ) -> ListItem<'static> {
@@ -323,7 +327,15 @@ impl Dashboard {
             )));
         }
 
-        // Line 4: Claude status (only if active session)
+        // Line 4: GitHub PR indicator (if available, not for main branch)
+        if !wt.info.is_main {
+            if let Some(pr) = github_pr {
+                let github_line = Self::format_github_indicator(pr, width);
+                lines.push(github_line);
+            }
+        }
+
+        // Line 5: Claude status (only if active session)
         if let Some(ref state) = claude_state {
             let claude_line = match state {
                 ClaudeState::Working => {
@@ -359,6 +371,107 @@ impl Dashboard {
             .collect();
 
         ListItem::new(lines)
+    }
+
+    /// Format a compact GitHub PR indicator line for the worktree list.
+    /// Format: `  #123 OPEN  ✓approved  ✓3/3  @john`
+    fn format_github_indicator(pr: &GitHubPR, width: usize) -> Line<'static> {
+        let mut spans = Vec::new();
+
+        // Indent
+        spans.push(Span::raw("  "));
+
+        // PR number (cyan)
+        spans.push(Span::styled(
+            format!("#{}", pr.number),
+            Style::default().fg(Color::Cyan),
+        ));
+
+        spans.push(Span::raw(" "));
+
+        // State with color (OPEN/MERGED/CLOSED)
+        let state_color = match pr.state.as_str() {
+            "OPEN" => Color::Green,
+            "MERGED" => Color::Magenta,
+            "CLOSED" => Color::Red,
+            _ => Color::DarkGray,
+        };
+        spans.push(Span::styled(
+            pr.state.clone(),
+            Style::default().fg(state_color),
+        ));
+
+        // Draft indicator (if applicable)
+        if pr.draft {
+            spans.push(Span::styled(
+                " (draft)",
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
+
+        // Review decision with icon
+        if let Some(ref decision) = pr.review_decision {
+            spans.push(Span::raw("  "));
+            let (icon, text, color) = match decision.as_str() {
+                "APPROVED" => ("\u{2713}", "approved", Color::Green),
+                "CHANGES_REQUESTED" => ("\u{2717}", "changes", Color::Red),
+                "REVIEW_REQUIRED" => ("\u{25CB}", "review", Color::Rgb(255, 165, 0)), // Orange
+                _ => ("", "", Color::DarkGray),
+            };
+            if !icon.is_empty() {
+                spans.push(Span::styled(
+                    format!("{}{}", icon, text),
+                    Style::default().fg(color),
+                ));
+            }
+        }
+
+        // Checks status with icon
+        if let Some(ref checks) = pr.checks_status {
+            spans.push(Span::raw("  "));
+            let total = checks.total;
+            let passing = checks.passing;
+
+            let (icon, color) = if checks.failing > 0 {
+                ("\u{2717}", Color::Red)
+            } else if checks.pending > 0 {
+                ("\u{25CB}", Color::Yellow)
+            } else if passing > 0 {
+                ("\u{2713}", Color::Green)
+            } else {
+                ("-", Color::DarkGray)
+            };
+
+            spans.push(Span::styled(
+                format!("{}{}/{}", icon, passing, total),
+                Style::default().fg(color),
+            ));
+        }
+
+        // First assignee (truncated if needed)
+        if let Some(assignee) = pr.assignees.first() {
+            spans.push(Span::raw("  "));
+            // Calculate how much space we have left
+            let current_len: usize = spans.iter().map(|s| s.content.len()).sum();
+            let max_assignee_len = width.saturating_sub(current_len + 1); // +1 for @
+
+            let display_name = if assignee.len() > max_assignee_len {
+                if max_assignee_len > 3 {
+                    format!("@{}...", &assignee[..max_assignee_len.saturating_sub(3)])
+                } else {
+                    format!("@{}", &assignee[..max_assignee_len])
+                }
+            } else {
+                format!("@{}", assignee)
+            };
+
+            spans.push(Span::styled(
+                display_name,
+                Style::default().fg(Color::Cyan),
+            ));
+        }
+
+        Line::from(spans)
     }
 
     /// Render the "vs main" bracket: [↑N ↓N +X -Y vs main]
