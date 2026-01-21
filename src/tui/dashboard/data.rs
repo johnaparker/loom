@@ -103,10 +103,8 @@ pub fn load_claude_states(
     let mut states = HashMap::new();
     for wt in worktrees {
         if let Some(session) = claude::read_state(cache_dir, project_name, &wt.info.name) {
-            // Only include non-stale sessions (or explicitly inactive ones)
-            if !session.is_stale() || session.state == ClaudeState::Inactive {
-                states.insert(wt.info.name.clone(), session);
-            }
+            // Always load sessions - effective_state() handles showing stale ones as Inactive
+            states.insert(wt.info.name.clone(), session);
         }
     }
 
