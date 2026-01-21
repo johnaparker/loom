@@ -15,7 +15,10 @@ pub use types::{ClaudeEvent, ClaudeSession, ClaudeState};
 pub use cache::{read_state, write_state};
 
 // Re-export state functions
-pub use state::{effective_state, update_state_from_event};
+pub use state::{
+    decrement_subagent_depth, effective_state, increment_subagent_depth, is_in_subagent,
+    touch_session, update_state_from_event,
+};
 
 // Re-export time functions
 pub use time::relative_time;

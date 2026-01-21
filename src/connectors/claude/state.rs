@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::path::Path;
 
 use super::cache::{read_state, write_state};
+use super::time::now_iso8601;
 use super::types::{ClaudeEvent, ClaudeSession, ClaudeState};
 
 /// Update the state from a hook event
@@ -67,4 +68,65 @@ pub fn effective_state(session: &ClaudeSession) -> ClaudeState {
     } else {
         session.state.clone()
     }
+}
+
+/// Check if we're currently inside a subagent context
+pub fn is_in_subagent(base: &Path, project: &str, worktree: &str) -> bool {
+    read_state(base, project, worktree)
+        .map(|s| s.subagent_depth > 0)
+        .unwrap_or(false)
+}
+
+/// Increment the subagent depth (called when Task tool starts)
+pub fn increment_subagent_depth(
+    base: &Path,
+    project: &str,
+    worktree: &str,
+    session_id: &str,
+) -> Result<()> {
+    let mut session = read_state(base, project, worktree).unwrap_or_else(|| {
+        ClaudeSession::new(session_id.to_string(), ClaudeState::Working)
+    });
+
+    session.session_id = session_id.to_string();
+    session.subagent_depth = session.subagent_depth.saturating_add(1);
+    session.last_updated = now_iso8601();
+
+    write_state(base, project, worktree, &session)
+}
+
+/// Decrement the subagent depth (called when Task tool completes)
+pub fn decrement_subagent_depth(
+    base: &Path,
+    project: &str,
+    worktree: &str,
+    session_id: &str,
+) -> Result<()> {
+    let mut session = read_state(base, project, worktree).unwrap_or_else(|| {
+        ClaudeSession::new(session_id.to_string(), ClaudeState::Working)
+    });
+
+    session.session_id = session_id.to_string();
+    session.subagent_depth = session.subagent_depth.saturating_sub(1);
+    session.last_updated = now_iso8601();
+
+    write_state(base, project, worktree, &session)
+}
+
+/// Touch the session to update the timestamp without adding an event
+/// Used to keep the session fresh during subagent execution
+pub fn touch_session(
+    base: &Path,
+    project: &str,
+    worktree: &str,
+    session_id: &str,
+) -> Result<()> {
+    let mut session = read_state(base, project, worktree).unwrap_or_else(|| {
+        ClaudeSession::new(session_id.to_string(), ClaudeState::Working)
+    });
+
+    session.session_id = session_id.to_string();
+    session.last_updated = now_iso8601();
+
+    write_state(base, project, worktree, &session)
 }
