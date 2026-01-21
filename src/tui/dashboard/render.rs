@@ -1001,8 +1001,12 @@ impl Dashboard {
 
         // Show recent events (most recent first, fill available height)
         // Track index to know if notification is "handled" (not the most recent)
+        // Filter out ToolResult events - they're used for state tracking but pollute the log
         let max_events = inner.height as usize;
-        for (idx, event) in session.events.iter().rev().take(max_events).enumerate() {
+        for (idx, event) in session.events.iter().rev()
+            .filter(|e| e.event_type != "ToolResult")
+            .take(max_events)
+            .enumerate() {
             let time_str = claude::relative_time(&event.timestamp);
             let is_most_recent = idx == 0;
 
@@ -1091,20 +1095,6 @@ impl Dashboard {
                         ));
                     }
                     spans
-                }
-                "ToolResult" => {
-                    let tool = event.prompt_preview.as_deref().unwrap_or("unknown");
-                    vec![
-                        Span::styled(
-                            format!("{:>8} ", time_str),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                        Span::styled("\u{2713} ", Style::default().fg(Color::Green)), // ✓
-                        Span::styled(
-                            format!("{} completed", tool),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                    ]
                 }
                 "SessionStart" => {
                     vec![
