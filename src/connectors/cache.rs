@@ -47,6 +47,8 @@ pub fn read_json<T: DeserializeOwned>(
 /// Write JSON data to a cache file.
 ///
 /// Creates the parent directories if they don't exist.
+/// Uses atomic write (write to temp file, then rename) to prevent
+/// corruption from concurrent reads during write operations.
 pub fn write_json<T: Serialize>(
     base: &Path,
     project_name: &str,
@@ -59,7 +61,13 @@ pub fn write_json<T: Serialize>(
 
     let path = dir.join(filename);
     let content = serde_json::to_string_pretty(data)?;
-    fs::write(&path, content)?;
+
+    // Atomic write: write to temp file, then rename.
+    // rename() is atomic on POSIX systems, ensuring readers always see
+    // either the old complete file or the new complete file, never partial data.
+    let temp_path = path.with_extension("json.tmp");
+    fs::write(&temp_path, &content)?;
+    fs::rename(&temp_path, &path)?;
 
     Ok(())
 }
