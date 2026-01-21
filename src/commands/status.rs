@@ -24,8 +24,18 @@ pub fn status() -> Result<()> {
     let cache_dir = config.cache_dir()?;
     let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
 
+    let linear_api_key = config.linear_api_key().map(|s| s.to_string());
+    let linear_prefix = config.linear_prefix().map(|s| s.to_string());
+
     let worktrees = manager.list_worktrees_with_stats()?;
-    let mut dashboard = Dashboard::new(worktrees, project_name.clone(), manager.repo_root().to_path_buf(), cache_dir);
+    let mut dashboard = Dashboard::new(
+        worktrees,
+        project_name.clone(),
+        manager.repo_root().to_path_buf(),
+        cache_dir,
+        linear_api_key,
+        linear_prefix,
+    );
     dashboard.set_main_branch(main_branch);
 
     // Set up terminal once for the entire session

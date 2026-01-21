@@ -542,16 +542,47 @@ impl Dashboard {
     }
 
     fn render_linear_panel(&self, f: &mut Frame, area: Rect) {
-        // Get the selected worktree's Linear issue
-        let issue = self
-            .get_selected_worktree()
+        // Get the selected worktree info
+        let worktree = self.get_selected_worktree();
+        let worktree_name = worktree.as_ref().map(|wt| wt.info.name.as_str());
+        let issue = worktree
+            .as_ref()
             .and_then(|wt| self.linear_issues.get(&wt.info.name));
+        let is_loading = worktree_name
+            .map(|name| self.is_linear_loading(name))
+            .unwrap_or(false);
 
-        let block = Block::default().borders(Borders::ALL).title(" Linear ");
+        let is_main = worktree
+            .as_ref()
+            .map(|wt| wt.info.is_main)
+            .unwrap_or(true);
+
+        // Build title with loading indicator
+        let title = if is_loading {
+            Line::from(vec![
+                Span::styled(" Linear ", Style::default().fg(Color::White)),
+                Span::styled("⟳", Style::default().fg(Color::Yellow)),
+            ])
+        } else {
+            Line::from(" Linear ")
+        };
+
+        let block = Block::default().borders(Borders::ALL).title(title);
         let inner = block.inner(area);
         f.render_widget(block, area);
 
-        let content: Text = match issue {
+        let content: Text = if is_main {
+            Text::styled(
+                "Main branch - no Linear issue",
+                Style::default().fg(Color::DarkGray).italic(),
+            )
+        } else if is_loading && issue.is_none() {
+            Text::styled(
+                "Loading...",
+                Style::default().fg(Color::Yellow).italic(),
+            )
+        } else {
+            match issue {
             Some(issue) => {
                 let mut lines = Vec::new();
 
@@ -596,6 +627,7 @@ impl Dashboard {
                 "No Linear issue linked\n\nCreate worktrees with Linear issue IDs\nto see issue details here.",
                 Style::default().fg(Color::DarkGray).italic(),
             ),
+            }
         };
 
         let paragraph = Paragraph::new(content).wrap(Wrap { trim: true });

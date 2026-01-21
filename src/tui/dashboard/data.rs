@@ -13,6 +13,9 @@ use crate::linear::{self, LinearIssue};
 /// Result of async GitHub PR fetch
 pub type GitHubPRResult = (String, Option<GitHubPR>); // (worktree_name, pr)
 
+/// Result of async Linear issue fetch
+pub type LinearIssueResult = (String, Option<LinearIssue>); // (worktree_name, issue)
+
 /// Load Linear issues from cache for all worktrees
 pub fn load_linear_issues(
     cache_dir: &Path,
@@ -66,6 +69,28 @@ pub fn fetch_github_pr_async(
 
         // Send result back (ignore error if receiver is gone)
         let _ = sender.send((worktree_name, pr));
+    });
+}
+
+/// Spawn async fetch of Linear issue for a worktree (non-blocking)
+pub fn fetch_linear_issue_async(
+    cache_dir: PathBuf,
+    worktree_name: String,
+    issue_id: String,
+    api_key: String,
+    project_name: String,
+    sender: Sender<LinearIssueResult>,
+) {
+    thread::spawn(move || {
+        let issue = linear::get_issue(&api_key, &issue_id).ok();
+
+        // Cache the result on success
+        if let Some(ref issue) = issue {
+            let _ = linear::write_metadata(&cache_dir, &project_name, &worktree_name, issue);
+        }
+
+        // Send result back (ignore error if receiver is gone)
+        let _ = sender.send((worktree_name, issue));
     });
 }
 
