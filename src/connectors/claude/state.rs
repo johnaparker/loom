@@ -50,6 +50,7 @@ pub fn effective_state(session: &ClaudeSession) -> ClaudeState {
                     _ => ClaudeState::Working,
                 }
             }
+            "PermissionRequest" => ClaudeState::WaitingPermission,
             // SessionCleared means the session was reset, Claude is now idle
             "SessionCleared" => ClaudeState::Idle,
             // SessionStart: startup and resume mean Claude is waiting for user input
