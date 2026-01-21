@@ -27,7 +27,7 @@ impl NewWorktreeModal {
                     ("demo".to_string(), "Demo".to_string()),
                 ],
             ),
-            auto_claude_checkbox: Checkbox::new("Start Claude with issue prompt", true),
+            auto_claude_checkbox: Checkbox::new("Start with Claude", true),
             error_message: None,
         }
     }

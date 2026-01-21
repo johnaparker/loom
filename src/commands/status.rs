@@ -444,14 +444,19 @@ fn run_dashboard_loop(
                     Ok(create_result) => {
                         let path_str = create_result.worktree_path.to_str().unwrap();
 
-                        if auto_claude && create_result.issue.is_some() {
-                            // Launch Claude with initial prompt for the Linear issue
-                            let issue_id = &create_result.issue.as_ref().unwrap().id;
-                            let claude_cmd = format!(
-                                "bash -c 'claude \"work on {} /plan\"; exec $SHELL'",
-                                issue_id
-                            );
-                            tmux::create_session_with_command(&create_result.session_name, path_str, &claude_cmd)?;
+                        if auto_claude {
+                            if let Some(issue) = &create_result.issue {
+                                // Launch Claude with initial prompt for the Linear issue
+                                let claude_cmd = format!(
+                                    "bash -c 'claude \"work on {} /plan\"; exec $SHELL'",
+                                    issue.id
+                                );
+                                tmux::create_session_with_command(&create_result.session_name, path_str, &claude_cmd)?;
+                            } else {
+                                // Launch Claude with no initial prompt
+                                let claude_cmd = "bash -c 'claude; exec $SHELL'";
+                                tmux::create_session_with_command(&create_result.session_name, path_str, claude_cmd)?;
+                            }
                             tmux::switch_to_session(&create_result.session_name, path_str)?;
                             dashboard.show_result(true, format!("Created '{}' and started Claude", branch));
                         } else {
