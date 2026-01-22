@@ -6,7 +6,7 @@ use std::sync::mpsc::Sender;
 use std::thread;
 
 use crate::claude::{self, ClaudeSession, ClaudeState};
-use crate::git::WorktreeStats;
+use crate::git::{WorktreeManager, WorktreeStats};
 use crate::github::{self, CachedPRState};
 use crate::linear::{self, LinearIssue};
 
@@ -18,6 +18,18 @@ pub type LinearIssueResult = (String, Option<LinearIssue>); // (worktree_name, i
 
 /// Result of async git fetch
 pub type GitFetchResult = Result<(), String>;
+
+/// Result of async worktree stats loading
+pub type WorktreeStatsResult = Result<Vec<WorktreeStats>, String>;
+
+/// Result of async batch cache loading
+/// Contains (linear_issues, github_prs, claude_states, has_active_claude)
+pub type CacheLoadResult = (
+    HashMap<String, LinearIssue>,
+    HashMap<String, CachedPRState>,
+    HashMap<String, ClaudeSession>,
+    bool,
+);
 
 /// Load Linear issues from cache for all worktrees
 pub fn load_linear_issues(
@@ -138,5 +150,32 @@ pub fn fetch_origin_async(repo_root: PathBuf, sender: Sender<GitFetchResult>) {
             Err(e) => Err(e.to_string()),
         };
         let _ = sender.send(fetch_result);
+    });
+}
+
+/// Spawn async worktree stats loading (non-blocking)
+pub fn load_worktree_stats_async(repo_root: PathBuf, sender: Sender<WorktreeStatsResult>) {
+    thread::spawn(move || {
+        let result = WorktreeManager::open(&repo_root)
+            .and_then(|m| m.list_worktrees_with_stats())
+            .map_err(|e| e.to_string());
+        let _ = sender.send(result);
+    });
+}
+
+/// Spawn async batch cache loading for all caches (non-blocking)
+pub fn load_all_caches_async(
+    cache_dir: PathBuf,
+    project_name: String,
+    worktrees: Vec<WorktreeStats>,
+    sender: Sender<CacheLoadResult>,
+) {
+    thread::spawn(move || {
+        // Load all three caches
+        let linear_issues = load_linear_issues(&cache_dir, &project_name, &worktrees);
+        let github_prs = load_github_prs_from_cache(&cache_dir, &project_name, &worktrees);
+        let (claude_states, has_active_claude) = load_claude_states(&cache_dir, &project_name, &worktrees);
+
+        let _ = sender.send((linear_issues, github_prs, claude_states, has_active_claude));
     });
 }

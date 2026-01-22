@@ -167,10 +167,11 @@ This ensures the codebase scales without duplication and bugs are fixed in one p
 
 The codebase uses async for external I/O but keeps the TUI event loop synchronous:
 
-- **Async**: API calls to Linear, GitHub; file I/O for large operations
-- **Sync**: TUI event loop, git operations (git2 is sync), config loading
+- **Async**: API calls to Linear, GitHub; worktree stats loading; cache file I/O
+- **Sync**: TUI event loop, simple git2 operations, config loading
 - **Pattern**: Dashboard spawns async tasks for data loading, polls for completion in the render loop
 - **Rule**: Never `.await` in the TUI event loop - it blocks rendering and input handling
+- **Worktree refresh**: Use `trigger_stats_refresh()` to reload worktree data asynchronously; this chains into cache loading automatically
 
 When adding new connectors or API calls, follow the existing pattern in `tui/dashboard/data.rs`.
 
@@ -287,14 +288,14 @@ For background tasks that run periodically (e.g., git fetch, API polling):
 
 6. **Integrate into event loop**:
    - Poll for results at start of loop (before `terminal.draw()`)
-   - Return `DashboardResult::Refresh` when task completes
+   - When task completes, call `self.start_stats_refresh()` to trigger async worktree reload
    - Check `should_run_task()` and start if due
    - Include `task_in_progress` in poll timeout calculation
 
 **Key principles:**
 - Never block the event loop - always use channels and `try_recv()`
 - Silently ignore errors for non-critical tasks (e.g., git fetch)
-- Return `DashboardResult::Refresh` to trigger worktree stats update
+- Call `start_stats_refresh()` internally or `trigger_stats_refresh()` from external code (e.g., `status.rs`) to refresh worktree data without blocking
 - Consider workflow modes - some tasks only make sense for certain workflows (e.g., git fetch only needed for pull-based workflows)
 
 ### Linear project management
