@@ -422,7 +422,7 @@ fn run_dashboard_loop(
                 }
                 // Stay in dashboard - don't exit
             }
-            DashboardResult::CreateNew { branch, category, auto_claude } => {
+            DashboardResult::CreateNew { branch, category, auto_claude, plan_mode } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,
                     "demo" => Category::Demo,
@@ -438,14 +438,25 @@ fn run_dashboard_loop(
                         if auto_claude {
                             if let Some(issue) = &create_result.issue {
                                 // Launch Claude with initial prompt for the Linear issue
-                                let claude_cmd = format!(
-                                    "bash -c 'claude \"work on {} /plan\"; exec $SHELL'",
-                                    issue.id
-                                );
+                                let claude_cmd = if plan_mode {
+                                    format!(
+                                        "bash -c 'claude \"work on {} /plan\"; exec $SHELL'",
+                                        issue.id
+                                    )
+                                } else {
+                                    format!(
+                                        "bash -c 'claude --permission-mode acceptEdits \"work on {}\"; exec $SHELL'",
+                                        issue.id
+                                    )
+                                };
                                 tmux::create_session_with_command(&create_result.session_name, path_str, &claude_cmd)?;
                             } else {
                                 // Launch Claude with no initial prompt
-                                let claude_cmd = "bash -c 'claude; exec $SHELL'";
+                                let claude_cmd = if plan_mode {
+                                    "bash -c 'claude; exec $SHELL'"
+                                } else {
+                                    "bash -c 'claude --permission-mode acceptEdits; exec $SHELL'"
+                                };
                                 tmux::create_session_with_command(&create_result.session_name, path_str, claude_cmd)?;
                             }
                             tmux::switch_to_session(&create_result.session_name, path_str)?;

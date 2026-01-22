@@ -43,4 +43,18 @@ impl Checkbox {
 
         buf.set_line(area.x, area.y, &line, area.width);
     }
+
+    /// Render the checkbox in a disabled/grayed-out state
+    pub fn render_disabled(&self, area: Rect, buf: &mut Buffer) {
+        let checkbox = if self.checked { "[x]" } else { "[ ]" };
+        let style = Style::default().fg(Color::DarkGray);
+
+        let line = Line::from(vec![
+            Span::styled(checkbox, style),
+            Span::raw(" "),
+            Span::styled(&self.label, style),
+        ]);
+
+        buf.set_line(area.x, area.y, &line, area.width);
+    }
 }

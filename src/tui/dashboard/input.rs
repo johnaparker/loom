@@ -93,9 +93,9 @@ impl Dashboard {
                     None
                 }
             }
-            ModalAction::CreateNew { branch, category, auto_claude } => {
+            ModalAction::CreateNew { branch, category, auto_claude, plan_mode } => {
                 self.mode = DashboardMode::Normal;
-                Some(DashboardResult::CreateNew { branch, category, auto_claude })
+                Some(DashboardResult::CreateNew { branch, category, auto_claude, plan_mode })
             }
             ModalAction::ShowResult { success, message } => {
                 self.mode = if success {
