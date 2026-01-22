@@ -22,6 +22,9 @@ pub struct GlobalConfig {
     /// Workflow mode for automatic git sync behavior
     #[serde(default)]
     pub workflow: SyncWorkflow,
+    /// Special character icons for TUI dashboard
+    #[serde(default)]
+    pub icons: IconsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +72,30 @@ impl Default for LinearConfig {
             api_key: None,
             team_prefix: None,
             auto_update_status: true,
+        }
+    }
+}
+
+/// Configuration for special character icons in TUI dashboard
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IconsConfig {
+    /// Icon displayed before Linear issue title
+    #[serde(default)]
+    pub linear: Option<String>,
+    /// Icon displayed before GitHub PR info
+    #[serde(default)]
+    pub github: Option<String>,
+    /// Icon displayed before branch name
+    #[serde(default)]
+    pub branch: Option<String>,
+}
+
+impl Default for IconsConfig {
+    fn default() -> Self {
+        Self {
+            linear: None,
+            github: None,
+            branch: None,
         }
     }
 }
@@ -122,6 +149,7 @@ impl Default for GlobalConfig {
             sesh: SeshConfig::default(),
             linear: LinearConfig::default(),
             workflow: SyncWorkflow::default(),
+            icons: IconsConfig::default(),
         }
     }
 }
@@ -230,5 +258,43 @@ team_prefix = "ABC"
         // Should be able to round-trip
         let deserialized: GlobalConfig = toml::from_str(&serialized).unwrap();
         assert_eq!(deserialized.worktree_root, config.worktree_root);
+    }
+
+    #[test]
+    fn test_parse_icons_config() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+
+[icons]
+linear = ""
+github = ""
+branch = ""
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.icons.linear, Some("".to_string()));
+        assert_eq!(config.icons.github, Some("".to_string()));
+        assert_eq!(config.icons.branch, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_icons_default_none() {
+        let config = GlobalConfig::default();
+        assert!(config.icons.linear.is_none());
+        assert!(config.icons.github.is_none());
+        assert!(config.icons.branch.is_none());
+    }
+
+    #[test]
+    fn test_icons_partial_config() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+
+[icons]
+linear = "🎫"
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.icons.linear, Some("🎫".to_string()));
+        assert!(config.icons.github.is_none());
+        assert!(config.icons.branch.is_none());
     }
 }
