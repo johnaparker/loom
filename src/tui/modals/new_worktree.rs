@@ -190,18 +190,15 @@ impl Modal for NewWorktreeModal {
         self.category_selector.render(chunks[3], buf, true);
 
         // Auto-claude checkbox
-        self.auto_claude_checkbox.render(chunks[5], buf, true);
+        self.auto_claude_checkbox.render(chunks[5], buf, true, true);
 
         // Plan mode checkbox - indent and gray out when auto_claude is disabled
         let plan_mode_area = Rect {
             x: chunks[6].x + 2, // indent
             ..chunks[6]
         };
-        if self.auto_claude_checkbox.is_checked() {
-            self.plan_mode_checkbox.render(plan_mode_area, buf, true);
-        } else {
-            self.plan_mode_checkbox.render_disabled(plan_mode_area, buf);
-        }
+        let plan_mode_enabled = self.auto_claude_checkbox.is_checked();
+        self.plan_mode_checkbox.render(plan_mode_area, buf, true, plan_mode_enabled);
 
         let help_idx = if self.error_message.is_some() {
             // Error message

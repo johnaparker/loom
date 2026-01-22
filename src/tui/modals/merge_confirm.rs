@@ -151,7 +151,7 @@ impl MergeConfirmModal {
         }
 
         // Checkbox
-        self.delete_branch_checkbox.render(chunks[5], buf, true);
+        self.delete_branch_checkbox.render(chunks[5], buf, true, true);
 
         // Help text
         let help = Paragraph::new(Line::from(vec![
