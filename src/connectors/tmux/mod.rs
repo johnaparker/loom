@@ -7,6 +7,25 @@ use anyhow::Result;
 use colored::Colorize;
 use std::process::Command;
 
+/// Build a shell command to launch Claude with the appropriate mode.
+///
+/// - `plan_mode`: If true, uses `/plan` suffix for plan-first workflow.
+///   If false, uses `--permission-mode acceptEdits` for immediate editing.
+/// - `issue_id`: Optional Linear issue ID to include in the initial prompt.
+///
+/// Returns a bash command string suitable for tmux session creation.
+pub fn build_claude_command(plan_mode: bool, issue_id: Option<&str>) -> String {
+    match (plan_mode, issue_id) {
+        (true, Some(id)) => format!("bash -c 'claude \"work on {} /plan\"; exec $SHELL'", id),
+        (false, Some(id)) => format!(
+            "bash -c 'claude --permission-mode acceptEdits \"work on {}\"; exec $SHELL'",
+            id
+        ),
+        (true, None) => "bash -c 'claude; exec $SHELL'".to_string(),
+        (false, None) => "bash -c 'claude --permission-mode acceptEdits; exec $SHELL'".to_string(),
+    }
+}
+
 /// Get the current tmux session name
 pub fn current_session() -> Option<String> {
     if std::env::var("TMUX").is_err() {

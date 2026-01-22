@@ -21,7 +21,7 @@ pub enum ModalAction {
     /// Merge the selected worktree to main
     Merge { delete_branch: bool },
     /// Create a new worktree
-    CreateNew { branch: String, category: String, auto_claude: bool },
+    CreateNew { branch: String, category: String, auto_claude: bool, plan_mode: bool },
     /// Show an action result (stays open until dismissed)
     ShowResult { success: bool, message: String },
     /// Dismiss result and return to normal mode

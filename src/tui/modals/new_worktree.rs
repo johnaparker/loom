@@ -12,6 +12,7 @@ pub struct NewWorktreeModal {
     branch_input: TextInput,
     category_selector: Selector<String>,
     auto_claude_checkbox: Checkbox,
+    plan_mode_checkbox: Checkbox,
     error_message: Option<String>,
 }
 
@@ -28,6 +29,7 @@ impl NewWorktreeModal {
                 ],
             ),
             auto_claude_checkbox: Checkbox::new("Start with Claude", true),
+            plan_mode_checkbox: Checkbox::new("Plan mode", true),
             error_message: None,
         }
     }
@@ -84,7 +86,8 @@ impl Modal for NewWorktreeModal {
                             .cloned()
                             .unwrap_or_else(|| "dev".to_string());
                         let auto_claude = self.auto_claude_checkbox.is_checked();
-                        Some(ModalAction::CreateNew { branch, category, auto_claude })
+                        let plan_mode = self.plan_mode_checkbox.is_checked();
+                        Some(ModalAction::CreateNew { branch, category, auto_claude, plan_mode })
                     }
                     Err(msg) => {
                         self.error_message = Some(msg);
@@ -103,12 +106,19 @@ impl Modal for NewWorktreeModal {
                 None
             }
             KeyCode::Char(' ') => {
-                // Space toggles checkbox
+                // Space toggles auto-claude checkbox
                 self.auto_claude_checkbox.toggle();
                 None
             }
+            KeyCode::Char('p') => {
+                // 'p' toggles plan mode (only when auto_claude is enabled)
+                if self.auto_claude_checkbox.is_checked() {
+                    self.plan_mode_checkbox.toggle();
+                }
+                None
+            }
             KeyCode::Char(c) => {
-                // All typing goes to branch input
+                // All other typing goes to branch input
                 self.branch_input.insert_char(c);
                 self.error_message = None;
                 None
@@ -147,7 +157,8 @@ impl Modal for NewWorktreeModal {
                 Constraint::Length(1), // spacer
                 Constraint::Length(1), // category
                 Constraint::Length(1), // spacer
-                Constraint::Length(1), // checkbox
+                Constraint::Length(1), // auto-claude checkbox
+                Constraint::Length(1), // plan mode checkbox
                 Constraint::Length(1), // spacer
                 Constraint::Length(1), // error
                 Constraint::Length(1), // spacer
@@ -160,7 +171,8 @@ impl Modal for NewWorktreeModal {
                 Constraint::Length(1), // spacer
                 Constraint::Length(1), // category
                 Constraint::Length(1), // spacer
-                Constraint::Length(1), // checkbox
+                Constraint::Length(1), // auto-claude checkbox
+                Constraint::Length(1), // plan mode checkbox
                 Constraint::Length(1), // spacer
                 Constraint::Length(1), // help
             ]
@@ -178,7 +190,15 @@ impl Modal for NewWorktreeModal {
         self.category_selector.render(chunks[3], buf, true);
 
         // Auto-claude checkbox
-        self.auto_claude_checkbox.render(chunks[5], buf, true);
+        self.auto_claude_checkbox.render(chunks[5], buf, true, true);
+
+        // Plan mode checkbox - indent and gray out when auto_claude is disabled
+        let plan_mode_area = Rect {
+            x: chunks[6].x + 2, // indent
+            ..chunks[6]
+        };
+        let plan_mode_enabled = self.auto_claude_checkbox.is_checked();
+        self.plan_mode_checkbox.render(plan_mode_area, buf, true, plan_mode_enabled);
 
         let help_idx = if self.error_message.is_some() {
             // Error message
@@ -187,21 +207,23 @@ impl Modal for NewWorktreeModal {
                     err,
                     Style::default().fg(Color::Red),
                 )]));
-                error.render(chunks[7], buf);
+                error.render(chunks[8], buf);
             }
-            9
+            10
         } else {
-            7
+            8
         };
 
         // Help text
         let help = Paragraph::new(Line::from(vec![
             Span::styled("Space", Style::default().fg(Color::Cyan)),
-            Span::styled(": toggle    ", Style::default().fg(Color::DarkGray)),
+            Span::styled(": claude  ", Style::default().fg(Color::DarkGray)),
+            Span::styled("p", Style::default().fg(Color::Cyan)),
+            Span::styled(": plan  ", Style::default().fg(Color::DarkGray)),
             Span::styled("Tab", Style::default().fg(Color::Cyan)),
-            Span::styled(": category    ", Style::default().fg(Color::DarkGray)),
+            Span::styled(": category  ", Style::default().fg(Color::DarkGray)),
             Span::styled("Enter", Style::default().fg(Color::Cyan)),
-            Span::styled(": create    ", Style::default().fg(Color::DarkGray)),
+            Span::styled(": create  ", Style::default().fg(Color::DarkGray)),
             Span::styled("Esc", Style::default().fg(Color::Cyan)),
             Span::styled(": cancel", Style::default().fg(Color::DarkGray)),
         ]));
@@ -210,9 +232,9 @@ impl Modal for NewWorktreeModal {
 
     fn preferred_size(&self) -> (u16, u16) {
         if self.error_message.is_some() {
-            (68, 15)
+            (68, 16)
         } else {
-            (68, 13)
+            (68, 14)
         }
     }
 }

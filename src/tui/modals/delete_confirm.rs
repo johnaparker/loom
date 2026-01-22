@@ -197,7 +197,7 @@ impl Modal for DeleteConfirmModal {
             } else {
                 true
             };
-            self.acknowledge_checkbox.render(chunks[chunk_idx], buf, is_focused);
+            self.acknowledge_checkbox.render(chunks[chunk_idx], buf, is_focused, true);
             chunk_idx += 1;
         }
 
@@ -207,7 +207,7 @@ impl Modal for DeleteConfirmModal {
             chunk_idx += 1;
 
             let is_focused = self.focused_checkbox == 0;
-            self.delete_branch_checkbox.render(chunks[chunk_idx], buf, is_focused);
+            self.delete_branch_checkbox.render(chunks[chunk_idx], buf, is_focused, true);
             chunk_idx += 1;
         }
 

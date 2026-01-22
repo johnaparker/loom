@@ -422,7 +422,7 @@ fn run_dashboard_loop(
                 }
                 // Stay in dashboard - don't exit
             }
-            DashboardResult::CreateNew { branch, category, auto_claude } => {
+            DashboardResult::CreateNew { branch, category, auto_claude, plan_mode } => {
                 let cat = match category.as_str() {
                     "review" => Category::Review,
                     "demo" => Category::Demo,
@@ -436,18 +436,9 @@ fn run_dashboard_loop(
                         let path_str = create_result.worktree_path.to_str().unwrap();
 
                         if auto_claude {
-                            if let Some(issue) = &create_result.issue {
-                                // Launch Claude with initial prompt for the Linear issue
-                                let claude_cmd = format!(
-                                    "bash -c 'claude \"work on {} /plan\"; exec $SHELL'",
-                                    issue.id
-                                );
-                                tmux::create_session_with_command(&create_result.session_name, path_str, &claude_cmd)?;
-                            } else {
-                                // Launch Claude with no initial prompt
-                                let claude_cmd = "bash -c 'claude; exec $SHELL'";
-                                tmux::create_session_with_command(&create_result.session_name, path_str, claude_cmd)?;
-                            }
+                            let issue_id = create_result.issue.as_ref().map(|i| i.id.as_str());
+                            let claude_cmd = tmux::build_claude_command(plan_mode, issue_id);
+                            tmux::create_session_with_command(&create_result.session_name, path_str, &claude_cmd)?;
                             tmux::switch_to_session(&create_result.session_name, path_str)?;
                             dashboard.show_result(true, format!("Created '{}' and started Claude", branch));
                         } else {

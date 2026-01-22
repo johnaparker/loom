@@ -26,17 +26,25 @@ impl Checkbox {
         self.checked = checked;
     }
 
-    pub fn render(&self, area: Rect, buf: &mut Buffer, focused: bool) {
+    /// Render the checkbox.
+    ///
+    /// - `focused`: If true, renders in cyan; otherwise white.
+    /// - `enabled`: If false, renders grayed out (disabled state).
+    pub fn render(&self, area: Rect, buf: &mut Buffer, focused: bool, enabled: bool) {
         let checkbox = if self.checked { "[x]" } else { "[ ]" };
 
-        let style = if focused {
-            Style::default().fg(Color::Cyan)
+        let (style, use_bold) = if !enabled {
+            (Style::default().fg(Color::DarkGray), false)
+        } else if focused {
+            (Style::default().fg(Color::Cyan), true)
         } else {
-            Style::default().fg(Color::White)
+            (Style::default().fg(Color::White), true)
         };
 
+        let checkbox_style = if use_bold { style.bold() } else { style };
+
         let line = Line::from(vec![
-            Span::styled(checkbox, style.bold()),
+            Span::styled(checkbox, checkbox_style),
             Span::raw(" "),
             Span::styled(&self.label, style),
         ]);
