@@ -3,12 +3,23 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use super::global::SyncWorkflow;
+
 /// Project-specific configuration stored at .gwt.toml in repo root
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectConfig {
     pub project_name: Option<String>,
     #[serde(default)]
     pub sync: ProjectSyncConfig,
+    /// Git section for workflow settings
+    #[serde(default)]
+    pub git: ProjectGitConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProjectGitConfig {
+    /// Workflow mode override for this project
+    pub workflow: Option<SyncWorkflow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -18,16 +29,31 @@ pub struct ProjectSyncConfig {
 }
 
 impl ProjectConfig {
-    /// Load project config from repo root, returns None if not found
-    pub fn load(repo_root: &Path) -> Result<Option<Self>> {
-        let path = repo_root.join(".gwt.toml");
+    /// Load config from a specific path if it exists
+    fn load_from_path(path: &Path) -> Result<Option<Self>> {
         if path.exists() {
-            let content = fs::read_to_string(&path)?;
+            let content = fs::read_to_string(path)?;
             let config: ProjectConfig = toml::from_str(&content)?;
             Ok(Some(config))
         } else {
             Ok(None)
         }
+    }
+
+    /// Load project config, checking worktree directory first then repo root.
+    /// This allows per-worktree config overrides.
+    pub fn load(worktree_dir: Option<&Path>, repo_root: &Path) -> Result<Option<Self>> {
+        // Check worktree directory first (allows per-worktree overrides)
+        if let Some(wt_dir) = worktree_dir {
+            if wt_dir != repo_root {
+                if let Some(config) = Self::load_from_path(&wt_dir.join(".gwt.toml"))? {
+                    return Ok(Some(config));
+                }
+            }
+        }
+
+        // Fall back to repo root
+        Self::load_from_path(&repo_root.join(".gwt.toml"))
     }
 
     /// Save project config to repo root
@@ -68,9 +94,38 @@ project_name = "minimal"
     }
 
     #[test]
+    fn test_parse_git_workflow_push() {
+        let toml_str = r#"
+[git]
+workflow = "push"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.git.workflow, Some(SyncWorkflow::Push));
+    }
+
+    #[test]
+    fn test_parse_git_workflow_pull() {
+        let toml_str = r#"
+[git]
+workflow = "pull"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.git.workflow, Some(SyncWorkflow::Pull));
+    }
+
+    #[test]
+    fn test_parse_git_workflow_default_none() {
+        let toml_str = r#"
+project_name = "test"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.git.workflow, None);
+    }
+
+    #[test]
     fn test_load_nonexistent_config() {
         let temp_dir = TempDir::new().unwrap();
-        let result = ProjectConfig::load(temp_dir.path()).unwrap();
+        let result = ProjectConfig::load(None, temp_dir.path()).unwrap();
         assert!(result.is_none());
     }
 
@@ -82,12 +137,61 @@ project_name = "minimal"
             sync: ProjectSyncConfig {
                 patterns: vec!["file1.txt".to_string(), "file2.txt".to_string()],
             },
+            git: ProjectGitConfig::default(),
         };
 
         config.save(temp_dir.path()).unwrap();
 
-        let loaded = ProjectConfig::load(temp_dir.path()).unwrap().unwrap();
+        let loaded = ProjectConfig::load(None, temp_dir.path()).unwrap().unwrap();
         assert_eq!(loaded.project_name, Some("test-project".to_string()));
         assert_eq!(loaded.sync.patterns.len(), 2);
+    }
+
+    #[test]
+    fn test_worktree_config_takes_precedence() {
+        let repo_root = TempDir::new().unwrap();
+        let worktree_dir = TempDir::new().unwrap();
+
+        // Create config in repo root
+        let repo_config = ProjectConfig {
+            project_name: Some("repo-project".to_string()),
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig::default(),
+        };
+        repo_config.save(repo_root.path()).unwrap();
+
+        // Create config in worktree
+        let wt_config = ProjectConfig {
+            project_name: Some("worktree-project".to_string()),
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig::default(),
+        };
+        wt_config.save(worktree_dir.path()).unwrap();
+
+        // Worktree config should take precedence
+        let loaded = ProjectConfig::load(Some(worktree_dir.path()), repo_root.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.project_name, Some("worktree-project".to_string()));
+    }
+
+    #[test]
+    fn test_fallback_to_repo_root_when_no_worktree_config() {
+        let repo_root = TempDir::new().unwrap();
+        let worktree_dir = TempDir::new().unwrap();
+
+        // Only create config in repo root
+        let repo_config = ProjectConfig {
+            project_name: Some("repo-project".to_string()),
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig::default(),
+        };
+        repo_config.save(repo_root.path()).unwrap();
+
+        // Should fall back to repo root config
+        let loaded = ProjectConfig::load(Some(worktree_dir.path()), repo_root.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.project_name, Some("repo-project".to_string()));
     }
 }

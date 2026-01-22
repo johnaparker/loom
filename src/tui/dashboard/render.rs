@@ -1194,13 +1194,20 @@ impl Dashboard {
                     Span::styled(": new  ", Style::default().fg(Color::DarkGray)),
                 ];
 
-                // Only show d/m/x for non-main worktrees
+                // Only show d/x for non-main worktrees, m only in push workflow
                 if !is_main {
                     spans.extend(vec![
                         Span::styled("d", Style::default().fg(Color::Cyan)),
                         Span::styled(": diff  ", Style::default().fg(Color::DarkGray)),
-                        Span::styled("m", Style::default().fg(Color::Cyan)),
-                        Span::styled(": merge  ", Style::default().fg(Color::DarkGray)),
+                    ]);
+                    // Only show merge in push workflow
+                    if !self.pull_workflow {
+                        spans.extend(vec![
+                            Span::styled("m", Style::default().fg(Color::Cyan)),
+                            Span::styled(": merge  ", Style::default().fg(Color::DarkGray)),
+                        ]);
+                    }
+                    spans.extend(vec![
                         Span::styled("x", Style::default().fg(Color::Cyan)),
                         Span::styled(": delete  ", Style::default().fg(Color::DarkGray)),
                     ]);

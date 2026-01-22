@@ -149,7 +149,11 @@ impl Dashboard {
                 None
             }
             KeyCode::Char('m') => {
-                // Merge - only for non-main worktrees
+                // Merge - only available in push workflow, and only for non-main worktrees
+                if self.pull_workflow {
+                    self.status_message = Some((false, "Merge not available in pull workflow - use GitHub PR".to_string()));
+                    return None;
+                }
                 if let Some(worktree) = self.get_selected_worktree() {
                     if !worktree.info.is_main && worktree.info.branch.is_some() {
                         // Create modal without conflict info initially
