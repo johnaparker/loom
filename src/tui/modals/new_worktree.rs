@@ -14,6 +14,7 @@ pub struct NewWorktreeModal {
     auto_claude_checkbox: Checkbox,
     plan_mode_checkbox: Checkbox,
     error_message: Option<String>,
+    focused_checkbox: usize, // 0 = auto_claude, 1 = plan_mode
 }
 
 impl NewWorktreeModal {
@@ -31,6 +32,7 @@ impl NewWorktreeModal {
             auto_claude_checkbox: Checkbox::new("Start with Claude", true),
             plan_mode_checkbox: Checkbox::new("Plan mode", true),
             error_message: None,
+            focused_checkbox: 0, // Start with auto_claude focused
         }
     }
 
@@ -62,6 +64,44 @@ impl NewWorktreeModal {
         }
 
         Ok(())
+    }
+
+    fn checkbox_count(&self) -> usize {
+        if self.auto_claude_checkbox.is_checked() {
+            2
+        } else {
+            1
+        }
+    }
+
+    fn focus_next(&mut self) {
+        let count = self.checkbox_count();
+        if count > 1 {
+            self.focused_checkbox = (self.focused_checkbox + 1) % count;
+        }
+    }
+
+    fn focus_prev(&mut self) {
+        let count = self.checkbox_count();
+        if count > 1 {
+            self.focused_checkbox = (self.focused_checkbox + count - 1) % count;
+        }
+    }
+
+    fn toggle_focused(&mut self) {
+        match self.focused_checkbox {
+            0 => {
+                self.auto_claude_checkbox.toggle();
+                // Reset focus when disabling plan_mode
+                if !self.auto_claude_checkbox.is_checked() {
+                    self.focused_checkbox = 0;
+                }
+            }
+            1 if self.auto_claude_checkbox.is_checked() => {
+                self.plan_mode_checkbox.toggle();
+            }
+            _ => {}
+        }
     }
 }
 
@@ -105,16 +145,16 @@ impl Modal for NewWorktreeModal {
                 self.category_selector.select_prev();
                 None
             }
-            KeyCode::Char(' ') => {
-                // Space toggles auto-claude checkbox
-                self.auto_claude_checkbox.toggle();
+            KeyCode::Up => {
+                self.focus_prev();
                 None
             }
-            KeyCode::Char('p') => {
-                // 'p' toggles plan mode (only when auto_claude is enabled)
-                if self.auto_claude_checkbox.is_checked() {
-                    self.plan_mode_checkbox.toggle();
-                }
+            KeyCode::Down => {
+                self.focus_next();
+                None
+            }
+            KeyCode::Char(' ') => {
+                self.toggle_focused();
                 None
             }
             KeyCode::Char(c) => {
@@ -189,16 +229,20 @@ impl Modal for NewWorktreeModal {
         // Category selector - always shows selection, not focused
         self.category_selector.render(chunks[3], buf, true);
 
-        // Auto-claude checkbox
-        self.auto_claude_checkbox.render(chunks[5], buf, true, true);
+        // Auto-claude checkbox - focused when focused_checkbox == 0
+        let auto_claude_focused = self.focused_checkbox == 0;
+        self.auto_claude_checkbox
+            .render(chunks[5], buf, auto_claude_focused, true);
 
         // Plan mode checkbox - indent and gray out when auto_claude is disabled
+        let plan_mode_enabled = self.auto_claude_checkbox.is_checked();
+        let plan_mode_focused = plan_mode_enabled && self.focused_checkbox == 1;
         let plan_mode_area = Rect {
             x: chunks[6].x + 2, // indent
             ..chunks[6]
         };
-        let plan_mode_enabled = self.auto_claude_checkbox.is_checked();
-        self.plan_mode_checkbox.render(plan_mode_area, buf, true, plan_mode_enabled);
+        self.plan_mode_checkbox
+            .render(plan_mode_area, buf, plan_mode_focused, plan_mode_enabled);
 
         let help_idx = if self.error_message.is_some() {
             // Error message
@@ -216,10 +260,10 @@ impl Modal for NewWorktreeModal {
 
         // Help text
         let help = Paragraph::new(Line::from(vec![
+            Span::styled("\u{2191}\u{2193}", Style::default().fg(Color::Cyan)),
+            Span::styled(": options  ", Style::default().fg(Color::DarkGray)),
             Span::styled("Space", Style::default().fg(Color::Cyan)),
-            Span::styled(": claude  ", Style::default().fg(Color::DarkGray)),
-            Span::styled("p", Style::default().fg(Color::Cyan)),
-            Span::styled(": plan  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(": toggle  ", Style::default().fg(Color::DarkGray)),
             Span::styled("Tab", Style::default().fg(Color::Cyan)),
             Span::styled(": category  ", Style::default().fg(Color::DarkGray)),
             Span::styled("Enter", Style::default().fg(Color::Cyan)),
@@ -232,9 +276,9 @@ impl Modal for NewWorktreeModal {
 
     fn preferred_size(&self) -> (u16, u16) {
         if self.error_message.is_some() {
-            (68, 16)
+            (74, 16)
         } else {
-            (68, 14)
+            (74, 14)
         }
     }
 }
