@@ -123,3 +123,68 @@ impl Config {
         self.workflow() == global::SyncWorkflow::Pull
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use project::{ProjectGitConfig, ProjectSyncConfig};
+
+    fn make_config(global_workflow: SyncWorkflow, project_workflow: Option<SyncWorkflow>) -> Config {
+        let global = GlobalConfig {
+            workflow: global_workflow,
+            ..GlobalConfig::default()
+        };
+        let project = project_workflow.map(|wf| ProjectConfig {
+            project_name: None,
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig { workflow: Some(wf) },
+        });
+        Config { global, project }
+    }
+
+    #[test]
+    fn test_workflow_uses_global_when_no_project() {
+        let config = Config {
+            global: GlobalConfig {
+                workflow: SyncWorkflow::Pull,
+                ..GlobalConfig::default()
+            },
+            project: None,
+        };
+        assert_eq!(config.workflow(), SyncWorkflow::Pull);
+        assert!(config.is_pull_workflow());
+        assert!(!config.is_push_workflow());
+    }
+
+    #[test]
+    fn test_workflow_uses_global_when_project_has_no_workflow() {
+        let config = Config {
+            global: GlobalConfig {
+                workflow: SyncWorkflow::Push,
+                ..GlobalConfig::default()
+            },
+            project: Some(ProjectConfig {
+                project_name: Some("test".to_string()),
+                sync: ProjectSyncConfig::default(),
+                git: ProjectGitConfig { workflow: None },
+            }),
+        };
+        assert_eq!(config.workflow(), SyncWorkflow::Push);
+        assert!(config.is_push_workflow());
+    }
+
+    #[test]
+    fn test_workflow_project_overrides_global() {
+        // Global is push, project overrides to pull
+        let config = make_config(SyncWorkflow::Push, Some(SyncWorkflow::Pull));
+        assert_eq!(config.workflow(), SyncWorkflow::Pull);
+        assert!(config.is_pull_workflow());
+        assert!(!config.is_push_workflow());
+
+        // Global is pull, project overrides to push
+        let config = make_config(SyncWorkflow::Pull, Some(SyncWorkflow::Push));
+        assert_eq!(config.workflow(), SyncWorkflow::Push);
+        assert!(config.is_push_workflow());
+        assert!(!config.is_pull_workflow());
+    }
+}

@@ -29,30 +29,31 @@ pub struct ProjectSyncConfig {
 }
 
 impl ProjectConfig {
+    /// Load config from a specific path if it exists
+    fn load_from_path(path: &Path) -> Result<Option<Self>> {
+        if path.exists() {
+            let content = fs::read_to_string(path)?;
+            let config: ProjectConfig = toml::from_str(&content)?;
+            Ok(Some(config))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Load project config, checking worktree directory first then repo root.
     /// This allows per-worktree config overrides.
     pub fn load(worktree_dir: Option<&Path>, repo_root: &Path) -> Result<Option<Self>> {
         // Check worktree directory first (allows per-worktree overrides)
         if let Some(wt_dir) = worktree_dir {
             if wt_dir != repo_root {
-                let wt_path = wt_dir.join(".gwt.toml");
-                if wt_path.exists() {
-                    let content = fs::read_to_string(&wt_path)?;
-                    let config: ProjectConfig = toml::from_str(&content)?;
+                if let Some(config) = Self::load_from_path(&wt_dir.join(".gwt.toml"))? {
                     return Ok(Some(config));
                 }
             }
         }
 
         // Fall back to repo root
-        let path = repo_root.join(".gwt.toml");
-        if path.exists() {
-            let content = fs::read_to_string(&path)?;
-            let config: ProjectConfig = toml::from_str(&content)?;
-            Ok(Some(config))
-        } else {
-            Ok(None)
-        }
+        Self::load_from_path(&repo_root.join(".gwt.toml"))
     }
 
     /// Save project config to repo root
@@ -90,6 +91,35 @@ project_name = "minimal"
         let config: ProjectConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.project_name, Some("minimal".to_string()));
         assert!(config.sync.patterns.is_empty()); // default
+    }
+
+    #[test]
+    fn test_parse_git_workflow_push() {
+        let toml_str = r#"
+[git]
+workflow = "push"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.git.workflow, Some(SyncWorkflow::Push));
+    }
+
+    #[test]
+    fn test_parse_git_workflow_pull() {
+        let toml_str = r#"
+[git]
+workflow = "pull"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.git.workflow, Some(SyncWorkflow::Pull));
+    }
+
+    #[test]
+    fn test_parse_git_workflow_default_none() {
+        let toml_str = r#"
+project_name = "test"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.git.workflow, None);
     }
 
     #[test]

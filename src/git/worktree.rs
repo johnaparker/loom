@@ -274,7 +274,6 @@ impl WorktreeManager {
                 .output()
                 .context("Failed to run git worktree add")?
         } else {
-            // Create new branch from main (workflow determines if remote or local)
             let start_point = self.best_start_point(use_remote_start_point)?;
             Command::new("git")
                 .args(["worktree", "add", "-b", branch, path_str, &start_point])
