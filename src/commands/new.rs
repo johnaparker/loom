@@ -30,14 +30,6 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
     )?;
 
     // Print results
-    if let Some(pushed) = result.main_pushed_commits {
-        println!(
-            "{} Pushed {} commit(s) to main before creating worktree",
-            "✓".green(),
-            pushed
-        );
-    }
-
     println!(
         "{} Creating worktree for branch '{}' at {}",
         "→".blue(),

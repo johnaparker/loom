@@ -74,6 +74,9 @@ pub enum GwtError {
 
     #[error("Dry run requires a worktree name for '{command}'")]
     DryRunRequiresName { command: String },
+
+    #[error("Merge to local main is not available in pull workflow")]
+    MergeNotAllowedInPullWorkflow,
 }
 
 impl GwtError {
@@ -153,6 +156,9 @@ impl GwtError {
             }
             GwtError::DryRunRequiresName { command } => {
                 Some(format!("Usage: gwt {} <name> --dry-run", command))
+            }
+            GwtError::MergeNotAllowedInPullWorkflow => {
+                Some("In pull workflow, merge via GitHub PR instead. Use 'gh pr create' to open a PR.".to_string())
             }
         }
     }

@@ -15,11 +15,13 @@ pub struct Config {
 }
 
 impl Config {
-    /// Load configuration from global config and optional project config
+    /// Load configuration from global config and optional project config.
+    /// Checks current working directory for .gwt.toml first, then falls back to repo root.
     pub fn load(repo_root: Option<&Path>) -> Result<Self> {
         let global = GlobalConfig::load()?;
         let project = if let Some(root) = repo_root {
-            ProjectConfig::load(root)?
+            let current_dir = std::env::current_dir().ok();
+            ProjectConfig::load(current_dir.as_deref(), root)?
         } else {
             None
         };
@@ -103,18 +105,21 @@ impl Config {
         }
     }
 
-    /// Get the current workflow mode
+    /// Get the current workflow mode (project config overrides global)
     pub fn workflow(&self) -> global::SyncWorkflow {
-        self.global.workflow
+        self.project
+            .as_ref()
+            .and_then(|p| p.git.workflow)
+            .unwrap_or(self.global.workflow)
     }
 
     /// Whether we're in push workflow mode (local-first)
     pub fn is_push_workflow(&self) -> bool {
-        self.global.workflow == global::SyncWorkflow::Push
+        self.workflow() == global::SyncWorkflow::Push
     }
 
     /// Whether we're in pull workflow mode (team/PR-based)
     pub fn is_pull_workflow(&self) -> bool {
-        self.global.workflow == global::SyncWorkflow::Pull
+        self.workflow() == global::SyncWorkflow::Pull
     }
 }

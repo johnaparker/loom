@@ -236,19 +236,27 @@ impl WorktreeManager {
             .or_else(|| self.main_branch_name().ok())
     }
 
-    /// Get the best start point for a new branch (prefers origin/main over local main)
-    fn best_start_point(&self) -> Result<String> {
-        // Prefer remote main branch (most up-to-date)
-        if let Some(remote_main) = self.remote_main_ref() {
-            return Ok(remote_main);
+    /// Get the best start point for a new branch
+    ///
+    /// - `use_remote`: If true (pull workflow), prefers origin/main for most up-to-date remote state
+    ///                 If false (push workflow), uses local main to stay local-first
+    fn best_start_point(&self, use_remote: bool) -> Result<String> {
+        if use_remote {
+            // Pull workflow: prefer remote main branch (most up-to-date)
+            if let Some(remote_main) = self.remote_main_ref() {
+                return Ok(remote_main);
+            }
         }
 
-        // Fall back to local main branch
+        // Push workflow or no remote: use local main branch
         self.main_branch_name()
     }
 
     /// Create a new worktree
-    pub fn create_worktree(&self, branch: &str, path: &Path) -> Result<()> {
+    ///
+    /// - `use_remote_start_point`: If true, new branches start from origin/main (pull workflow)
+    ///                              If false, new branches start from local main (push workflow)
+    pub fn create_worktree(&self, branch: &str, path: &Path, use_remote_start_point: bool) -> Result<()> {
         // Create parent directories
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -266,8 +274,8 @@ impl WorktreeManager {
                 .output()
                 .context("Failed to run git worktree add")?
         } else {
-            // Create new branch from origin/main (or fallback to local main)
-            let start_point = self.best_start_point()?;
+            // Create new branch from main (workflow determines if remote or local)
+            let start_point = self.best_start_point(use_remote_start_point)?;
             Command::new("git")
                 .args(["worktree", "add", "-b", branch, path_str, &start_point])
                 .current_dir(&self.repo_root)

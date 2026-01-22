@@ -155,17 +155,16 @@ pub struct CreateWorktreeResult {
     pub direnv_allowed: bool,
     /// Whether registered with sesh
     pub sesh_registered: bool,
-    /// Number of commits main was pushed (push workflow)
-    pub main_pushed_commits: Option<u32>,
 }
 
 /// Create a new worktree with all associated setup.
 ///
 /// This is the complete create operation used by both CLI and TUI.
 /// It handles:
-/// - Workflow-aware pre-sync (push main if ahead in push workflow, fetch in pull workflow)
+/// - Fetching from origin to ensure we have the latest refs
 /// - Resolving Linear issue IDs to branch names
 /// - Creating the worktree (tracking remote or new branch)
+/// - Workflow-aware branch start point (origin/main for pull, local main for push)
 /// - Writing Linear metadata cache
 /// - Updating Linear issue status to "In Progress"
 /// - Syncing files from main (.env, .envrc, .claude/)
@@ -185,23 +184,7 @@ pub fn create_worktree(
 ) -> Result<CreateWorktreeResult> {
     let worktree_root = config.worktree_root()?;
 
-    // Workflow-aware pre-sync before creating worktree
-    let mut main_pushed_commits = None;
-
-    if config.is_push_workflow() {
-        // Push workflow: If local main is ahead of origin/main, auto-push main first
-        // This ensures new worktrees branch from the latest pushed state
-        if let Some(ahead) = manager.main_ahead_of_origin() {
-            if ahead > 0 {
-                if manager.push_main_to_remote().is_ok() {
-                    main_pushed_commits = Some(ahead);
-                }
-            }
-        }
-    }
-
     // Fetch from origin to ensure we have the latest refs
-    // This is important for pull workflow, and also useful for push workflow
     let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
 
     // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
@@ -229,10 +212,11 @@ pub fn create_worktree(
     let track_remote = manager.remote_branch_exists(&resolved.git_branch);
 
     // Create the worktree - either tracking remote or creating new
+    // For new branches, use remote start point for pull workflow, local for push workflow
     if track_remote {
         manager.create_worktree_tracking(&resolved.git_branch, &worktree_path)?;
     } else {
-        manager.create_worktree(&resolved.git_branch, &worktree_path)?;
+        manager.create_worktree(&resolved.git_branch, &worktree_path, config.is_pull_workflow())?;
     }
 
     // Write Linear metadata and update status if we have issue info
@@ -293,6 +277,5 @@ pub fn create_worktree(
         synced_files,
         direnv_allowed,
         sesh_registered,
-        main_pushed_commits,
     })
 }

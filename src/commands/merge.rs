@@ -13,6 +13,12 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let manager = WorktreeManager::open(&current_dir)?;
     let config = Config::load(Some(manager.repo_root()))?;
+
+    // Merge to local main is only available in push workflow
+    if config.is_pull_workflow() {
+        return Err(GwtError::MergeNotAllowedInPullWorkflow.into());
+    }
+
     let project_name = config.project_name(&manager.project_name()?);
     let cache_dir = config.cache_dir()?;
 
@@ -85,15 +91,6 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     // Merge the branch to main
     manager.merge_to_main(&branch)?;
     println!("{} Merged successfully", "✓".green());
-
-    // Auto-push to origin in push workflow
-    if config.is_push_workflow() {
-        println!("{} Pushing to origin...", "→".blue());
-        match manager.push_main_to_remote() {
-            Ok(()) => println!("{} Pushed to origin", "✓".green()),
-            Err(e) => eprintln!("{} Could not auto-push: {}", "⚠".yellow(), e),
-        }
-    }
 
     // Update Linear issue to "Done" (non-critical)
     if config.linear_auto_update_status() {
