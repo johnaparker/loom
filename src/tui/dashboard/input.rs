@@ -139,7 +139,7 @@ impl Dashboard {
                 self.mode = DashboardMode::NewWorktree(NewWorktreeModal::new());
                 None
             }
-            KeyCode::Char('d') => {
+            KeyCode::Char('x') => {
                 // Delete - only for non-main worktrees
                 if let Some(worktree) = self.get_selected_worktree() {
                     if !worktree.info.is_main {
@@ -172,8 +172,8 @@ impl Dashboard {
                 }
                 None
             }
-            KeyCode::Char('r') => {
-                // Review - open diff view in neovim for non-main worktrees
+            KeyCode::Char('d') => {
+                // Diff - open diff view in neovim for non-main worktrees
                 if let Some(worktree) = self.get_selected_worktree() {
                     if !worktree.info.is_main {
                         return Some(DashboardResult::Review { worktree });

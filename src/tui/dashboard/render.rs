@@ -1171,15 +1171,15 @@ impl Dashboard {
                     Span::styled(": new  ", Style::default().fg(Color::DarkGray)),
                 ];
 
-                // Only show d/m/r for non-main worktrees
+                // Only show d/m/x for non-main worktrees
                 if !is_main {
                     spans.extend(vec![
                         Span::styled("d", Style::default().fg(Color::Cyan)),
-                        Span::styled(": delete  ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(": diff  ", Style::default().fg(Color::DarkGray)),
                         Span::styled("m", Style::default().fg(Color::Cyan)),
                         Span::styled(": merge  ", Style::default().fg(Color::DarkGray)),
-                        Span::styled("r", Style::default().fg(Color::Cyan)),
-                        Span::styled(": review  ", Style::default().fg(Color::DarkGray)),
+                        Span::styled("x", Style::default().fg(Color::Cyan)),
+                        Span::styled(": delete  ", Style::default().fg(Color::DarkGray)),
                     ]);
                 }
 
