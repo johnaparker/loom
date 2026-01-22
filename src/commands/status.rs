@@ -94,8 +94,7 @@ fn run_dashboard_loop(
                 } else {
                     dashboard.show_result(true, format!("Switched to '{}'", wt.info.name));
                 }
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
+                dashboard.trigger_stats_refresh();
             }
             DashboardResult::Quit => {
                 return Ok(());
@@ -128,9 +127,8 @@ fn run_dashboard_loop(
                     }
                 }
 
-                // Refresh worktrees
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
+                // Trigger async refresh
+                dashboard.trigger_stats_refresh();
             }
             DashboardResult::Merge {
                 worktree,
@@ -162,8 +160,7 @@ fn run_dashboard_loop(
                                 conflicts.len()
                             ),
                         );
-                        let worktrees = manager.list_worktrees_with_stats()?;
-                        dashboard.update_worktrees(worktrees);
+                        dashboard.trigger_stats_refresh();
                         continue;
                     }
                     Ok(None) => {
@@ -202,9 +199,8 @@ fn run_dashboard_loop(
                     }
                 }
 
-                // Refresh worktrees
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
+                // Trigger async refresh
+                dashboard.trigger_stats_refresh();
             }
             DashboardResult::SyncWithRemote { worktree } => {
                 let branch = worktree.info.branch.as_deref().unwrap_or(&worktree.info.name);
@@ -220,8 +216,7 @@ fn run_dashboard_loop(
                         false,
                         "Cannot sync: uncommitted changes present".to_string(),
                     );
-                    let worktrees = manager.list_worktrees_with_stats()?;
-                    dashboard.update_worktrees(worktrees);
+                    dashboard.trigger_stats_refresh();
                     continue;
                 }
 
@@ -235,8 +230,7 @@ fn run_dashboard_loop(
                             ahead, behind
                         ),
                     );
-                    let worktrees = manager.list_worktrees_with_stats()?;
-                    dashboard.update_worktrees(worktrees);
+                    dashboard.trigger_stats_refresh();
                     continue;
                 }
 
@@ -305,9 +299,8 @@ fn run_dashboard_loop(
                     );
                 }
 
-                // Refresh worktrees
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
+                // Trigger async refresh
+                dashboard.trigger_stats_refresh();
             }
             DashboardResult::Review { worktree } => {
                 let session = sesh::session_name(project_name, &worktree.info.name);
@@ -334,8 +327,7 @@ fn run_dashboard_loop(
                 // Switch to the session
                 tmux::switch_to_session(&session, path_str)?;
                 dashboard.show_result(true, format!("Opened review for '{}'", worktree.info.name));
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
+                dashboard.trigger_stats_refresh();
             }
             DashboardResult::Claude { worktree } => {
                 let session = sesh::session_name(project_name, &worktree.info.name);
@@ -366,8 +358,7 @@ fn run_dashboard_loop(
                 }
 
                 dashboard.show_result(true, format!("Opened Claude for '{}'", worktree.info.name));
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
+                dashboard.trigger_stats_refresh();
             }
             DashboardResult::Linear { worktree } => {
                 // Read Linear metadata and open URL
@@ -469,14 +460,12 @@ fn run_dashboard_loop(
                         dashboard.show_result(false, format!("Failed to create: {}", e));
                     }
                 }
-                // Refresh worktrees
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
+                // Trigger async refresh
+                dashboard.trigger_stats_refresh();
             }
             DashboardResult::Refresh => {
-                // Just refresh worktrees
-                let worktrees = manager.list_worktrees_with_stats()?;
-                dashboard.update_worktrees(worktrees);
+                // Trigger async refresh
+                dashboard.trigger_stats_refresh();
             }
         }
     }

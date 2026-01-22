@@ -28,7 +28,12 @@ use crate::github::CachedPRState;
 use crate::linear::LinearIssue;
 
 pub use state::{DashboardMode, DashboardResult};
-use data::{GitFetchResult, GitHubPRResult, LinearIssueResult, fetch_github_pr_async, fetch_linear_issue_async, fetch_origin_async, load_claude_states, load_github_prs_from_cache, load_linear_issues};
+use data::{
+    CacheLoadResult, GitFetchResult, GitHubPRResult, LinearIssueResult, WorktreeStatsResult,
+    fetch_github_pr_async, fetch_linear_issue_async, fetch_origin_async,
+    load_all_caches_async, load_claude_states, load_github_prs_from_cache, load_linear_issues,
+    load_worktree_stats_async,
+};
 
 /// Braille spinner frames for smooth rotation animation
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -90,6 +95,18 @@ pub struct Dashboard {
     last_fetch_time: Option<Instant>,
     /// Whether to run periodic git fetch (only needed for pull-based workflows)
     pull_workflow: bool,
+    /// Channel for receiving async worktree stats results
+    worktree_stats_receiver: Receiver<WorktreeStatsResult>,
+    /// Sender for spawning async worktree stats loads
+    worktree_stats_sender: Sender<WorktreeStatsResult>,
+    /// Whether worktree stats are currently loading
+    worktree_stats_loading: bool,
+    /// Channel for receiving async cache load results
+    cache_receiver: Receiver<CacheLoadResult>,
+    /// Sender for spawning async cache loads
+    cache_sender: Sender<CacheLoadResult>,
+    /// Whether caches are currently loading
+    cache_loading: bool,
 }
 
 impl Dashboard {
@@ -122,6 +139,12 @@ impl Dashboard {
 
         // Create channel for async git fetch
         let (git_fetch_sender, git_fetch_receiver) = mpsc::channel();
+
+        // Create channel for async worktree stats
+        let (worktree_stats_sender, worktree_stats_receiver) = mpsc::channel();
+
+        // Create channel for async cache loading
+        let (cache_sender, cache_receiver) = mpsc::channel();
 
         // Load initial Claude states
         let (claude_states, has_active_claude) = load_claude_states(&cache_dir, &project_name, &worktrees);
@@ -158,6 +181,12 @@ impl Dashboard {
             git_fetch_in_progress: false,
             last_fetch_time: None,
             pull_workflow,
+            worktree_stats_receiver,
+            worktree_stats_sender,
+            worktree_stats_loading: false,
+            cache_receiver,
+            cache_sender,
+            cache_loading: false,
         };
 
         // GitHub panel is always visible, so fetch PR data for initial selection
@@ -321,6 +350,93 @@ impl Dashboard {
         self.has_active_claude = has_active;
     }
 
+    /// Start async worktree stats refresh (if not already loading)
+    fn start_stats_refresh(&mut self) {
+        if self.worktree_stats_loading {
+            return;
+        }
+        self.worktree_stats_loading = true;
+        load_worktree_stats_async(self.repo_root.clone(), self.worktree_stats_sender.clone());
+    }
+
+    /// Check for completed worktree stats load and return true if completed
+    fn poll_stats_results(&mut self) -> bool {
+        if let Ok(result) = self.worktree_stats_receiver.try_recv() {
+            self.worktree_stats_loading = false;
+            if let Ok(worktrees) = result {
+                // Update worktrees list and start cache refresh
+                self.update_worktrees_internal(worktrees);
+                self.start_cache_refresh();
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Trigger async stats refresh (public method for external use)
+    pub fn trigger_stats_refresh(&mut self) {
+        self.start_stats_refresh();
+    }
+
+    /// Start async cache refresh for all caches
+    fn start_cache_refresh(&mut self) {
+        if self.cache_loading {
+            return;
+        }
+        self.cache_loading = true;
+        load_all_caches_async(
+            self.cache_dir.clone(),
+            self.project_name.clone(),
+            self.worktrees.clone(),
+            self.cache_sender.clone(),
+        );
+    }
+
+    /// Check for completed cache load and apply results
+    fn poll_cache_results(&mut self) -> bool {
+        if let Ok((linear_issues, github_prs, claude_states, has_active_claude)) =
+            self.cache_receiver.try_recv()
+        {
+            self.cache_loading = false;
+            self.linear_issues = linear_issues;
+            self.github_prs = github_prs;
+            self.claude_states = claude_states;
+            self.has_active_claude = has_active_claude;
+
+            // Show pending error modal if any
+            if let Some((success, message)) = self.pending_result.take() {
+                if !success {
+                    self.mode = DashboardMode::ActionResult(
+                        crate::tui::modals::ActionResultModal::error(message),
+                    );
+                }
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Update worktrees list without loading caches (internal use)
+    fn update_worktrees_internal(&mut self, worktrees: Vec<WorktreeStats>) {
+        // Remember currently selected worktree name
+        let selected_name = self.get_selected_worktree().map(|w| w.info.name.clone());
+
+        self.worktrees = worktrees;
+        self.filter_worktrees();
+
+        // Try to restore selection to the previously selected worktree
+        if let Some(name) = selected_name {
+            if let Some(pos) = self
+                .filtered_indices
+                .iter()
+                .position(|&i| self.worktrees[i].info.name == name)
+            {
+                self.selected = pos;
+                self.list_state.select(Some(pos));
+            }
+        }
+    }
+
     /// Set the main branch name (for merge modal)
     pub fn set_main_branch(&mut self, name: String) {
         self.main_branch = name;
@@ -439,16 +555,20 @@ impl Dashboard {
         const ANIMATION_INTERVAL: Duration = Duration::from_millis(150);
         const REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
-        let last_refresh = Instant::now();
+        let mut last_refresh = Instant::now();
 
         loop {
             // Check for completed async fetches
             self.poll_github_results();
             self.poll_linear_results();
 
-            // Check for completed git fetch and trigger refresh if completed
+            // Check for completed async worktree stats and cache loads
+            self.poll_stats_results();
+            self.poll_cache_results();
+
+            // Check for completed git fetch and trigger async stats refresh
             if self.poll_git_fetch_results() {
-                return Ok(DashboardResult::Refresh);
+                self.start_stats_refresh();
             }
 
             // Start periodic git fetch if due (only for pull-based workflows)
@@ -462,7 +582,15 @@ impl Dashboard {
             let has_pending_github = !self.github_loading.is_empty();
             let has_pending_linear = !self.linear_loading.is_empty();
             let has_pending_git_fetch = self.git_fetch_in_progress;
-            let poll_timeout = if self.has_active_claude || has_pending_github || has_pending_linear || has_pending_git_fetch {
+            let has_pending_stats = self.worktree_stats_loading;
+            let has_pending_cache = self.cache_loading;
+            let poll_timeout = if self.has_active_claude
+                || has_pending_github
+                || has_pending_linear
+                || has_pending_git_fetch
+                || has_pending_stats
+                || has_pending_cache
+            {
                 ANIMATION_INTERVAL
             } else {
                 // Calculate remaining time until next refresh
@@ -489,13 +617,15 @@ impl Dashboard {
                 // Animation tick - increment frame counter
                 self.animation_frame = self.animation_frame.wrapping_add(1);
 
-                // Check if it's also time for a full refresh
+                // Check if it's also time for a full refresh (async)
                 if last_refresh.elapsed() >= REFRESH_INTERVAL {
-                    return Ok(DashboardResult::Refresh);
+                    self.start_stats_refresh();
+                    last_refresh = Instant::now();
                 }
             } else {
-                // Full refresh interval elapsed
-                return Ok(DashboardResult::Refresh);
+                // Full refresh interval elapsed - trigger async refresh
+                self.start_stats_refresh();
+                last_refresh = Instant::now();
             }
         }
     }

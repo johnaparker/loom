@@ -3,13 +3,29 @@
 use anyhow::Result;
 use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
 
 use crate::error::GwtError;
 use super::types::{ChecksStatus, GitHubPR, PRComment};
 use super::url::get_create_pr_url;
 
-/// Check if the gh CLI is installed and authenticated
+/// Cached result of gh CLI availability check (true = available, false = not available/not authenticated)
+static GH_CLI_AVAILABLE: OnceLock<bool> = OnceLock::new();
+
+/// Check if the gh CLI is installed and authenticated (cached after first call)
 pub fn check_gh_cli() -> Result<()> {
+    let available = GH_CLI_AVAILABLE.get_or_init(|| check_gh_cli_impl().is_ok());
+    if *available {
+        Ok(())
+    } else {
+        // Return the appropriate error - try to determine which one
+        // Since we cached the result, we need to re-check to give a specific error
+        check_gh_cli_impl()
+    }
+}
+
+/// Internal implementation that actually checks gh CLI availability
+fn check_gh_cli_impl() -> Result<()> {
     // Check if gh is installed
     let output = Command::new("gh")
         .args(["--version"])
