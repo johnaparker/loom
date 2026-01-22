@@ -36,6 +36,9 @@ pub fn status() -> Result<()> {
         linear_api_key,
         linear_prefix,
         config.is_pull_workflow(),
+        config.linear_icon().map(|s| s.to_string()),
+        config.github_icon().map(|s| s.to_string()),
+        config.branch_icon().map(|s| s.to_string()),
     );
     dashboard.set_main_branch(main_branch);
 

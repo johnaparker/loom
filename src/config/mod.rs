@@ -117,4 +117,19 @@ impl Config {
     pub fn is_pull_workflow(&self) -> bool {
         self.global.workflow == global::SyncWorkflow::Pull
     }
+
+    /// Get the Linear icon (displayed before Linear issue titles)
+    pub fn linear_icon(&self) -> Option<&str> {
+        self.global.icons.linear.as_deref()
+    }
+
+    /// Get the GitHub icon (displayed before GitHub PR info)
+    pub fn github_icon(&self) -> Option<&str> {
+        self.global.icons.github.as_deref()
+    }
+
+    /// Get the branch icon (displayed before branch names)
+    pub fn branch_icon(&self) -> Option<&str> {
+        self.global.icons.branch.as_deref()
+    }
 }

@@ -155,6 +155,9 @@ impl Dashboard {
         let content_width = area.width.saturating_sub(7) as usize; // 2 borders + "> " + "▌ "
 
         let animation_frame = self.animation_frame;
+        let linear_icon = self.linear_icon();
+        let github_icon = self.github_icon();
+        let branch_icon = self.branch_icon();
         let items: Vec<ListItem> = self
             .filtered_indices
             .iter()
@@ -181,6 +184,9 @@ impl Dashboard {
                     github_pr,
                     claude_state,
                     animation_frame,
+                    linear_icon,
+                    github_icon,
+                    branch_icon,
                 )
             })
             .collect();
@@ -207,6 +213,9 @@ impl Dashboard {
         github_pr: Option<&GitHubPR>,
         claude_state: Option<ClaudeState>,
         animation_frame: u8,
+        linear_icon: Option<&str>,
+        github_icon: Option<&str>,
+        branch_icon: Option<&str>,
     ) -> ListItem<'static> {
         // Determine bar color based on Claude state
         let bar_color = match claude_state {
@@ -235,7 +244,10 @@ impl Dashboard {
             .info
             .branch
             .as_ref()
-            .map(|b| format!("   {}", b))
+            .map(|b| match branch_icon {
+                Some(icon) => format!("   {} {}", icon, b),
+                None => format!("   {}", b),
+            })
             .unwrap_or_else(|| " (detached)".to_string());
         line1_spans.push(Span::styled(
             branch_text.clone(),
@@ -319,12 +331,17 @@ impl Dashboard {
 
         // Line 3: Linear issue title (if available)
         if let Some(title) = linear_title {
-            // Truncate if too long (leave room for indent and ellipsis)
-            let max_len = width.saturating_sub(6);
+            // Build prefix with optional icon
+            let prefix = linear_icon
+                .map(|i| format!("  {} ", i))
+                .unwrap_or_else(|| "  ".to_string());
+            let prefix_len = prefix.chars().count();
+            // Truncate if too long (leave room for prefix and ellipsis)
+            let max_len = width.saturating_sub(prefix_len + 3);
             let display_title = if title.len() > max_len {
-                format!("  {}...", &title[..max_len.saturating_sub(3)])
+                format!("{}{}...", prefix, &title[..max_len.saturating_sub(3)])
             } else {
-                format!("  {}", title)
+                format!("{}{}", prefix, title)
             };
             lines.push(Line::from(Span::styled(
                 display_title,
@@ -335,7 +352,7 @@ impl Dashboard {
         // Line 4: GitHub PR indicator (if available, not for main branch)
         if !wt.info.is_main {
             if let Some(pr) = github_pr {
-                let github_line = Self::format_github_indicator(pr, width);
+                let github_line = Self::format_github_indicator(pr, width, github_icon);
                 lines.push(github_line);
             }
         }
@@ -379,12 +396,18 @@ impl Dashboard {
     }
 
     /// Format a compact GitHub PR indicator line for the worktree list.
-    /// Format: `  #123 OPEN  ✓approved  ✓3/3  @john`
-    fn format_github_indicator(pr: &GitHubPR, width: usize) -> Line<'static> {
+    /// Format: `  [icon] #123 OPEN  ✓approved  ✓3/3  @john`
+    fn format_github_indicator(pr: &GitHubPR, width: usize, github_icon: Option<&str>) -> Line<'static> {
         let mut spans = Vec::new();
 
-        // Indent
+        // Indent with optional icon (icon colored cyan to match PR number)
         spans.push(Span::raw("  "));
+        if let Some(icon) = github_icon {
+            spans.push(Span::styled(
+                format!("{} ", icon),
+                Style::default().fg(Color::Cyan),
+            ));
+        }
 
         // PR number (cyan)
         spans.push(Span::styled(
