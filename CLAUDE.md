@@ -305,3 +305,20 @@ When creating Linear issues for this project, use:
 - **Project**: `Git Worktree Tool`
 
 The project name can be used directly - no need to look up UUIDs.
+
+### Running alignment review
+
+Run `/align` to perform an AI-powered review of your branch's changes vs main:
+
+```bash
+# In Claude Code
+/align
+```
+
+The command checks:
+- **Test coverage**: Are tests needed? Do existing tests need updates?
+- **CLAUDE.md compliance**: Does code follow documented conventions?
+- **Architecture**: Is design modular, scalable, well-integrated?
+- **Code cleanup**: Duplication, dead code, unnecessary complexity?
+
+Uses subagents with fresh context for unbiased review. After presenting findings, offers to automatically fix issues.
