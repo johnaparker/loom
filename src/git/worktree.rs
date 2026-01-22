@@ -775,7 +775,7 @@ impl WorktreeManager {
 
         let (uncommitted_added, uncommitted_removed) = self.uncommitted_stats(&info.path);
         let age_days = self.worktree_age_days(&info.path);
-        let recent_commits = self.recent_commits(&info.path, 10, info.is_main);
+        let recent_commits = self.recent_commits(&info.path, 25, info.is_main);
 
         WorktreeStats {
             info,
