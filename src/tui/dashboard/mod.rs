@@ -95,6 +95,12 @@ pub struct Dashboard {
     last_fetch_time: Option<Instant>,
     /// Whether to run periodic git fetch (only needed for pull-based workflows)
     pull_workflow: bool,
+    /// Icon to display before Linear issue titles
+    linear_icon: Option<String>,
+    /// Icon to display before GitHub PR info
+    github_icon: Option<String>,
+    /// Icon to display before branch names
+    branch_icon: Option<String>,
     /// Channel for receiving async worktree stats results
     worktree_stats_receiver: Receiver<WorktreeStatsResult>,
     /// Sender for spawning async worktree stats loads
@@ -118,6 +124,9 @@ impl Dashboard {
         linear_api_key: Option<String>,
         linear_prefix: Option<String>,
         pull_workflow: bool,
+        linear_icon: Option<String>,
+        github_icon: Option<String>,
+        branch_icon: Option<String>,
     ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
         let mut list_state = ListState::default();
@@ -181,6 +190,9 @@ impl Dashboard {
             git_fetch_in_progress: false,
             last_fetch_time: None,
             pull_workflow,
+            linear_icon,
+            github_icon,
+            branch_icon,
             worktree_stats_receiver,
             worktree_stats_sender,
             worktree_stats_loading: false,
@@ -637,6 +649,21 @@ impl Dashboard {
             let actual_idx = self.filtered_indices[self.selected];
             Some(self.worktrees[actual_idx].clone())
         }
+    }
+
+    /// Get the Linear icon for display
+    pub(crate) fn linear_icon(&self) -> Option<&str> {
+        self.linear_icon.as_deref()
+    }
+
+    /// Get the GitHub icon for display
+    pub(crate) fn github_icon(&self) -> Option<&str> {
+        self.github_icon.as_deref()
+    }
+
+    /// Get the branch icon for display
+    pub(crate) fn branch_icon(&self) -> Option<&str> {
+        self.branch_icon.as_deref()
     }
 
     fn move_selection(&mut self, delta: i32) {
