@@ -12,7 +12,7 @@ mod types;
 pub use types::{ClaudeEvent, ClaudeSession, ClaudeState};
 
 // Re-export cache functions
-pub use cache::{read_state, write_state};
+pub use cache::{modify_state, read_state, write_state};
 
 // Re-export state functions
 pub use state::{

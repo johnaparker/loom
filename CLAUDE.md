@@ -226,6 +226,34 @@ Current coverage: Unit tests for fuzzy matching, URL parsing, cache operations.
 5. Export from `src/connectors/mod.rs`
 6. Add backward-compat re-export in `src/lib.rs`: `pub use connectors::{name};`
 
+### Cache consistency for read-modify-write
+
+When multiple processes may update the same cache file concurrently (e.g., Claude hooks), use `with_lock_modify()` instead of separate read/write calls:
+
+```rust
+use crate::connectors::cache::with_lock_modify;
+
+// BAD: Race condition - another process may write between read and write
+let data = read_json(...)?;
+let modified = modify(data);
+write_json(..., &modified)?;
+
+// GOOD: Atomic read-modify-write with file locking
+with_lock_modify::<MyType, _>(base, project, worktree, "file.json", |current| {
+    let mut data = current.unwrap_or_default();
+    data.field += 1;
+    data
+})?;
+```
+
+**Locking behavior:**
+- Uses a separate `.lock` file (e.g., `claude.json.lock`)
+- Exclusive locks with exponential backoff (10-160ms, 5 attempts)
+- Total timeout ~310ms; proceeds unlocked on timeout (hooks must not crash)
+- `.lock` files may be left behind (harmless)
+
+For Claude-specific state, use `claude::modify_state()` which wraps `with_lock_modify()`.
+
 ### Adding a TUI feature
 
 **New dashboard panel:**

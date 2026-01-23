@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::path::Path;
 
-use super::cache::{read_state, write_state};
+use super::cache::{modify_state, read_state};
 use super::time::now_iso8601;
 use super::types::{ClaudeEvent, ClaudeSession, ClaudeState};
 
@@ -16,19 +16,22 @@ pub fn update_state_from_event(
     session_id: &str,
     new_state: ClaudeState,
 ) -> Result<()> {
-    // Read existing session or create new one
-    let mut session = read_state(base, project, worktree).unwrap_or_else(|| {
-        ClaudeSession::new(session_id.to_string(), ClaudeState::Inactive)
-    });
+    let session_id = session_id.to_string();
 
-    // Update session ID if changed (preserve events for continuous log)
-    session.session_id = session_id.to_string();
+    modify_state(base, project, worktree, move |current| {
+        let mut session = current.unwrap_or_else(|| {
+            ClaudeSession::new(session_id.clone(), ClaudeState::Inactive)
+        });
 
-    // Update state and add event
-    session.state = new_state;
-    session.add_event(event);
+        // Update session ID if changed (preserve events for continuous log)
+        session.session_id = session_id;
 
-    write_state(base, project, worktree, &session)
+        // Update state and add event
+        session.state = new_state;
+        session.add_event(event);
+
+        session
+    })
 }
 
 /// Get the effective state based on the most recent event
@@ -84,15 +87,19 @@ pub fn increment_subagent_depth(
     worktree: &str,
     session_id: &str,
 ) -> Result<()> {
-    let mut session = read_state(base, project, worktree).unwrap_or_else(|| {
-        ClaudeSession::new(session_id.to_string(), ClaudeState::Working)
-    });
+    let session_id = session_id.to_string();
 
-    session.session_id = session_id.to_string();
-    session.subagent_depth = session.subagent_depth.saturating_add(1);
-    session.last_updated = now_iso8601();
+    modify_state(base, project, worktree, move |current| {
+        let mut session = current.unwrap_or_else(|| {
+            ClaudeSession::new(session_id.clone(), ClaudeState::Working)
+        });
 
-    write_state(base, project, worktree, &session)
+        session.session_id = session_id;
+        session.subagent_depth = session.subagent_depth.saturating_add(1);
+        session.last_updated = now_iso8601();
+
+        session
+    })
 }
 
 /// Decrement the subagent depth (called when Task tool completes)
@@ -102,15 +109,19 @@ pub fn decrement_subagent_depth(
     worktree: &str,
     session_id: &str,
 ) -> Result<()> {
-    let mut session = read_state(base, project, worktree).unwrap_or_else(|| {
-        ClaudeSession::new(session_id.to_string(), ClaudeState::Working)
-    });
+    let session_id = session_id.to_string();
 
-    session.session_id = session_id.to_string();
-    session.subagent_depth = session.subagent_depth.saturating_sub(1);
-    session.last_updated = now_iso8601();
+    modify_state(base, project, worktree, move |current| {
+        let mut session = current.unwrap_or_else(|| {
+            ClaudeSession::new(session_id.clone(), ClaudeState::Working)
+        });
 
-    write_state(base, project, worktree, &session)
+        session.session_id = session_id;
+        session.subagent_depth = session.subagent_depth.saturating_sub(1);
+        session.last_updated = now_iso8601();
+
+        session
+    })
 }
 
 /// Touch the session to update the timestamp without adding an event
@@ -121,12 +132,16 @@ pub fn touch_session(
     worktree: &str,
     session_id: &str,
 ) -> Result<()> {
-    let mut session = read_state(base, project, worktree).unwrap_or_else(|| {
-        ClaudeSession::new(session_id.to_string(), ClaudeState::Working)
-    });
+    let session_id = session_id.to_string();
 
-    session.session_id = session_id.to_string();
-    session.last_updated = now_iso8601();
+    modify_state(base, project, worktree, move |current| {
+        let mut session = current.unwrap_or_else(|| {
+            ClaudeSession::new(session_id.clone(), ClaudeState::Working)
+        });
 
-    write_state(base, project, worktree, &session)
+        session.session_id = session_id;
+        session.last_updated = now_iso8601();
+
+        session
+    })
 }
