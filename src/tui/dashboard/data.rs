@@ -1,4 +1,35 @@
 //! Data loading for the dashboard.
+//!
+//! # Thread Safety: Background Thread Functions
+//!
+//! Functions in this module spawn background threads for I/O operations that
+//! would otherwise block the TUI event loop. They follow a consistent pattern:
+//!
+//! 1. Accept a `Sender<ResultType>` channel for returning results
+//! 2. Spawn a `std::thread` to perform the blocking operation
+//! 3. Send results back through the channel when complete
+//!
+//! The TUI event loop polls these channels using `try_recv()` (non-blocking)
+//! to check for completed operations.
+//!
+//! ## Usage from TUI
+//!
+//! ```ignore
+//! // Start async operation
+//! fetch_github_pr_async(params, self.sender.clone());
+//!
+//! // Later, in event loop, poll for results (non-blocking)
+//! while let Ok(result) = self.receiver.try_recv() {
+//!     // Process completed result
+//! }
+//! ```
+//!
+//! ## Sync Helper Functions
+//!
+//! Some functions like `load_linear_issues()` are synchronous and read from
+//! cache files. These are safe to call from background threads (via
+//! `load_all_caches_async`) but should NOT be called directly from the event loop
+//! as they perform file I/O.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -63,7 +94,13 @@ pub fn load_github_prs_from_cache(
     prs
 }
 
-/// Spawn async fetch of GitHub PR for a worktree (non-blocking)
+/// Spawn async fetch of GitHub PR for a worktree.
+///
+/// # Thread Safety: Spawns Background Thread
+///
+/// This function spawns a `std::thread` to perform the HTTP request. The result
+/// is sent back through the provided `sender` channel. Call from the TUI event
+/// loop - it returns immediately without blocking.
 pub fn fetch_github_pr_async(
     cache_dir: PathBuf,
     worktree_name: String,
@@ -89,7 +126,14 @@ pub fn fetch_github_pr_async(
     });
 }
 
-/// Spawn async fetch of Linear issue for a worktree (non-blocking)
+/// Spawn async fetch of Linear issue for a worktree.
+///
+/// # Thread Safety: Spawns Background Thread
+///
+/// This function spawns a `std::thread` to perform the HTTP request via
+/// `linear::get_issue()` (which uses `reqwest::blocking`). The result is sent
+/// back through the provided `sender` channel. Call from the TUI event loop -
+/// it returns immediately without blocking.
 pub fn fetch_linear_issue_async(
     cache_dir: PathBuf,
     worktree_name: String,
@@ -136,7 +180,13 @@ pub fn load_claude_states(
     (states, has_active)
 }
 
-/// Spawn async git fetch for origin (non-blocking)
+/// Spawn async git fetch for origin.
+///
+/// # Thread Safety: Spawns Background Thread
+///
+/// This function spawns a `std::thread` to run `git fetch origin`. The result
+/// is sent back through the provided `sender` channel. Call from the TUI event
+/// loop - it returns immediately without blocking.
 pub fn fetch_origin_async(repo_root: PathBuf, sender: Sender<GitFetchResult>) {
     thread::spawn(move || {
         let result = std::process::Command::new("git")
@@ -153,7 +203,13 @@ pub fn fetch_origin_async(repo_root: PathBuf, sender: Sender<GitFetchResult>) {
     });
 }
 
-/// Spawn async worktree stats loading (non-blocking)
+/// Spawn async worktree stats loading.
+///
+/// # Thread Safety: Spawns Background Thread
+///
+/// This function spawns a `std::thread` to load worktree statistics. The result
+/// is sent back through the provided `sender` channel. Call from the TUI event
+/// loop - it returns immediately without blocking.
 pub fn load_worktree_stats_async(repo_root: PathBuf, sender: Sender<WorktreeStatsResult>) {
     thread::spawn(move || {
         let result = WorktreeManager::open(&repo_root)
@@ -163,7 +219,14 @@ pub fn load_worktree_stats_async(repo_root: PathBuf, sender: Sender<WorktreeStat
     });
 }
 
-/// Spawn async batch cache loading for all caches (non-blocking)
+/// Spawn async batch cache loading for all caches.
+///
+/// # Thread Safety: Spawns Background Thread
+///
+/// This function spawns a `std::thread` to load Linear, GitHub, and Claude
+/// caches from disk. The result is sent back through the provided `sender`
+/// channel. Call from the TUI event loop - it returns immediately without
+/// blocking.
 pub fn load_all_caches_async(
     cache_dir: PathBuf,
     project_name: String,

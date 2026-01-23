@@ -175,6 +175,8 @@ The codebase uses async for external I/O but keeps the TUI event loop synchronou
 
 When adding new connectors or API calls, follow the existing pattern in `tui/dashboard/data.rs`.
 
+**Documentation convention:** Modules in `src/tui/` have doc comments marked with "Thread Safety: SYNC ONLY" or "Thread Safety: Background Thread Functions" to clarify which functions can block. A pre-commit hook enforces no `.await` in TUI code.
+
 ### Anti-patterns
 
 Avoid these common mistakes:
