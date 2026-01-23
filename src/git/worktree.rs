@@ -3,6 +3,7 @@ use git2::{BranchType, Repository};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use super::repository::{Git2Provider, RepositoryProvider};
 use crate::error::GwtError;
 
 /// Result of a push operation
@@ -70,7 +71,12 @@ impl WorktreeManager {
     /// Open a repository and create a worktree manager
     /// Always finds the main repository, even when called from a worktree
     pub fn open(path: &Path) -> Result<Self> {
-        let repo = Repository::discover(path).map_err(|_| GwtError::NotGitRepo)?;
+        Self::open_with_provider(path, &Git2Provider)
+    }
+
+    /// Open with a custom repository provider (for testing).
+    pub fn open_with_provider<P: RepositoryProvider>(path: &Path, provider: &P) -> Result<Self> {
+        let repo = provider.discover(path).map_err(|_| GwtError::NotGitRepo)?;
         let workdir = repo.workdir().ok_or(GwtError::NotGitRepo)?;
 
         // Check if we're in a worktree by looking for the common git dir
@@ -98,9 +104,15 @@ impl WorktreeManager {
         };
 
         // Re-open repository from the main repo root to ensure consistent behavior
-        let repo = Repository::open(&repo_root).map_err(|_| GwtError::NotGitRepo)?;
+        let repo = provider.open(&repo_root).map_err(|_| GwtError::NotGitRepo)?;
 
         Ok(Self { repo, repo_root })
+    }
+
+    /// Create from an already-opened repository (for testing).
+    #[cfg(test)]
+    pub fn from_repo(repo: Repository, repo_root: PathBuf) -> Self {
+        Self { repo, repo_root }
     }
 
     /// Get the repository root path
@@ -1077,5 +1089,182 @@ impl WorktreeManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command as StdCommand;
+    use tempfile::TempDir;
+
+    /// Helper to create a git repo with an initial commit
+    fn create_test_repo(temp: &TempDir) -> Repository {
+        let repo = Repository::init(temp.path()).unwrap();
+
+        // Configure user for commits
+        {
+            let mut config = repo.config().unwrap();
+            config.set_str("user.email", "test@example.com").unwrap();
+            config.set_str("user.name", "Test User").unwrap();
+        }
+
+        // Create initial commit
+        {
+            let sig = repo.signature().unwrap();
+            let tree_id = repo.index().unwrap().write_tree().unwrap();
+            let tree = repo.find_tree(tree_id).unwrap();
+            repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+                .unwrap();
+        }
+
+        // Ensure we have a main branch
+        {
+            let head = repo.head().unwrap();
+            let commit = head.peel_to_commit().unwrap();
+            repo.branch("main", &commit, false).ok();
+        }
+
+        repo
+    }
+
+    #[test]
+    fn test_worktree_manager_open_with_tempdir() {
+        let temp = TempDir::new().unwrap();
+        create_test_repo(&temp);
+
+        let manager = WorktreeManager::open(temp.path()).unwrap();
+        // Canonicalize paths to handle macOS /var -> /private/var symlink
+        let expected = temp.path().canonicalize().unwrap();
+        let actual = manager.repo_root().canonicalize().unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_worktree_manager_from_repo() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo(&temp);
+        let repo_root = temp.path().to_path_buf();
+
+        // Create WorktreeManager directly from repo (no filesystem discovery)
+        let manager = WorktreeManager::from_repo(repo, repo_root.clone());
+
+        assert_eq!(manager.repo_root(), &repo_root);
+    }
+
+    #[test]
+    fn test_list_worktrees_main_only() {
+        let temp = TempDir::new().unwrap();
+        create_test_repo(&temp);
+
+        let manager = WorktreeManager::open(temp.path()).unwrap();
+        let worktrees = manager.list_worktrees().unwrap();
+
+        // Should have exactly one worktree (main)
+        assert_eq!(worktrees.len(), 1);
+        assert!(worktrees[0].is_main);
+        assert_eq!(worktrees[0].name, "main");
+    }
+
+    #[test]
+    fn test_main_branch_name() {
+        let temp = TempDir::new().unwrap();
+        create_test_repo(&temp);
+
+        let manager = WorktreeManager::open(temp.path()).unwrap();
+        let main_branch = manager.main_branch_name().unwrap();
+
+        // Should be "main" (created in create_test_repo)
+        assert_eq!(main_branch, "main");
+    }
+
+    #[test]
+    fn test_uncommitted_stats_clean_repo() {
+        let temp = TempDir::new().unwrap();
+        create_test_repo(&temp);
+
+        let manager = WorktreeManager::open(temp.path()).unwrap();
+        let (added, removed) = manager.uncommitted_stats(temp.path());
+
+        // Clean repo should have no uncommitted changes
+        assert_eq!(added, 0);
+        assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn test_uncommitted_stats_with_changes() {
+        let temp = TempDir::new().unwrap();
+        create_test_repo(&temp);
+
+        // Add a file with content and stage it so git diff --cached sees it
+        let file_path = temp.path().join("test.txt");
+        std::fs::write(&file_path, "line1\nline2\nline3\n").unwrap();
+
+        // Stage the file
+        StdCommand::new("git")
+            .args(["add", "test.txt"])
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+
+        let manager = WorktreeManager::open(temp.path()).unwrap();
+        // Use canonicalized path to handle macOS symlinks
+        let canonical_path = temp.path().canonicalize().unwrap();
+        let (added, _removed) = manager.uncommitted_stats(&canonical_path);
+
+        // Should have added lines (3 lines in the new file)
+        assert!(added > 0);
+    }
+
+    #[test]
+    fn test_open_with_provider_git2() {
+        let temp = TempDir::new().unwrap();
+        create_test_repo(&temp);
+
+        // Use the Git2Provider explicitly
+        let provider = Git2Provider;
+        let manager = WorktreeManager::open_with_provider(temp.path(), &provider).unwrap();
+
+        // Canonicalize paths to handle macOS /var -> /private/var symlink
+        let expected = temp.path().canonicalize().unwrap();
+        let actual = manager.repo_root().canonicalize().unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_project_name() {
+        let temp = TempDir::new().unwrap();
+        create_test_repo(&temp);
+
+        let manager = WorktreeManager::open(temp.path()).unwrap();
+        let project_name = manager.project_name().unwrap();
+
+        // Project name should match temp dir name
+        assert!(!project_name.is_empty());
+    }
+
+    #[test]
+    fn test_parse_shortstat_empty() {
+        let result = WorktreeManager::parse_shortstat("");
+        assert_eq!(result, Some((0, 0)));
+    }
+
+    #[test]
+    fn test_parse_shortstat_insertions_only() {
+        let result = WorktreeManager::parse_shortstat("3 files changed, 100 insertions(+)");
+        assert_eq!(result, Some((100, 0)));
+    }
+
+    #[test]
+    fn test_parse_shortstat_deletions_only() {
+        let result = WorktreeManager::parse_shortstat("2 files changed, 50 deletions(-)");
+        assert_eq!(result, Some((0, 50)));
+    }
+
+    #[test]
+    fn test_parse_shortstat_both() {
+        let result =
+            WorktreeManager::parse_shortstat("5 files changed, 100 insertions(+), 20 deletions(-)");
+        assert_eq!(result, Some((100, 20)));
     }
 }

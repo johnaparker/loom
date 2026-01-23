@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use super::source::{ConfigSource, FilesystemSource};
+
 /// Global configuration stored at ~/.config/gwt/config.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalConfig {
@@ -175,9 +177,13 @@ impl GlobalConfig {
 
     /// Load global config from disk, or return defaults if not found
     pub fn load() -> Result<Self> {
-        let path = Self::config_path()?;
-        if path.exists() {
-            let content = fs::read_to_string(&path)?;
+        Self::load_with_source(&FilesystemSource)
+    }
+
+    /// Load global config using a custom source (for testing).
+    pub fn load_with_source<S: ConfigSource>(source: &S) -> Result<Self> {
+        let path = source.global_config_path()?;
+        if let Some(content) = source.read_config(&path)? {
             let config: GlobalConfig = toml::from_str(&content)?;
             Ok(config)
         } else {
