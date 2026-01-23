@@ -20,18 +20,18 @@ impl Dashboard {
         // Layout: Title | [Search] | Top row (50%) | Bottom row (50%) | Help
         let constraints = if is_search_mode {
             vec![
-                Constraint::Length(1),    // Title bar
-                Constraint::Length(3),    // Search bar
+                Constraint::Length(1),      // Title bar
+                Constraint::Length(3),      // Search bar
                 Constraint::Percentage(50), // Top row (Worktrees + Claude)
                 Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
-                Constraint::Length(1),    // Help bar
+                Constraint::Length(1),      // Help bar
             ]
         } else {
             vec![
-                Constraint::Length(1),    // Title bar
+                Constraint::Length(1),      // Title bar
                 Constraint::Percentage(50), // Top row (Worktrees + Claude)
                 Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
-                Constraint::Length(1),    // Help bar
+                Constraint::Length(1),      // Help bar
             ]
         };
 
@@ -167,12 +167,13 @@ impl Dashboard {
                     .linear_issues
                     .get(&wt.info.name)
                     .map(|issue| issue.title.as_str());
-                let github_pr = self.github_prs.get(&wt.info.name).and_then(|state| {
-                    match state {
+                let github_pr = self
+                    .github_prs
+                    .get(&wt.info.name)
+                    .and_then(|state| match state {
                         CachedPRState::Found(pr) => Some(pr),
                         CachedPRState::NotFound => None,
-                    }
-                });
+                    });
                 let claude_state = self
                     .claude_states
                     .get(&wt.info.name)
@@ -315,9 +316,7 @@ impl Dashboard {
         }
 
         // Show "Clean" only if both brackets are empty and no uncommitted changes
-        let is_clean = !has_main_bracket
-            && !has_self_bracket
-            && !wt.has_uncommitted_changes();
+        let is_clean = !has_main_bracket && !has_self_bracket && !wt.has_uncommitted_changes();
 
         if is_clean && line2_spans.len() <= 2 {
             // Only age was added
@@ -396,46 +395,40 @@ impl Dashboard {
     }
 
     /// Format a compact GitHub PR indicator line for the worktree list.
-    /// Format: `  [icon] #123 OPEN  ✓approved  ✓3/3  @john`
-    fn format_github_indicator(pr: &GitHubPR, width: usize, github_icon: Option<&str>) -> Line<'static> {
+    /// Format: `  [icon] OPEN  ✓approved  ✓3/3  @john`
+    fn format_github_indicator(
+        pr: &GitHubPR,
+        width: usize,
+        github_icon: Option<&str>,
+    ) -> Line<'static> {
         let mut spans = Vec::new();
 
-        // Indent with optional icon (icon colored cyan to match PR number)
+        // State with color - DRAFT shown instead of OPEN when applicable
+        let (display_state, state_color) = if pr.draft {
+            ("DRAFT".to_string(), Color::Yellow)
+        } else {
+            (
+                pr.state.clone(),
+                match pr.state.as_str() {
+                    "OPEN" => Color::Green,
+                    "MERGED" => Color::Magenta,
+                    "CLOSED" => Color::Red,
+                    _ => Color::DarkGray,
+                },
+            )
+        };
+
+        // Indent with optional icon (icon colored to match status)
         spans.push(Span::raw("  "));
         if let Some(icon) = github_icon {
             spans.push(Span::styled(
                 format!("{} ", icon),
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(state_color),
             ));
         }
 
-        // PR number (cyan)
-        spans.push(Span::styled(
-            format!("#{}", pr.number),
-            Style::default().fg(Color::Cyan),
-        ));
-
-        spans.push(Span::raw(" "));
-
-        // State with color (OPEN/MERGED/CLOSED)
-        let state_color = match pr.state.as_str() {
-            "OPEN" => Color::Green,
-            "MERGED" => Color::Magenta,
-            "CLOSED" => Color::Red,
-            _ => Color::DarkGray,
-        };
-        spans.push(Span::styled(
-            pr.state.clone(),
-            Style::default().fg(state_color),
-        ));
-
-        // Draft indicator (if applicable)
-        if pr.draft {
-            spans.push(Span::styled(
-                " (draft)",
-                Style::default().fg(Color::DarkGray),
-            ));
-        }
+        // State
+        spans.push(Span::styled(display_state, Style::default().fg(state_color)));
 
         // Review decision with icon
         if let Some(ref decision) = pr.review_decision {
@@ -477,9 +470,11 @@ impl Dashboard {
         }
 
         // First assignee, or author as fallback (truncated if needed)
-        let user = pr.assignees.first().map(|s| s.as_str()).unwrap_or_else(|| {
-            if pr.author.is_empty() { "" } else { &pr.author }
-        });
+        let user = pr
+            .assignees
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or_else(|| if pr.author.is_empty() { "" } else { &pr.author });
         if !user.is_empty() {
             spans.push(Span::raw("  "));
             // Calculate how much space we have left
@@ -496,10 +491,7 @@ impl Dashboard {
                 format!("@{}", user)
             };
 
-            spans.push(Span::styled(
-                display_name,
-                Style::default().fg(Color::Cyan),
-            ));
+            spans.push(Span::styled(display_name, Style::default().fg(Color::Cyan)));
         }
 
         Line::from(spans)
@@ -632,7 +624,10 @@ impl Dashboard {
         }
 
         if has_content {
-            spans.push(Span::styled(" vs self", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(
+                " vs self",
+                Style::default().fg(Color::DarkGray),
+            ));
             spans.push(Span::styled("]", Style::default().fg(Color::DarkGray)));
             spans
         } else {
@@ -680,7 +675,8 @@ impl Dashboard {
                 .collect()
         };
 
-        let list = List::new(items).block(Block::default().borders(Borders::ALL).title(" Commits "));
+        let list =
+            List::new(items).block(Block::default().borders(Borders::ALL).title(" Commits "));
 
         f.render_widget(list, area);
     }
@@ -696,10 +692,7 @@ impl Dashboard {
             .map(|name| self.is_linear_loading(name))
             .unwrap_or(false);
 
-        let is_main = worktree
-            .as_ref()
-            .map(|wt| wt.info.is_main)
-            .unwrap_or(true);
+        let is_main = worktree.as_ref().map(|wt| wt.info.is_main).unwrap_or(true);
 
         let block = Block::default().borders(Borders::ALL).title(" Linear ");
         let inner = block.inner(area);
@@ -711,56 +704,53 @@ impl Dashboard {
                 Style::default().fg(Color::DarkGray).italic(),
             )
         } else if is_loading && issue.is_none() {
-            Text::styled(
-                "Loading...",
-                Style::default().fg(Color::Yellow).italic(),
-            )
+            Text::styled("Loading...", Style::default().fg(Color::Yellow).italic())
         } else {
             match issue {
-            Some(issue) => {
-                let mut lines = Vec::new();
+                Some(issue) => {
+                    let mut lines = Vec::new();
 
-                // Issue title in bold white
-                lines.push(Line::from(Span::styled(
-                    &issue.title,
-                    Style::default().fg(Color::White).bold(),
-                )));
-
-                // Issue ID with hint to open
-                lines.push(Line::from(vec![
-                    Span::styled(&issue.id, Style::default().fg(Color::Cyan)),
-                    Span::styled(" (l to open)", Style::default().fg(Color::DarkGray)),
-                ]));
-
-                // Empty line before description
-                lines.push(Line::from(""));
-
-                // Description or "No description"
-                if let Some(ref desc) = issue.description {
-                    // Word wrap the description
-                    for line in desc.lines() {
-                        if line.is_empty() {
-                            lines.push(Line::from(""));
-                        } else {
-                            lines.push(Line::from(Span::styled(
-                                line,
-                                Style::default().fg(Color::Gray),
-                            )));
-                        }
-                    }
-                } else {
+                    // Issue title in bold white
                     lines.push(Line::from(Span::styled(
-                        "No description",
-                        Style::default().fg(Color::DarkGray).italic(),
+                        &issue.title,
+                        Style::default().fg(Color::White).bold(),
                     )));
-                }
 
-                Text::from(lines)
-            }
-            None => Text::styled(
-                "No Linear issue linked\n\nCreate worktrees with Linear issue IDs\nto see issue details here.",
-                Style::default().fg(Color::DarkGray).italic(),
-            ),
+                    // Issue ID with hint to open
+                    lines.push(Line::from(vec![
+                        Span::styled(&issue.id, Style::default().fg(Color::Cyan)),
+                        Span::styled(" (l to open)", Style::default().fg(Color::DarkGray)),
+                    ]));
+
+                    // Empty line before description
+                    lines.push(Line::from(""));
+
+                    // Description or "No description"
+                    if let Some(ref desc) = issue.description {
+                        // Word wrap the description
+                        for line in desc.lines() {
+                            if line.is_empty() {
+                                lines.push(Line::from(""));
+                            } else {
+                                lines.push(Line::from(Span::styled(
+                                    line,
+                                    Style::default().fg(Color::Gray),
+                                )));
+                            }
+                        }
+                    } else {
+                        lines.push(Line::from(Span::styled(
+                            "No description",
+                            Style::default().fg(Color::DarkGray).italic(),
+                        )));
+                    }
+
+                    Text::from(lines)
+                }
+                None => Text::styled(
+                    "No Linear issue linked\n\nCreate worktrees with Linear issue IDs\nto see issue details here.",
+                    Style::default().fg(Color::DarkGray).italic(),
+                ),
             }
         };
 
@@ -779,10 +769,7 @@ impl Dashboard {
             .map(|name| self.is_github_loading(name))
             .unwrap_or(false);
 
-        let is_main = worktree
-            .as_ref()
-            .map(|wt| wt.info.is_main)
-            .unwrap_or(true);
+        let is_main = worktree.as_ref().map(|wt| wt.info.is_main).unwrap_or(true);
 
         let block = Block::default().borders(Borders::ALL).title(" GitHub ");
         let inner = block.inner(area);
@@ -795,10 +782,7 @@ impl Dashboard {
             )
         } else if is_loading && cached_state.is_none() {
             // Only show "Loading..." when there's no cached state at all (first load)
-            Text::styled(
-                "Loading...",
-                Style::default().fg(Color::Yellow).italic(),
-            )
+            Text::styled("Loading...", Style::default().fg(Color::Yellow).italic())
         } else {
             match cached_state {
                 Some(CachedPRState::Found(pr)) => self.format_github_pr_content(pr, inner.width),
@@ -813,7 +797,11 @@ impl Dashboard {
         f.render_widget(paragraph, inner);
     }
 
-    fn format_github_pr_content(&self, pr: &crate::github::GitHubPR, inner_width: u16) -> Text<'static> {
+    fn format_github_pr_content(
+        &self,
+        pr: &crate::github::GitHubPR,
+        inner_width: u16,
+    ) -> Text<'static> {
         let mut lines = Vec::new();
 
         // PR title in bold white
@@ -822,18 +810,24 @@ impl Dashboard {
             Style::default().fg(Color::White).bold(),
         )));
 
-        // PR number and state with hint to open
-        let state_color = match pr.state.as_str() {
-            "OPEN" => Color::Green,
-            "MERGED" => Color::Magenta,
-            "CLOSED" => Color::Red,
-            _ => Color::DarkGray,
+        // PR number and state with hint to open - DRAFT shown instead of OPEN when applicable
+        let (display_state, state_color) = if pr.draft {
+            ("DRAFT".to_string(), Color::Yellow)
+        } else {
+            (
+                pr.state.clone(),
+                match pr.state.as_str() {
+                    "OPEN" => Color::Green,
+                    "MERGED" => Color::Magenta,
+                    "CLOSED" => Color::Red,
+                    _ => Color::DarkGray,
+                },
+            )
         };
-        let draft_text = if pr.draft { " (draft)" } else { "" };
         lines.push(Line::from(vec![
             Span::styled(format!("#{}", pr.number), Style::default().fg(Color::Cyan)),
             Span::styled(
-                format!(" {}{}", pr.state, draft_text),
+                format!(" {}", display_state),
                 Style::default().fg(state_color),
             ),
             Span::styled(" (g to open)", Style::default().fg(Color::DarkGray)),
@@ -845,7 +839,11 @@ impl Dashboard {
                 lines.push(Line::from(vec![
                     Span::styled("Assignees: ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
-                        pr.assignees.iter().map(|a| format!("@{}", a)).collect::<Vec<_>>().join(", "),
+                        pr.assignees
+                            .iter()
+                            .map(|a| format!("@{}", a))
+                            .collect::<Vec<_>>()
+                            .join(", "),
                         Style::default().fg(Color::Cyan),
                     ),
                 ]));
@@ -854,7 +852,11 @@ impl Dashboard {
                 lines.push(Line::from(vec![
                     Span::styled("Reviewers: ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
-                        pr.reviewers.iter().map(|r| format!("@{}", r)).collect::<Vec<_>>().join(", "),
+                        pr.reviewers
+                            .iter()
+                            .map(|r| format!("@{}", r))
+                            .collect::<Vec<_>>()
+                            .join(", "),
                         Style::default().fg(Color::Cyan),
                     ),
                 ]));
@@ -890,10 +892,7 @@ impl Dashboard {
                         Style::default().fg(Color::Red),
                     ),
                     Span::styled(
-                        format!(
-                            ", {} passing, {} pending",
-                            checks.passing, checks.pending
-                        ),
+                        format!(", {} passing, {} pending", checks.passing, checks.pending),
                         Style::default().fg(Color::DarkGray),
                     ),
                 ])
@@ -1002,9 +1001,7 @@ impl Dashboard {
         f.render_widget(block, area);
 
         let content: Text = match session {
-            Some(s) if !s.events.is_empty() => {
-                self.format_claude_events(s, inner)
-            }
+            Some(s) if !s.events.is_empty() => self.format_claude_events(s, inner),
             Some(_) => Text::styled(
                 "Session active, no events yet",
                 Style::default().fg(Color::DarkGray).italic(),
@@ -1019,17 +1016,25 @@ impl Dashboard {
         f.render_widget(paragraph, inner);
     }
 
-    fn format_claude_events(&self, session: &crate::claude::ClaudeSession, inner: Rect) -> Text<'static> {
+    fn format_claude_events(
+        &self,
+        session: &crate::claude::ClaudeSession,
+        inner: Rect,
+    ) -> Text<'static> {
         let mut lines = Vec::new();
 
         // Show recent events (most recent first, fill available height)
         // Track index to know if notification is "handled" (not the most recent)
         // Filter out ToolResult events - they're used for state tracking but pollute the log
         let max_events = inner.height as usize;
-        for (idx, event) in session.events.iter().rev()
+        for (idx, event) in session
+            .events
+            .iter()
+            .rev()
             .filter(|e| e.event_type != "ToolResult")
             .take(max_events)
-            .enumerate() {
+            .enumerate()
+        {
             let time_str = claude::relative_time(&event.timestamp);
             let is_most_recent = idx == 0;
 
@@ -1126,7 +1131,10 @@ impl Dashboard {
                             Style::default().fg(Color::DarkGray),
                         ),
                         Span::styled("\u{25B7} ", Style::default().fg(Color::Cyan)), // ▷
-                        Span::styled("Session started".to_string(), Style::default().fg(Color::Cyan)),
+                        Span::styled(
+                            "Session started".to_string(),
+                            Style::default().fg(Color::Cyan),
+                        ),
                     ]
                 }
                 "SessionCleared" => {
@@ -1136,7 +1144,10 @@ impl Dashboard {
                             Style::default().fg(Color::DarkGray),
                         ),
                         Span::styled("\u{21BB} ", Style::default().fg(Color::Yellow)), // ↻
-                        Span::styled("Session cleared".to_string(), Style::default().fg(Color::Yellow)),
+                        Span::styled(
+                            "Session cleared".to_string(),
+                            Style::default().fg(Color::Yellow),
+                        ),
                     ]
                 }
                 "SessionEnd" => {
