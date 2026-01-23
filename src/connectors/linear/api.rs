@@ -1,4 +1,35 @@
 //! Linear GraphQL API client.
+//!
+//! # Thread Safety: Blocking HTTP
+//!
+//! This module uses `reqwest::blocking` intentionally. The blocking client is
+//! simpler and appropriate here because:
+//!
+//! 1. **Called from background threads**: Functions like `get_issue()` are invoked
+//!    via `fetch_linear_issue_async()` in `tui/dashboard/data.rs`, which spawns
+//!    a dedicated thread for the HTTP request.
+//!
+//! 2. **Not called from TUI event loop**: The TUI never calls these functions
+//!    directly. It uses the async wrappers in `data.rs` and polls for results.
+//!
+//! ## Correct Usage
+//!
+//! ```ignore
+//! // From TUI - use the async wrapper (spawns background thread)
+//! fetch_linear_issue_async(cache_dir, name, id, key, project, sender);
+//!
+//! // From CLI commands - can call directly (not in event loop)
+//! let issue = linear::get_issue(&api_key, &issue_id)?;
+//! ```
+//!
+//! ## DO NOT
+//!
+//! Never call `get_issue()` or `update_issue_status()` directly from:
+//! - `tui/dashboard/mod.rs` (event loop)
+//! - `tui/dashboard/render.rs` (rendering)
+//! - `tui/dashboard/input.rs` (input handling)
+//!
+//! These would block the UI. Use `fetch_linear_issue_async()` instead.
 
 use std::time::Duration;
 
@@ -10,7 +41,13 @@ use super::types::LinearIssue;
 /// API timeout for Linear requests (5 seconds)
 const API_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Fetch Linear issue details from the API
+/// Fetch Linear issue details from the API.
+///
+/// # Thread Safety: BLOCKING
+///
+/// This function makes a blocking HTTP request. Do NOT call from the TUI event
+/// loop - use `fetch_linear_issue_async()` in `tui/dashboard/data.rs` instead.
+/// Safe to call from CLI commands or background threads.
 pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
     let client = reqwest::blocking::Client::builder()
         .timeout(API_TIMEOUT)
@@ -101,11 +138,16 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
     })
 }
 
-/// Update a Linear issue's status by state type
+/// Update a Linear issue's status by state type.
 ///
 /// state_type values:
 /// - "started" - marks issue as "In Progress" (prefers state named "In Progress")
 /// - "completed" - marks issue as "Done" (prefers state named "Done")
+///
+/// # Thread Safety: BLOCKING
+///
+/// This function makes blocking HTTP requests. Do NOT call from the TUI event
+/// loop. Safe to call from CLI commands or background threads.
 pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> Result<()> {
     // Map state types to preferred state names
     let preferred_name = match state_type {

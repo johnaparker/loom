@@ -1,4 +1,16 @@
 //! Input handling for the dashboard.
+//!
+//! # Thread Safety: SYNC ONLY
+//!
+//! All functions in this module are called from the TUI event loop and **must
+//! remain synchronous**. They must not:
+//! - Use `.await` or block on futures
+//! - Make HTTP requests or perform network I/O
+//! - Perform blocking file operations
+//!
+//! Input handlers should return quickly to keep the UI responsive. Long-running
+//! operations should be triggered as background tasks (see `data.rs`) and their
+//! results polled in subsequent event loop iterations.
 
 use crossterm::event::{KeyCode, KeyModifiers};
 

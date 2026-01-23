@@ -1,6 +1,47 @@
 //! Interactive dashboard for worktree status.
 //!
 //! Provides a terminal UI for viewing and managing worktrees.
+//!
+//! # Threading Model
+//!
+//! The dashboard uses a **synchronous event loop** with **async background tasks**:
+//!
+//! - **Event loop** (`run_loop`): Runs synchronously, polling for keyboard events
+//!   and checking for completed background tasks. Never blocks on I/O.
+//! - **Background tasks**: External I/O (API calls, git operations, cache loading)
+//!   runs in spawned threads via `std::thread::spawn`. Results are sent back
+//!   through `mpsc` channels.
+//! - **Polling**: The event loop uses `try_recv()` to check channels without blocking.
+//!
+//! ## SYNC ONLY Functions
+//!
+//! Functions in `mod.rs`, `render.rs`, and `input.rs` are called from the event loop
+//! and **must remain synchronous**. They must not:
+//! - Use `.await` (blocks the event loop)
+//! - Make HTTP requests directly (use background tasks in `data.rs`)
+//! - Perform expensive file I/O (use `load_all_caches_async` instead)
+//!
+//! ## Background Tasks
+//!
+//! Functions in `data.rs` spawn background threads for I/O. Pattern:
+//! ```ignore
+//! // In data.rs - spawns background thread
+//! pub fn fetch_data_async(sender: Sender<Result>) {
+//!     thread::spawn(move || {
+//!         let result = blocking_operation();
+//!         let _ = sender.send(result);
+//!     });
+//! }
+//!
+//! // In mod.rs - non-blocking poll
+//! fn poll_data_results(&mut self) {
+//!     while let Ok(result) = self.receiver.try_recv() {
+//!         // Process result
+//!     }
+//! }
+//! ```
+//!
+//! This architecture keeps the UI responsive while performing network and disk I/O.
 
 mod data;
 mod input;
@@ -251,7 +292,12 @@ impl Dashboard {
         );
     }
 
-    /// Check for completed async GitHub PR fetches and update state
+    /// Check for completed async GitHub PR fetches and update state.
+    ///
+    /// # Thread Safety: SYNC ONLY
+    ///
+    /// Uses non-blocking `try_recv()` to poll the channel. Safe to call from
+    /// the event loop - never blocks.
     pub fn poll_github_results(&mut self) {
         // Non-blocking receive of all pending results
         while let Ok((worktree_name, state)) = self.github_pr_receiver.try_recv() {
@@ -312,7 +358,12 @@ impl Dashboard {
         );
     }
 
-    /// Check for completed async Linear issue fetches and update state
+    /// Check for completed async Linear issue fetches and update state.
+    ///
+    /// # Thread Safety: SYNC ONLY
+    ///
+    /// Uses non-blocking `try_recv()` to poll the channel. Safe to call from
+    /// the event loop - never blocks.
     fn poll_linear_results(&mut self) {
         // Non-blocking receive of all pending results
         while let Ok((worktree_name, issue)) = self.linear_issue_receiver.try_recv() {
@@ -337,7 +388,12 @@ impl Dashboard {
         fetch_origin_async(self.repo_root.clone(), self.git_fetch_sender.clone());
     }
 
-    /// Check for completed git fetch and return true if fetch completed (triggers refresh)
+    /// Check for completed git fetch and return true if fetch completed (triggers refresh).
+    ///
+    /// # Thread Safety: SYNC ONLY
+    ///
+    /// Uses non-blocking `try_recv()` to poll the channel. Safe to call from
+    /// the event loop - never blocks.
     fn poll_git_fetch_results(&mut self) -> bool {
         if let Ok(_result) = self.git_fetch_receiver.try_recv() {
             self.git_fetch_in_progress = false;
@@ -371,7 +427,12 @@ impl Dashboard {
         load_worktree_stats_async(self.repo_root.clone(), self.worktree_stats_sender.clone());
     }
 
-    /// Check for completed worktree stats load and return true if completed
+    /// Check for completed worktree stats load and return true if completed.
+    ///
+    /// # Thread Safety: SYNC ONLY
+    ///
+    /// Uses non-blocking `try_recv()` to poll the channel. Safe to call from
+    /// the event loop - never blocks.
     fn poll_stats_results(&mut self) -> bool {
         if let Ok(result) = self.worktree_stats_receiver.try_recv() {
             self.worktree_stats_loading = false;
@@ -404,7 +465,12 @@ impl Dashboard {
         );
     }
 
-    /// Check for completed cache load and apply results
+    /// Check for completed cache load and apply results.
+    ///
+    /// # Thread Safety: SYNC ONLY
+    ///
+    /// Uses non-blocking `try_recv()` to poll the channel. Safe to call from
+    /// the event loop - never blocks.
     fn poll_cache_results(&mut self) -> bool {
         if let Ok((linear_issues, github_prs, claude_states, has_active_claude)) =
             self.cache_receiver.try_recv()
@@ -559,6 +625,20 @@ impl Dashboard {
         self.run_loop(terminal)
     }
 
+    /// Main event loop for the dashboard.
+    ///
+    /// # Thread Safety: SYNC ONLY
+    ///
+    /// This is the core event loop. It must remain synchronous - all operations
+    /// here must complete quickly without blocking:
+    ///
+    /// - Polls channels for completed background tasks (non-blocking `try_recv`)
+    /// - Renders the UI (pure computation, no I/O)
+    /// - Waits for keyboard events with timeout (`event::poll`)
+    /// - Handles input (triggers actions, may spawn new background tasks)
+    ///
+    /// **Never add `.await`, HTTP calls, or blocking file I/O here.**
+    /// Use the async functions in `data.rs` to spawn background tasks instead.
     fn run_loop(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,

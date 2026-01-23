@@ -1,4 +1,16 @@
 //! Rendering logic for the dashboard.
+//!
+//! # Thread Safety: SYNC ONLY
+//!
+//! All functions in this module are called from the TUI event loop and **must
+//! remain synchronous**. They must not:
+//! - Use `.await` or block on futures
+//! - Make HTTP requests or perform network I/O
+//! - Perform blocking file operations
+//!
+//! These functions are called on every frame render. Any blocking operation
+//! would freeze the entire UI. Data loading happens in background threads
+//! (see `data.rs`) and is polled via channels in the event loop.
 
 use ratatui::{
     prelude::*,
