@@ -10,11 +10,166 @@ use std::path::{Path, PathBuf};
 use crate::cli::Category;
 use crate::config::Config;
 use crate::error::GwtError;
-use crate::git::WorktreeManager;
+use crate::git::{PushResult, WorktreeManager, WorktreeStats};
 use crate::linear::{self, LinearIssue};
 use crate::sesh;
 use crate::sync;
 use crate::tmux;
+
+/// Result of a sync operation with remote.
+#[derive(Debug)]
+pub enum SyncResult {
+    /// Worktree is already synced with remote
+    AlreadySynced { worktree_name: String },
+    /// Pushed commits to remote
+    Pushed { worktree_name: String, commits: u32 },
+    /// Created a new remote branch and pushed
+    CreatedRemoteBranch { worktree_name: String },
+    /// Pulled commits from remote
+    Pulled { worktree_name: String, commits: u32 },
+    /// Cannot sync due to some condition
+    CannotSync { reason: String },
+}
+
+impl SyncResult {
+    /// Convert the result to a human-readable message
+    pub fn message(&self) -> String {
+        match self {
+            SyncResult::AlreadySynced { worktree_name } => {
+                format!("'{}' already synced with remote", worktree_name)
+            }
+            SyncResult::Pushed { worktree_name, commits } => {
+                format!("Pushed {} commit(s) for '{}'", commits, worktree_name)
+            }
+            SyncResult::CreatedRemoteBranch { worktree_name } => {
+                format!("Created remote branch and pushed '{}'", worktree_name)
+            }
+            SyncResult::Pulled { worktree_name, commits } => {
+                format!("Pulled {} commit(s) for '{}'", commits, worktree_name)
+            }
+            SyncResult::CannotSync { reason } => reason.clone(),
+        }
+    }
+
+    /// Whether this result represents success
+    pub fn is_success(&self) -> bool {
+        !matches!(self, SyncResult::CannotSync { .. })
+    }
+}
+
+/// Sync a worktree with its remote tracking branch.
+///
+/// This encapsulates the decision tree for syncing:
+/// - If uncommitted changes present: cannot sync
+/// - If both ahead and behind: cannot sync (needs manual resolution)
+/// - If no tracking branch: push with -u to create it
+/// - If behind: pull
+/// - If ahead: push
+/// - If synced: report already synced
+pub fn sync_with_remote(
+    manager: &WorktreeManager,
+    worktree: &WorktreeStats,
+) -> SyncResult {
+    let branch = worktree.info.branch.as_deref().unwrap_or(&worktree.info.name);
+    let worktree_name = worktree.info.name.clone();
+
+    // Check for uncommitted changes first
+    if worktree.has_uncommitted_changes() {
+        return SyncResult::CannotSync {
+            reason: "Cannot sync: uncommitted changes present".to_string(),
+        };
+    }
+
+    let ahead = worktree.tracking_ahead.unwrap_or(0);
+    let behind = worktree.tracking_behind.unwrap_or(0);
+    let has_tracking = worktree.tracking_ahead.is_some();
+
+    // Both ahead and behind - needs manual resolution
+    if ahead > 0 && behind > 0 {
+        return SyncResult::CannotSync {
+            reason: format!(
+                "Cannot sync: ↑{} ahead, ↓{} behind. Resolve manually",
+                ahead, behind
+            ),
+        };
+    }
+
+    // No tracking branch - push with -u to create it
+    if !has_tracking {
+        match manager.push_to_remote(&worktree.info.path, branch) {
+            Ok(PushResult::CreatedRemoteBranch) => {
+                return SyncResult::CreatedRemoteBranch { worktree_name };
+            }
+            Ok(PushResult::Success) => {
+                return SyncResult::Pushed {
+                    worktree_name,
+                    commits: ahead,
+                };
+            }
+            Ok(PushResult::Rejected { reason: _ }) => {
+                return SyncResult::CannotSync {
+                    reason: "Push rejected. Pull first with 'P'".to_string(),
+                };
+            }
+            Err(e) => {
+                return SyncResult::CannotSync {
+                    reason: format!("Failed to push: {}", e),
+                };
+            }
+        }
+    }
+
+    // Behind tracking - pull
+    if behind > 0 {
+        match manager.pull_from_remote(&worktree.info.path, branch) {
+            Ok(()) => {
+                return SyncResult::Pulled {
+                    worktree_name,
+                    commits: behind,
+                };
+            }
+            Err(e) => {
+                return SyncResult::CannotSync {
+                    reason: format!("Failed to pull: {}", e),
+                };
+            }
+        }
+    }
+
+    // Ahead of tracking - push
+    if ahead > 0 {
+        match manager.push_to_remote(&worktree.info.path, branch) {
+            Ok(PushResult::Success) | Ok(PushResult::CreatedRemoteBranch) => {
+                return SyncResult::Pushed {
+                    worktree_name,
+                    commits: ahead,
+                };
+            }
+            Ok(PushResult::Rejected { reason: _ }) => {
+                return SyncResult::CannotSync {
+                    reason: "Push rejected. Pull first with 'P'".to_string(),
+                };
+            }
+            Err(e) => {
+                return SyncResult::CannotSync {
+                    reason: format!("Failed to push: {}", e),
+                };
+            }
+        }
+    }
+
+    // Already synced
+    SyncResult::AlreadySynced { worktree_name }
+}
+
+/// Result of a merge operation.
+#[derive(Debug)]
+pub enum MergeResult {
+    /// Merge succeeded, cleanup completed
+    Success(CleanupResult),
+    /// Cannot merge due to conflicts
+    Conflicts { files: Vec<String> },
+}
 
 /// Clean up all resources associated with a worktree.
 ///
@@ -87,6 +242,7 @@ pub fn delete_worktree(
 /// Merge a worktree's branch to main and clean up.
 ///
 /// This is the complete merge operation used by both CLI and TUI.
+/// Checks for conflicts first and returns `MergeResult::Conflicts` if any exist.
 ///
 /// Linear status is updated BEFORE cleanup because cleanup kills the tmux session,
 /// which may terminate the process if running from within that session.
@@ -101,7 +257,21 @@ pub fn merge_worktree_to_main(
     linear_issue: Option<&LinearIssue>,
     linear_api_key: Option<&str>,
     linear_auto_update: bool,
-) -> Result<CleanupResult> {
+) -> Result<MergeResult> {
+    // Check for conflicts first
+    match manager.check_merge_conflicts(branch) {
+        Ok(Some(conflicts)) => {
+            return Ok(MergeResult::Conflicts { files: conflicts });
+        }
+        Ok(None) => {
+            // No conflicts, proceed with merge
+        }
+        Err(e) => {
+            // Error checking conflicts, warn but allow merge attempt
+            eprintln!("Warning: Could not check for conflicts: {}", e);
+        }
+    }
+
     // Merge to main
     manager.merge_to_main(branch)?;
 
@@ -128,7 +298,7 @@ pub fn merge_worktree_to_main(
     let mut result = cleanup_worktree_resources(cache_dir, project_name, worktree_name)?;
     result.linear_updated = linear_updated;
 
-    Ok(result)
+    Ok(MergeResult::Success(result))
 }
 
 /// Result of worktree creation for reporting.
