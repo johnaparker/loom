@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(/Users/john/github/gwt/target/debug/gwt hook:*)"
-    ]
-  }
-}
