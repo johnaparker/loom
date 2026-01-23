@@ -162,7 +162,7 @@ impl Dashboard {
             }
             KeyCode::Char('m') => {
                 // Merge - only available in push workflow, and only for non-main worktrees
-                if self.pull_workflow {
+                if self.is_pull_workflow() {
                     self.status_message = Some((false, "Merge not available in pull workflow - use GitHub PR".to_string()));
                     return None;
                 }
@@ -190,6 +190,10 @@ impl Dashboard {
             }
             KeyCode::Char('d') => {
                 // Diff - open diff view in neovim for non-main worktrees
+                if !self.config().diffview.enabled {
+                    self.status_message = Some((false, "Diffview disabled in config".to_string()));
+                    return None;
+                }
                 if let Some(worktree) = self.get_selected_worktree() {
                     if !worktree.info.is_main {
                         return Some(DashboardResult::Review { worktree });
@@ -206,6 +210,10 @@ impl Dashboard {
             }
             KeyCode::Char('l') => {
                 // Linear - open Linear issue (only if worktree has one)
+                if !self.config().linear.enabled {
+                    self.status_message = Some((false, "Linear disabled in config".to_string()));
+                    return None;
+                }
                 if let Some(worktree) = self.get_selected_worktree() {
                     if self.linear_issues.contains_key(&worktree.info.name) {
                         return Some(DashboardResult::Linear { worktree });
@@ -215,6 +223,10 @@ impl Dashboard {
             }
             KeyCode::Char('g') => {
                 // GitHub - open PR or create-PR page (only for non-main worktrees)
+                if !self.config().github.enabled {
+                    self.status_message = Some((false, "GitHub disabled in config".to_string()));
+                    return None;
+                }
                 if let Some(worktree) = self.get_selected_worktree() {
                     if !worktree.info.is_main && worktree.info.branch.is_some() {
                         return Some(DashboardResult::GitHub { worktree });

@@ -62,9 +62,10 @@ src/
 │   ├── hook.rs           # Claude Code hook integration
 │   └── completions.rs    # gwt completions <shell> - generate shell completions
 ├── config/
-│   ├── mod.rs            # Combined config handling
+│   ├── mod.rs            # Combined config handling + ResolvedConfig
 │   ├── global.rs         # ~/.config/gwt/config.toml
-│   └── project.rs        # .gwt.toml in repo root
+│   ├── project.rs        # .gwt.toml in repo root
+│   └── worktree.rs       # .gwt.toml in worktree directory (overrides)
 ├── core/                 # Shared TUI/CLI utilities
 │   ├── mod.rs
 │   ├── fuzzy.rs          # FuzzyMatcher - unified fuzzy matching (nucleo)
@@ -207,8 +208,18 @@ Current coverage: Unit tests for fuzzy matching, URL parsing, cache operations.
 
 ### Modifying config
 
-1. Update structs in `src/config/global.rs` or `src/config/project.rs`
+gwt uses a three-level config hierarchy: **global** → **project** → **worktree**. Each level can override the previous.
+
+1. Update structs in `src/config/global.rs`, `src/config/project.rs`, or `src/config/worktree.rs`
 2. Add accessor methods to `Config` in `src/config/mod.rs`
+3. For TUI/dashboard code, update `ResolvedConfig` and its resolution logic in `Config::resolve()`
+
+**Config levels:**
+- `global.rs`: User-wide settings (`~/.config/gwt/config.toml`)
+- `project.rs`: Per-repo settings (`.gwt.toml` in repo root)
+- `worktree.rs`: Per-worktree overrides (`.gwt.toml` in worktree directory)
+
+**Integration enable flags:** All integrations (Linear, GitHub, Diffview) are disabled by default. Use `enabled = true` in config to enable them. The TUI uses `ResolvedConfig` which merges all three levels.
 
 ### Adding a new error type
 

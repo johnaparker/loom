@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use super::global::SyncWorkflow;
+use super::IntegrationOverride;
 
 /// Project-specific configuration stored at .gwt.toml in repo root
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,6 +15,15 @@ pub struct ProjectConfig {
     /// Git section for workflow settings
     #[serde(default)]
     pub git: ProjectGitConfig,
+    /// Linear integration override
+    #[serde(default)]
+    pub linear: Option<IntegrationOverride>,
+    /// GitHub integration override
+    #[serde(default)]
+    pub github: Option<IntegrationOverride>,
+    /// Diffview integration override
+    #[serde(default)]
+    pub diffview: Option<IntegrationOverride>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -138,6 +148,9 @@ project_name = "test"
                 patterns: vec!["file1.txt".to_string(), "file2.txt".to_string()],
             },
             git: ProjectGitConfig::default(),
+            linear: None,
+            github: None,
+            diffview: None,
         };
 
         config.save(temp_dir.path()).unwrap();
@@ -157,6 +170,9 @@ project_name = "test"
             project_name: Some("repo-project".to_string()),
             sync: ProjectSyncConfig::default(),
             git: ProjectGitConfig::default(),
+            linear: None,
+            github: None,
+            diffview: None,
         };
         repo_config.save(repo_root.path()).unwrap();
 
@@ -165,6 +181,9 @@ project_name = "test"
             project_name: Some("worktree-project".to_string()),
             sync: ProjectSyncConfig::default(),
             git: ProjectGitConfig::default(),
+            linear: None,
+            github: None,
+            diffview: None,
         };
         wt_config.save(worktree_dir.path()).unwrap();
 
@@ -185,6 +204,9 @@ project_name = "test"
             project_name: Some("repo-project".to_string()),
             sync: ProjectSyncConfig::default(),
             git: ProjectGitConfig::default(),
+            linear: None,
+            github: None,
+            diffview: None,
         };
         repo_config.save(repo_root.path()).unwrap();
 
@@ -193,5 +215,39 @@ project_name = "test"
             .unwrap()
             .unwrap();
         assert_eq!(loaded.project_name, Some("repo-project".to_string()));
+    }
+
+    #[test]
+    fn test_parse_integration_overrides() {
+        let toml_str = r#"
+project_name = "my-project"
+
+[linear]
+enabled = false
+
+[github]
+enabled = true
+
+[diffview]
+enabled = false
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.linear.as_ref().and_then(|l| l.enabled), Some(false));
+        assert_eq!(config.github.as_ref().and_then(|g| g.enabled), Some(true));
+        assert_eq!(config.diffview.as_ref().and_then(|d| d.enabled), Some(false));
+    }
+
+    #[test]
+    fn test_partial_integration_overrides() {
+        let toml_str = r#"
+project_name = "my-project"
+
+[github]
+enabled = false
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.linear.is_none());
+        assert_eq!(config.github.as_ref().and_then(|g| g.enabled), Some(false));
+        assert!(config.diffview.is_none());
     }
 }

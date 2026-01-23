@@ -1,16 +1,28 @@
 mod global;
 mod project;
 mod source;
+mod worktree;
 
-pub use global::{GlobalConfig, SyncWorkflow};
+pub use global::{DiffviewConfig, GitHubConfig, GlobalConfig, LinearConfig, SyncWorkflow};
 pub use project::ProjectConfig;
 pub use source::{ConfigSource, FilesystemSource};
+pub use worktree::{WorktreeConfig, WorktreeSyncConfig};
 
 #[cfg(test)]
 pub use source::MemorySource;
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+
+/// Shared integration override configuration.
+///
+/// Used by both project and worktree configs to override integration enabled state.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IntegrationOverride {
+    /// Override the enabled state at this config level
+    pub enabled: Option<bool>,
+}
 
 /// Combined configuration from global and project sources
 #[derive(Debug, Clone)]
@@ -150,6 +162,167 @@ impl Config {
     pub fn branch_icon(&self) -> Option<&str> {
         self.global.icons.branch.as_deref()
     }
+
+    /// Resolve configuration for a specific worktree context.
+    ///
+    /// This merges all config levels with priority: worktree → project → global → defaults.
+    /// If `worktree_path` is provided and a worktree config exists there, it will override
+    /// project and global settings.
+    pub fn resolve(&self, worktree_path: Option<&Path>) -> Result<ResolvedConfig> {
+        // Load worktree config if path provided and exists
+        let worktree_config = worktree_path
+            .and_then(|p| WorktreeConfig::load(p).ok())
+            .flatten();
+
+        // Resolve Linear integration
+        let linear_enabled = resolve_integration_enabled(
+            worktree_config.as_ref().and_then(|w| w.linear.as_ref()).and_then(|i| i.enabled),
+            self.project.as_ref().and_then(|p| p.linear.as_ref()).and_then(|i| i.enabled),
+            self.global.linear.enabled,
+        );
+
+        // Resolve GitHub integration
+        let github_enabled = resolve_integration_enabled(
+            worktree_config.as_ref().and_then(|w| w.github.as_ref()).and_then(|i| i.enabled),
+            self.project.as_ref().and_then(|p| p.github.as_ref()).and_then(|i| i.enabled),
+            self.global.github.enabled,
+        );
+
+        // Resolve Diffview integration
+        let diffview_enabled = resolve_integration_enabled(
+            worktree_config.as_ref().and_then(|w| w.diffview.as_ref()).and_then(|i| i.enabled),
+            self.project.as_ref().and_then(|p| p.diffview.as_ref()).and_then(|i| i.enabled),
+            self.global.diffview.enabled,
+        );
+
+        // Resolve sync patterns: merge global + project, then apply worktree excludes
+        let mut sync_patterns = self.sync_patterns();
+        if let Some(ref wt_config) = worktree_config {
+            // Add worktree-specific patterns
+            for pattern in &wt_config.sync.patterns {
+                if !sync_patterns.contains(pattern) {
+                    sync_patterns.push(pattern.clone());
+                }
+            }
+            // Remove excluded patterns
+            sync_patterns.retain(|p| !wt_config.sync.exclude_patterns.contains(p));
+        }
+
+        Ok(ResolvedConfig {
+            worktree_root: self.worktree_root()?,
+            cache_dir: self.cache_dir()?,
+            workflow: self.workflow(),
+            linear: ResolvedLinearConfig {
+                enabled: linear_enabled,
+                api_key: self.global.linear.api_key.clone(),
+                team_prefix: self.global.linear.team_prefix.clone(),
+                auto_update_status: self.global.linear.auto_update_status,
+            },
+            github: ResolvedGitHubConfig {
+                enabled: github_enabled,
+            },
+            diffview: ResolvedDiffviewConfig {
+                enabled: diffview_enabled,
+                command: self.global.diffview.command.clone(),
+            },
+            sync_patterns,
+            icons: ResolvedIconsConfig {
+                linear: self.global.icons.linear.clone(),
+                github: self.global.icons.github.clone(),
+                branch: self.global.icons.branch.clone(),
+            },
+            sesh_auto_register: self.global.sesh.auto_register,
+            default_category: self.global.default_category.clone(),
+        })
+    }
+
+    /// Check for migration warnings (e.g., old worktree path still in use)
+    pub fn check_migration_warnings(&self) -> Vec<String> {
+        let mut warnings = vec![];
+
+        // Check if using new default but old path exists with worktrees
+        if self.global.worktree_root == "~/.worktrees" {
+            if let Some(home) = dirs::home_dir() {
+                let old_path = home.join("worktrees");
+                if old_path.exists() && old_path.is_dir() {
+                    // Check if it contains any subdirectories (worktrees)
+                    if let Ok(entries) = std::fs::read_dir(&old_path) {
+                        if entries.filter_map(|e| e.ok()).any(|e| e.path().is_dir()) {
+                            warnings.push(format!(
+                                "Found worktrees at ~/worktrees but gwt now defaults to ~/.worktrees. \
+                                To migrate, run: mv ~/worktrees ~/.worktrees && ln -s ~/.worktrees ~/worktrees"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        warnings
+    }
+}
+
+/// Resolve integration enabled state with priority: worktree → project → global
+fn resolve_integration_enabled(
+    worktree: Option<bool>,
+    project: Option<bool>,
+    global: bool,
+) -> bool {
+    worktree.or(project).unwrap_or(global)
+}
+
+/// Resolved configuration with all levels merged.
+///
+/// Priority: worktree → project → global → defaults
+#[derive(Debug, Clone)]
+pub struct ResolvedConfig {
+    pub worktree_root: PathBuf,
+    pub cache_dir: PathBuf,
+    pub workflow: SyncWorkflow,
+    pub linear: ResolvedLinearConfig,
+    pub github: ResolvedGitHubConfig,
+    pub diffview: ResolvedDiffviewConfig,
+    pub sync_patterns: Vec<String>,
+    pub icons: ResolvedIconsConfig,
+    pub sesh_auto_register: bool,
+    pub default_category: String,
+}
+
+/// Resolved Linear integration configuration
+#[derive(Debug, Clone)]
+pub struct ResolvedLinearConfig {
+    /// Whether Linear integration is enabled (merged from all levels)
+    pub enabled: bool,
+    /// API key (from global config)
+    pub api_key: Option<String>,
+    /// Team prefix for issue detection (from global config)
+    pub team_prefix: Option<String>,
+    /// Auto-update status on gwt new/merge
+    pub auto_update_status: bool,
+}
+
+/// Resolved GitHub integration configuration
+#[derive(Debug, Clone)]
+pub struct ResolvedGitHubConfig {
+    /// Whether GitHub integration is enabled (merged from all levels)
+    pub enabled: bool,
+}
+
+/// Resolved Diffview integration configuration
+#[derive(Debug, Clone)]
+pub struct ResolvedDiffviewConfig {
+    /// Whether Diffview integration is enabled (merged from all levels)
+    pub enabled: bool,
+    /// Command to run nvim (from global config)
+    pub command: String,
+}
+
+/// Resolved icons configuration
+#[derive(Debug, Clone)]
+pub struct ResolvedIconsConfig {
+    pub linear: Option<String>,
+    pub github: Option<String>,
+    pub branch: Option<String>,
 }
 
 #[cfg(test)]
@@ -166,6 +339,9 @@ mod tests {
             project_name: None,
             sync: ProjectSyncConfig::default(),
             git: ProjectGitConfig { workflow: Some(wf) },
+            linear: None,
+            github: None,
+            diffview: None,
         });
         Config { global, project }
     }
@@ -195,6 +371,9 @@ mod tests {
                 project_name: Some("test".to_string()),
                 sync: ProjectSyncConfig::default(),
                 git: ProjectGitConfig { workflow: None },
+                linear: None,
+                github: None,
+                diffview: None,
             }),
         };
         assert_eq!(config.workflow(), SyncWorkflow::Push);
@@ -261,9 +440,13 @@ workflow = "pull"
         let source = MemorySource::default();
 
         let config = Config::load_with_source(None, &source).unwrap();
-        assert_eq!(config.global.worktree_root, "~/worktrees");
+        assert_eq!(config.global.worktree_root, "~/.worktrees");
         assert_eq!(config.default_category(), "dev");
         assert!(config.is_push_workflow()); // Push is default
+        // Integrations disabled by default
+        assert!(!config.global.linear.enabled);
+        assert!(!config.global.github.enabled);
+        assert!(!config.global.diffview.enabled);
     }
 
     #[test]
@@ -282,6 +465,9 @@ workflow = "pull"
                 git: ProjectGitConfig {
                     workflow: Some(SyncWorkflow::Pull), // Override global
                 },
+                linear: None,
+                github: None,
+                diffview: None,
             }),
         );
 
@@ -292,5 +478,116 @@ workflow = "pull"
         // Sync patterns should merge
         let patterns = config.sync_patterns();
         assert!(patterns.contains(&"custom.txt".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_integration_enabled() {
+        // Test the helper function directly
+        assert!(!resolve_integration_enabled(None, None, false));
+        assert!(resolve_integration_enabled(None, None, true));
+        assert!(resolve_integration_enabled(None, Some(true), false));
+        assert!(!resolve_integration_enabled(None, Some(false), true));
+        assert!(resolve_integration_enabled(Some(true), Some(false), false));
+        assert!(!resolve_integration_enabled(Some(false), Some(true), true));
+    }
+
+    #[test]
+    fn test_resolved_config_defaults() {
+        // Test that ResolvedConfig has correct defaults
+        let config = Config::from_parts(GlobalConfig::default(), None);
+        let resolved = config.resolve(None).unwrap();
+
+        // All integrations disabled by default
+        assert!(!resolved.linear.enabled);
+        assert!(!resolved.github.enabled);
+        assert!(!resolved.diffview.enabled);
+        assert_eq!(resolved.diffview.command, "nvim");
+    }
+
+    #[test]
+    fn test_resolved_config_global_enabled() {
+        // Test that global enabled state is propagated
+        let mut global = GlobalConfig::default();
+        global.linear.enabled = true;
+        global.github.enabled = true;
+        global.diffview.enabled = true;
+
+        let config = Config::from_parts(global, None);
+        let resolved = config.resolve(None).unwrap();
+
+        assert!(resolved.linear.enabled);
+        assert!(resolved.github.enabled);
+        assert!(resolved.diffview.enabled);
+    }
+
+    #[test]
+    fn test_resolved_config_project_overrides_global() {
+        // Test that project config overrides global
+        let mut global = GlobalConfig::default();
+        global.linear.enabled = true;
+        global.github.enabled = true;
+
+        let project = ProjectConfig {
+            project_name: None,
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig::default(),
+            linear: Some(IntegrationOverride { enabled: Some(false) }),
+            github: None, // No override
+            diffview: Some(IntegrationOverride { enabled: Some(true) }),
+        };
+
+        let config = Config::from_parts(global, Some(project));
+        let resolved = config.resolve(None).unwrap();
+
+        // Project override should win
+        assert!(!resolved.linear.enabled); // Was true globally, disabled by project
+        assert!(resolved.github.enabled);  // No project override, uses global (true)
+        assert!(resolved.diffview.enabled); // Was false globally, enabled by project
+    }
+
+    #[test]
+    fn test_resolved_config_worktree_overrides_all() {
+        use tempfile::TempDir;
+        use worktree::{WorktreeConfig, WorktreeSyncConfig};
+
+        // Create temp worktree directory with config
+        let temp_dir = TempDir::new().unwrap();
+        let wt_config = WorktreeConfig {
+            sync: WorktreeSyncConfig {
+                patterns: vec!["worktree-only.txt".to_string()],
+                exclude_patterns: vec![".env".to_string()], // Exclude from global patterns
+            },
+            linear: Some(IntegrationOverride { enabled: Some(true) }), // Override project's false
+            github: Some(IntegrationOverride { enabled: Some(false) }), // Override global's true
+            diffview: None, // No override - should use project's true
+        };
+        wt_config.save(temp_dir.path()).unwrap();
+
+        // Global: linear=false, github=true, diffview=false
+        let mut global = GlobalConfig::default();
+        global.github.enabled = true;
+
+        // Project: linear=false, github=None (uses global), diffview=true
+        let project = ProjectConfig {
+            project_name: None,
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig::default(),
+            linear: Some(IntegrationOverride { enabled: Some(false) }),
+            github: None,
+            diffview: Some(IntegrationOverride { enabled: Some(true) }),
+        };
+
+        let config = Config::from_parts(global, Some(project));
+        let resolved = config.resolve(Some(temp_dir.path())).unwrap();
+
+        // Worktree overrides should win
+        assert!(resolved.linear.enabled); // Worktree true overrides project false
+        assert!(!resolved.github.enabled); // Worktree false overrides global true
+        assert!(resolved.diffview.enabled); // No worktree override, uses project true
+
+        // Sync patterns: global patterns minus worktree excludes, plus worktree additions
+        assert!(resolved.sync_patterns.contains(&"worktree-only.txt".to_string()));
+        assert!(!resolved.sync_patterns.contains(&".env".to_string())); // Excluded by worktree
+        assert!(resolved.sync_patterns.contains(&".envrc".to_string())); // Global pattern not excluded
     }
 }

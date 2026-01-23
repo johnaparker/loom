@@ -1201,7 +1201,7 @@ impl Dashboard {
             DashboardMode::Normal => {
                 let selected = self.get_selected_worktree();
                 let is_main = selected.as_ref().map(|w| w.info.is_main).unwrap_or(true);
-                let has_linear = selected
+                let has_linear = self.config.linear.enabled && selected
                     .as_ref()
                     .map(|w| self.linear_issues.contains_key(&w.info.name))
                     .unwrap_or(false);
@@ -1219,12 +1219,15 @@ impl Dashboard {
 
                 // Only show d/x for non-main worktrees, m only in push workflow
                 if !is_main {
-                    spans.extend(vec![
-                        Span::styled("d", Style::default().fg(Color::Cyan)),
-                        Span::styled(": diff  ", Style::default().fg(Color::DarkGray)),
-                    ]);
+                    // Only show d: diff if diffview is enabled
+                    if self.config.diffview.enabled {
+                        spans.extend(vec![
+                            Span::styled("d", Style::default().fg(Color::Cyan)),
+                            Span::styled(": diff  ", Style::default().fg(Color::DarkGray)),
+                        ]);
+                    }
                     // Only show merge in push workflow
-                    if !self.pull_workflow {
+                    if !self.is_pull_workflow() {
                         spans.extend(vec![
                             Span::styled("m", Style::default().fg(Color::Cyan)),
                             Span::styled(": merge  ", Style::default().fg(Color::DarkGray)),
@@ -1248,7 +1251,7 @@ impl Dashboard {
                     Span::styled(": claude  ", Style::default().fg(Color::DarkGray)),
                 ]);
 
-                // Show l: linear only if worktree has a Linear issue
+                // Show l: linear only if worktree has a Linear issue and Linear is enabled
                 if has_linear {
                     spans.extend(vec![
                         Span::styled("l", Style::default().fg(Color::Cyan)),
@@ -1256,8 +1259,8 @@ impl Dashboard {
                     ]);
                 }
 
-                // Show g: github only for non-main worktrees
-                if !is_main {
+                // Show g: github only for non-main worktrees and if GitHub is enabled
+                if !is_main && self.config.github.enabled {
                     spans.extend(vec![
                         Span::styled("g", Style::default().fg(Color::Cyan)),
                         Span::styled(": github  ", Style::default().fg(Color::DarkGray)),
