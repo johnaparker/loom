@@ -332,7 +332,7 @@ impl Dashboard {
         if let Some(title) = linear_title {
             // Build prefix with optional icon
             let prefix = linear_icon
-                .map(|i| format!("  {}  ", i))
+                .map(|i| format!("  {} ", i))
                 .unwrap_or_else(|| "  ".to_string());
             let prefix_len = prefix.chars().count();
             // Truncate if too long (leave room for prefix and ellipsis)
