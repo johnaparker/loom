@@ -1232,6 +1232,18 @@ mod tests {
     }
 
     #[test]
+    fn test_open_with_provider_not_a_repo() {
+        let temp = TempDir::new().unwrap();
+        // Don't initialize a git repo - just an empty directory
+
+        let provider = Git2Provider;
+        let result = WorktreeManager::open_with_provider(temp.path(), &provider);
+
+        // Should fail with NotGitRepo error
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_project_name() {
         let temp = TempDir::new().unwrap();
         create_test_repo(&temp);
