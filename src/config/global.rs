@@ -18,8 +18,6 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub sync: SyncConfig,
     #[serde(default)]
-    pub sesh: SeshConfig,
-    #[serde(default)]
     pub linear: LinearConfig,
     #[serde(default)]
     pub github: GitHubConfig,
@@ -44,18 +42,6 @@ impl Default for SyncConfig {
         Self {
             patterns: default_sync_patterns(),
         }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SeshConfig {
-    #[serde(default = "default_true")]
-    pub auto_register: bool,
-}
-
-impl Default for SeshConfig {
-    fn default() -> Self {
-        Self { auto_register: true }
     }
 }
 
@@ -194,7 +180,6 @@ impl Default for GlobalConfig {
             default_category: default_category(),
             cache_dir: default_cache_dir(),
             sync: SyncConfig::default(),
-            sesh: SeshConfig::default(),
             linear: LinearConfig::default(),
             github: GitHubConfig::default(),
             diffview: DiffviewConfig::default(),
@@ -261,7 +246,6 @@ mod tests {
         assert_eq!(config.worktree_root, "~/.worktrees");
         assert_eq!(config.default_category, "dev");
         assert_eq!(config.cache_dir, "~/.cache/gwt");
-        assert!(config.sesh.auto_register);
         assert!(config.sync.patterns.contains(&".env".to_string()));
         assert!(config.sync.patterns.contains(&".envrc".to_string()));
         // Integrations disabled by default
@@ -278,7 +262,6 @@ worktree_root = "/custom/path"
         let config: GlobalConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.worktree_root, "/custom/path");
         assert_eq!(config.default_category, "dev"); // default
-        assert!(config.sesh.auto_register); // default
     }
 
     #[test]
@@ -290,9 +273,6 @@ default_category = "review"
 [sync]
 patterns = [".env", "custom-file.txt"]
 
-[sesh]
-auto_register = false
-
 [linear]
 api_key = "test-key"
 team_prefix = "ABC"
@@ -300,7 +280,6 @@ team_prefix = "ABC"
         let config: GlobalConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.worktree_root, "/custom/path");
         assert_eq!(config.default_category, "review");
-        assert!(!config.sesh.auto_register);
         assert_eq!(config.sync.patterns.len(), 2);
         assert_eq!(config.linear.api_key, Some("test-key".to_string()));
         assert_eq!(config.linear.team_prefix, Some("ABC".to_string()));

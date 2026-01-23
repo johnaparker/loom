@@ -34,7 +34,6 @@ The killer feature. Via Claude Code hooks (`gwt hook`):
 | Linear | Link worktrees to issues, show status in dashboard |
 | GitHub | Track PR state, checks, reviews in dashboard |
 | tmux | Session management, quick switching |
-| sesh | Worktree registration for session picker |
 
 ### Local Tool Integration
 - **tmux**: Create/switch sessions per worktree
@@ -93,10 +92,8 @@ src/
 │   │   ├── time.rs       # ISO8601 time utilities
 │   │   ├── state.rs      # State machine logic
 │   │   └── cache.rs      # Session state caching
-│   ├── tmux/
-│   │   └── mod.rs        # Tmux session management
-│   └── sesh/
-│       └── mod.rs        # Sesh.toml integration
+│   └── tmux/
+│       └── mod.rs        # Tmux session management
 ├── git/
 │   ├── mod.rs
 │   └── worktree.rs       # Git2 + git CLI worktree ops
@@ -134,7 +131,7 @@ src/
 - Use `anyhow::Result` for error handling in commands
 - Use `GwtError` (in `src/error.rs`) for user-facing errors with helpful suggestions
 - Use `colored` for terminal output formatting
-- Commands follow pattern: open repo -> load config -> perform action -> update sesh/tmux
+- Commands follow pattern: open repo -> load config -> perform action -> update tmux
 - Git operations use `git2` where possible, fall back to CLI for complex operations
 - Commands with optional name arg: no arg = TUI picker, with arg = fuzzy match (nucleo)
 - Destructive commands (merge, remove) support `--dry-run` flag to preview actions
@@ -146,7 +143,7 @@ src/
 - **`core/`**: Shared utilities used by both CLI commands and TUI
   - `FuzzyMatcher` for all fuzzy matching (replaces duplicate implementations)
   - `with_alternate_screen()` for terminal setup/teardown
-- **`connectors/`**: External service integrations (Linear, GitHub, Claude, tmux, sesh)
+- **`connectors/`**: External service integrations (Linear, GitHub, Claude, tmux)
   - Each connector has its own subdirectory with types, API, and cache modules
   - Shared cache utilities in `connectors/cache.rs` (platform cache dir via `dirs` crate: `~/Library/Caches/gwt/` on macOS)
   - Import via `crate::linear`, `crate::github`, etc. (re-exported in lib.rs)

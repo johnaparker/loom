@@ -49,7 +49,6 @@ gwt integrates with external services via connectors:
 | **Linear** | Link worktrees to issues, show status | Set `LINEAR_API_KEY` env var |
 | **GitHub** | Track PR state, checks, reviews | Install [gh CLI](https://cli.github.com/) and authenticate |
 | **tmux** | Session management, quick switching | Just have tmux installed |
-| **sesh** | Worktree registration for session picker | Optional, auto-detected |
 
 ### Configuration
 
@@ -75,10 +74,6 @@ workflow = "push"
 [sync]
 # Files/dirs to sync from main when creating worktrees
 patterns = [".env", ".envrc", ".claude/"]
-
-[sesh]
-# Register worktrees with sesh session picker
-auto_register = true
 
 [linear]
 # Enable Linear integration (default: false)

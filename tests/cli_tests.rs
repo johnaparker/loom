@@ -480,7 +480,7 @@ mod worktree_discovery_tests {
         std::fs::write(
             &config_path,
             format!(
-                "worktree_root = \"{}\"\ndefault_category = \"dev\"\n[sync]\npatterns = []\n[sesh]\nauto_register = false\n[linear]\n",
+                "worktree_root = \"{}\"\ndefault_category = \"dev\"\n[sync]\npatterns = []\n[linear]\n",
                 temp_dir.path().display()
             ),
         )

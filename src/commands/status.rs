@@ -12,7 +12,6 @@ use crate::config::Config;
 use crate::git::WorktreeManager;
 use crate::github;
 use crate::linear;
-use crate::sesh;
 use crate::tmux;
 use crate::tui::{Dashboard, DashboardResult};
 
@@ -69,7 +68,7 @@ fn run_dashboard_loop(
     loop {
         match dashboard.run_with_terminal(terminal)? {
             DashboardResult::SwitchTo(wt) => {
-                let session = sesh::session_name(project_name, &wt.info.name);
+                let session = format!("{}/{}", project_name, &wt.info.name);
 
                 // Auto-pull in pull workflow if branch is behind tracking
                 let pulled = if config.is_pull_workflow()
@@ -187,7 +186,7 @@ fn run_dashboard_loop(
                 dashboard.trigger_stats_refresh();
             }
             DashboardResult::Review { worktree } => {
-                let session = sesh::session_name(project_name, &worktree.info.name);
+                let session = format!("{}/{}", project_name, &worktree.info.name);
                 let path_str = worktree.info.path.to_str().unwrap();
                 let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
                 let nvim_command = tmux::build_review_command(&main_branch);
@@ -203,7 +202,7 @@ fn run_dashboard_loop(
                 dashboard.trigger_stats_refresh();
             }
             DashboardResult::Claude { worktree } => {
-                let session = sesh::session_name(project_name, &worktree.info.name);
+                let session = format!("{}/{}", project_name, &worktree.info.name);
                 let path_str = worktree.info.path.to_str().unwrap();
                 let claude_command = "bash -c 'claude; exec $SHELL'";
 

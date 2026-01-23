@@ -70,14 +70,6 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
         println!("{} Ran direnv allow", "✓".green());
     }
 
-    if result.sesh_registered {
-        println!(
-            "{} Registered sesh session: {}",
-            "✓".green(),
-            result.session_name
-        );
-    }
-
     // Auto-switch to the new tmux session
     println!(
         "{} Switching to session '{}'",

@@ -2,7 +2,7 @@
 name = "gwt"
 version = "0.2.0"
 edition = "2024"
-description = "Git worktree manager with tmux/sesh integration"
+description = "Git worktree manager with tmux integration"
 
 [dependencies]
 # CLI

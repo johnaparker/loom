@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::WorktreeManager;
-use crate::{sesh, tmux};
+use crate::tmux;
 
 pub fn review() -> Result<()> {
     let current_dir = std::env::current_dir()?;
@@ -23,7 +23,7 @@ pub fn review() -> Result<()> {
         Err(GwtError::CannotReviewMain)?;
     }
 
-    let session = sesh::session_name(&project_name, &worktree.name);
+    let session = format!("{}/{}", project_name, &worktree.name);
     let path_str = worktree.path.to_str().unwrap();
     let main_branch = manager
         .main_branch_name()
