@@ -49,7 +49,6 @@ gwt integrates with external services via connectors:
 | **Linear** | Link worktrees to issues, show status | Set `LINEAR_API_KEY` env var |
 | **GitHub** | Track PR state, checks, reviews | Install [gh CLI](https://cli.github.com/) and authenticate |
 | **tmux** | Session management, quick switching | Just have tmux installed |
-| **sesh** | Worktree registration for session picker | Optional, auto-detected |
 
 ### Configuration
 
@@ -61,9 +60,6 @@ default_category = "dev"
 
 [sync]
 patterns = [".env", ".envrc", ".claude/"]
-
-[sesh]
-auto_register = true
 ```
 
 **Project config:** `.gwt.toml` in repo root

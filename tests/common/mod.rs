@@ -57,9 +57,6 @@ default_category = "dev"
 [sync]
 patterns = []
 
-[sesh]
-auto_register = false
-
 [linear]
 "#,
             worktree_dir.path().display()

@@ -12,7 +12,6 @@ use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::{PushResult, WorktreeManager, WorktreeStats};
 use crate::linear::{self, LinearIssue};
-use crate::sesh;
 use crate::sync;
 use crate::tmux;
 
@@ -174,7 +173,6 @@ pub enum MergeResult {
 /// Clean up all resources associated with a worktree.
 ///
 /// This handles:
-/// - Unregistering from sesh
 /// - Deleting Linear metadata cache
 /// - Killing the tmux session if it exists (LAST - may terminate current process)
 ///
@@ -182,10 +180,9 @@ pub enum MergeResult {
 /// IMPORTANT: tmux kill is done last because if running from within the tmux session
 /// being killed, the process will terminate and nothing after will execute.
 pub fn cleanup_worktree_resources(cache_dir: &Path, project_name: &str, worktree_name: &str) -> Result<CleanupResult> {
-    let session_name = sesh::session_name(project_name, worktree_name);
+    let session_name = format!("{}/{}", project_name, worktree_name);
 
     // Do these BEFORE killing tmux - tmux kill may terminate this process
-    let sesh_unregistered = sesh::unregister_worktree(project_name, worktree_name)?;
     let linear_deleted = linear::delete_metadata(cache_dir, project_name, worktree_name).is_ok();
 
     // Kill tmux LAST - this may kill the current process if running from within the session
@@ -193,7 +190,6 @@ pub fn cleanup_worktree_resources(cache_dir: &Path, project_name: &str, worktree
 
     Ok(CleanupResult {
         tmux_killed,
-        sesh_unregistered,
         linear_deleted,
         linear_updated: false,
     })
@@ -204,7 +200,6 @@ pub fn cleanup_worktree_resources(cache_dir: &Path, project_name: &str, worktree
 #[allow(dead_code)]
 pub struct CleanupResult {
     pub tmux_killed: bool,
-    pub sesh_unregistered: bool,
     pub linear_deleted: bool,
     /// Whether Linear issue status was updated (e.g., to "Done" on merge)
     pub linear_updated: bool,
@@ -311,7 +306,7 @@ pub struct CreateWorktreeResult {
     pub git_branch: String,
     /// Full path to the worktree
     pub worktree_path: PathBuf,
-    /// Session name for tmux/sesh
+    /// Session name for tmux
     pub session_name: String,
     /// Whether the worktree tracks a remote branch
     pub tracked_remote: bool,
@@ -323,8 +318,6 @@ pub struct CreateWorktreeResult {
     pub synced_files: Vec<String>,
     /// Whether direnv allow was run
     pub direnv_allowed: bool,
-    /// Whether registered with sesh
-    pub sesh_registered: bool,
 }
 
 /// Create a new worktree with all associated setup.
@@ -339,7 +332,6 @@ pub struct CreateWorktreeResult {
 /// - Updating Linear issue status to "In Progress"
 /// - Syncing files from main (.env, .envrc, .claude/)
 /// - Running direnv allow if needed
-/// - Registering with sesh
 ///
 /// Callers are responsible for:
 /// - Printing output (CLI) or showing results (TUI)
@@ -420,21 +412,7 @@ pub fn create_worktree(
         }
     }
 
-    // Register with sesh if enabled
-    let session_name = sesh::session_name(project_name, &resolved.worktree_name);
-    let mut sesh_registered = false;
-
-    if config.sesh_auto_register() {
-        if sesh::register_worktree(
-            project_name,
-            &resolved.worktree_name,
-            worktree_path.to_str().unwrap(),
-        )
-        .is_ok()
-        {
-            sesh_registered = true;
-        }
-    }
+    let session_name = format!("{}/{}", project_name, &resolved.worktree_name);
 
     Ok(CreateWorktreeResult {
         worktree_name: resolved.worktree_name,
@@ -446,6 +424,5 @@ pub fn create_worktree(
         linear_status_updated,
         synced_files,
         direnv_allowed,
-        sesh_registered,
     })
 }

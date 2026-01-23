@@ -14,5 +14,4 @@ pub mod tui;
 pub use connectors::claude;
 pub use connectors::github;
 pub use connectors::linear;
-pub use connectors::sesh;
 pub use connectors::tmux;

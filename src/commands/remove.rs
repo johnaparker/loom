@@ -9,7 +9,6 @@ use crate::error::GwtError;
 use crate::git::{WorktreeInfo, WorktreeManager};
 use crate::linear;
 use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
-use crate::sesh;
 use crate::tmux;
 use crate::tui::Picker;
 
@@ -133,7 +132,7 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
         }
     }
 
-    let session_name = sesh::session_name(&project_name, &worktree.name);
+    let session_name = format!("{}/{}", project_name, worktree.name);
     let use_force = force || has_uncommitted;
 
     // Dry run mode - preview actions
@@ -161,10 +160,6 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
         if tmux::session_exists(&session_name) {
             dry_run_action(&format!("Kill tmux session '{}'", session_name.cyan()));
         }
-        dry_run_action(&format!(
-            "Unregister sesh session '{}'",
-            session_name.cyan()
-        ));
         if let Some(ref branch) = worktree.branch {
             dry_run_action(&format!("Offer to delete branch '{}'", branch.green()));
         }
@@ -186,11 +181,6 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     // Kill tmux session if it exists
     if tmux::kill_session(&session_name) {
         println!("{} Killed tmux session", "✓".green());
-    }
-
-    // Unregister from sesh
-    if sesh::unregister_worktree(&project_name, &worktree.name)? {
-        println!("{} Unregistered sesh session", "✓".green());
     }
 
     // Clean up Linear cache
