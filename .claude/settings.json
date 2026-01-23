@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:crates.io)",
+      "Bash(cargo search:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo check:*)",
+      "Bash(printf:*)",
+      "mcp__linear-server__update_issue"
+    ]
+  }
+}

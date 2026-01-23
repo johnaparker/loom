@@ -1,16 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch",
-      "WebFetch(domain:crates.io)",
-      "Bash(cargo search:*)",
-      "Bash(cargo build:*)",
-      "Bash(cargo clippy:*)",
-      "Bash(cargo test:*)",
-      "Bash(printf:*)",
-      "Bash(/Users/john/github/gwt/target/debug/gwt hook:*)",
-      "Bash(cargo check:*)",
-      "mcp__linear-server__update_issue"
+      "Bash(/Users/john/github/gwt/target/debug/gwt hook:*)"
     ]
   }
 }
