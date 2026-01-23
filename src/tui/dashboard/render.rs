@@ -395,30 +395,13 @@ impl Dashboard {
     }
 
     /// Format a compact GitHub PR indicator line for the worktree list.
-    /// Format: `  [icon] #123 OPEN  ✓approved  ✓3/3  @john`
+    /// Format: `  [icon] OPEN  ✓approved  ✓3/3  @john`
     fn format_github_indicator(
         pr: &GitHubPR,
         width: usize,
         github_icon: Option<&str>,
     ) -> Line<'static> {
         let mut spans = Vec::new();
-
-        // Indent with optional icon (icon colored cyan to match PR number)
-        spans.push(Span::raw("  "));
-        if let Some(icon) = github_icon {
-            spans.push(Span::styled(
-                format!("{} ", icon),
-                Style::default().fg(Color::Cyan),
-            ));
-        }
-
-        // PR number (cyan)
-        spans.push(Span::styled(
-            format!("#{}", pr.number),
-            Style::default().fg(Color::Cyan),
-        ));
-
-        spans.push(Span::raw(" "));
 
         // State with color - DRAFT shown instead of OPEN when applicable
         let (display_state, state_color) = if pr.draft {
@@ -434,10 +417,18 @@ impl Dashboard {
                 },
             )
         };
-        spans.push(Span::styled(
-            display_state,
-            Style::default().fg(state_color),
-        ));
+
+        // Indent with optional icon (icon colored to match status)
+        spans.push(Span::raw("  "));
+        if let Some(icon) = github_icon {
+            spans.push(Span::styled(
+                format!("{} ", icon),
+                Style::default().fg(state_color),
+            ));
+        }
+
+        // State
+        spans.push(Span::styled(display_state, Style::default().fg(state_color)));
 
         // Review decision with icon
         if let Some(ref decision) = pr.review_decision {
