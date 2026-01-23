@@ -7,7 +7,6 @@ use crate::error::GwtError;
 use crate::git::WorktreeManager;
 use crate::linear;
 use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
-use crate::sesh;
 
 pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     let current_dir = std::env::current_dir()?;
@@ -40,7 +39,6 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
         .clone();
 
     let main_branch = manager.main_branch_name()?;
-    let session_name = sesh::session_name(&project_name, name);
 
     // Check for Linear issue metadata (used for status updates)
     // Fallback: if no cache, try to extract issue from branch name
@@ -68,7 +66,6 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
             worktree.path.display().to_string().dimmed()
         ));
         dry_run_action(&format!("Offer to delete branch '{}'", branch.green()));
-        dry_run_action(&format!("Unregister sesh session '{}'", session_name.cyan()));
         if config.linear_auto_update_status() && config.linear_api_key().is_some() {
             if let Some(ref issue) = linear_issue {
                 dry_run_action(&format!(
@@ -115,11 +112,6 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
         println!("{} Branch '{}' deleted", "✓".green(), branch);
     } else {
         println!("{} Branch '{}' kept", "→".blue(), branch);
-    }
-
-    // Unregister from sesh
-    if sesh::unregister_worktree(&project_name, name)? {
-        println!("{} Unregistered sesh session", "✓".green());
     }
 
     // Clean up Linear cache
