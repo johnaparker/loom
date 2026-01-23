@@ -1,8 +1,13 @@
 mod global;
 mod project;
+mod source;
 
 pub use global::{GlobalConfig, SyncWorkflow};
 pub use project::ProjectConfig;
+pub use source::{ConfigSource, FilesystemSource};
+
+#[cfg(test)]
+pub use source::MemorySource;
 
 use anyhow::Result;
 use std::path::{Path, PathBuf};
@@ -18,14 +23,27 @@ impl Config {
     /// Load configuration from global config and optional project config.
     /// Checks current working directory for .gwt.toml first, then falls back to repo root.
     pub fn load(repo_root: Option<&Path>) -> Result<Self> {
-        let global = GlobalConfig::load()?;
+        Self::load_with_source(repo_root, &FilesystemSource)
+    }
+
+    /// Load configuration using a custom source (for testing).
+    pub fn load_with_source<S: ConfigSource>(repo_root: Option<&Path>, source: &S) -> Result<Self> {
+        let global = GlobalConfig::load_with_source(source)?;
         let project = if let Some(root) = repo_root {
+            // For now, project config loading still uses filesystem
+            // because it has more complex path resolution logic
             let current_dir = std::env::current_dir().ok();
             ProjectConfig::load(current_dir.as_deref(), root)?
         } else {
             None
         };
         Ok(Self { global, project })
+    }
+
+    /// Create a Config from pre-built components (for testing).
+    #[cfg(test)]
+    pub fn from_parts(global: GlobalConfig, project: Option<ProjectConfig>) -> Self {
+        Self { global, project }
     }
 
     /// Get the worktree root directory, expanding ~ to home
@@ -201,5 +219,83 @@ mod tests {
         assert_eq!(config.workflow(), SyncWorkflow::Push);
         assert!(config.is_push_workflow());
         assert!(!config.is_pull_workflow());
+    }
+
+    // Tests demonstrating new injection patterns
+
+    #[test]
+    fn test_config_from_parts_direct_construction() {
+        // Test Config from pre-built parts (no filesystem access)
+        let config = Config::from_parts(
+            GlobalConfig {
+                workflow: SyncWorkflow::Pull,
+                worktree_root: "/custom/path".to_string(),
+                ..GlobalConfig::default()
+            },
+            None,
+        );
+
+        assert!(config.is_pull_workflow());
+        assert_eq!(config.worktree_root().unwrap(), PathBuf::from("/custom/path"));
+    }
+
+    #[test]
+    fn test_config_load_with_memory_source() {
+        // Test config loading with in-memory source (no filesystem)
+        let source = MemorySource {
+            global_config: Some(
+                r#"
+worktree_root = "/test/worktrees"
+default_category = "feature"
+workflow = "pull"
+"#
+                .to_string(),
+            ),
+            ..Default::default()
+        };
+
+        let config = Config::load_with_source(None, &source).unwrap();
+        assert_eq!(config.global.worktree_root, "/test/worktrees");
+        assert_eq!(config.default_category(), "feature");
+        assert!(config.is_pull_workflow());
+    }
+
+    #[test]
+    fn test_config_load_with_missing_global_uses_defaults() {
+        // Test that missing global config returns defaults
+        let source = MemorySource::default();
+
+        let config = Config::load_with_source(None, &source).unwrap();
+        assert_eq!(config.global.worktree_root, "~/worktrees");
+        assert_eq!(config.default_category(), "dev");
+        assert!(config.is_push_workflow()); // Push is default
+    }
+
+    #[test]
+    fn test_config_from_parts_with_project() {
+        // Test Config from parts with project config
+        let config = Config::from_parts(
+            GlobalConfig {
+                workflow: SyncWorkflow::Push,
+                ..GlobalConfig::default()
+            },
+            Some(ProjectConfig {
+                project_name: Some("test-project".to_string()),
+                sync: ProjectSyncConfig {
+                    patterns: vec!["custom.txt".to_string()],
+                },
+                git: ProjectGitConfig {
+                    workflow: Some(SyncWorkflow::Pull), // Override global
+                },
+            }),
+        );
+
+        // Project workflow should override global
+        assert!(config.is_pull_workflow());
+        assert_eq!(config.project_name("default"), "test-project");
+
+        // Sync patterns should merge
+        let patterns = config.sync_patterns();
+        assert!(patterns.contains(&"custom.txt".to_string()));
     }
 }

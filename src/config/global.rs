@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use super::source::{ConfigSource, FilesystemSource};
+
 /// Global configuration stored at ~/.config/gwt/config.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalConfig {
@@ -159,25 +161,18 @@ impl GlobalConfig {
     /// Prefers ~/.config/gwt/config.toml (XDG-style) if it exists,
     /// otherwise falls back to platform default
     pub fn config_path() -> Result<PathBuf> {
-        // Prefer XDG-style path (~/.config/gwt/config.toml)
-        if let Some(home) = dirs::home_dir() {
-            let xdg_path = home.join(".config").join("gwt").join("config.toml");
-            if xdg_path.exists() {
-                return Ok(xdg_path);
-            }
-        }
-
-        // Fall back to platform default
-        let config_dir = dirs::config_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
-        Ok(config_dir.join("gwt").join("config.toml"))
+        FilesystemSource.global_config_path()
     }
 
     /// Load global config from disk, or return defaults if not found
     pub fn load() -> Result<Self> {
-        let path = Self::config_path()?;
-        if path.exists() {
-            let content = fs::read_to_string(&path)?;
+        Self::load_with_source(&FilesystemSource)
+    }
+
+    /// Load global config using a custom source (for testing).
+    pub fn load_with_source<S: ConfigSource>(source: &S) -> Result<Self> {
+        let path = source.global_config_path()?;
+        if let Some(content) = source.read_config(&path)? {
             let config: GlobalConfig = toml::from_str(&content)?;
             Ok(config)
         } else {
@@ -200,6 +195,17 @@ impl GlobalConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::MemorySource;
+
+    #[test]
+    fn test_load_with_source_invalid_toml() {
+        let source = MemorySource {
+            global_config: Some("invalid { toml [[[".to_string()),
+            ..Default::default()
+        };
+        let result = GlobalConfig::load_with_source(&source);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_default_config() {
