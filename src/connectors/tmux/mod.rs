@@ -248,3 +248,28 @@ pub fn switch_to_pane(session_name: &str, location: &PaneLocation) -> Result<()>
 
     Ok(())
 }
+
+/// Find an active Claude pane in a session.
+///
+/// Claude uses various pane titles: "Claude" (normal), "✳" (multi-pane),
+/// or Braille patterns (spinner/stats).
+///
+/// Returns the pane location if found, None otherwise.
+pub fn find_active_claude_pane(session: &str) -> Option<PaneLocation> {
+    find_pane_with_title(session, "Claude")
+        .or_else(|| find_pane_with_title(session, "✳"))
+        .or_else(|| find_pane_with_braille_title(session))
+}
+
+/// Build a bash command to open nvim with DiffviewOpen for reviewing changes.
+///
+/// Uses merge-base to show only the worktree's changes since branching,
+/// avoiding showing changes main has that the worktree doesn't.
+/// Wraps in bash -c so command substitution is evaluated, and
+/// exec $SHELL keeps window open after nvim exits.
+pub fn build_review_command(main_branch: &str) -> String {
+    format!(
+        "bash -c 'nvim -c \"DiffviewOpen $(git merge-base {} HEAD)\"; exec $SHELL'",
+        main_branch
+    )
+}
