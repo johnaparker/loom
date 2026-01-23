@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use super::IntegrationOverride;
+
 /// Worktree-specific configuration stored at .gwt.toml in the worktree directory.
 ///
 /// This config only applies once the worktree exists - it cannot be used during
@@ -19,13 +21,13 @@ pub struct WorktreeConfig {
     pub sync: WorktreeSyncConfig,
     /// Linear integration override
     #[serde(default)]
-    pub linear: Option<WorktreeIntegrationConfig>,
+    pub linear: Option<IntegrationOverride>,
     /// GitHub integration override
     #[serde(default)]
-    pub github: Option<WorktreeIntegrationConfig>,
+    pub github: Option<IntegrationOverride>,
     /// Diffview integration override
     #[serde(default)]
-    pub diffview: Option<WorktreeIntegrationConfig>,
+    pub diffview: Option<IntegrationOverride>,
 }
 
 /// Worktree-level sync configuration
@@ -37,13 +39,6 @@ pub struct WorktreeSyncConfig {
     /// Patterns to exclude from syncing to this worktree
     #[serde(default)]
     pub exclude_patterns: Vec<String>,
-}
-
-/// Worktree-level integration configuration override
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct WorktreeIntegrationConfig {
-    /// Override the enabled state for this worktree
-    pub enabled: Option<bool>,
 }
 
 impl WorktreeConfig {
@@ -91,7 +86,7 @@ mod tests {
                 patterns: vec!["extra.txt".to_string()],
                 exclude_patterns: vec![".claude/".to_string()],
             },
-            linear: Some(WorktreeIntegrationConfig { enabled: Some(false) }),
+            linear: Some(IntegrationOverride { enabled: Some(false) }),
             github: None,
             diffview: None,
         };

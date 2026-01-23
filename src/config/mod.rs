@@ -4,15 +4,25 @@ mod source;
 mod worktree;
 
 pub use global::{DiffviewConfig, GitHubConfig, GlobalConfig, LinearConfig, SyncWorkflow};
-pub use project::{ProjectConfig, ProjectIntegrationConfig};
+pub use project::ProjectConfig;
 pub use source::{ConfigSource, FilesystemSource};
-pub use worktree::{WorktreeConfig, WorktreeIntegrationConfig, WorktreeSyncConfig};
+pub use worktree::{WorktreeConfig, WorktreeSyncConfig};
 
 #[cfg(test)]
 pub use source::MemorySource;
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+
+/// Shared integration override configuration.
+///
+/// Used by both project and worktree configs to override integration enabled state.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IntegrationOverride {
+    /// Override the enabled state at this config level
+    pub enabled: Option<bool>,
+}
 
 /// Combined configuration from global and project sources
 #[derive(Debug, Clone)]
@@ -526,9 +536,9 @@ workflow = "pull"
             project_name: None,
             sync: ProjectSyncConfig::default(),
             git: ProjectGitConfig::default(),
-            linear: Some(ProjectIntegrationConfig { enabled: Some(false) }),
+            linear: Some(IntegrationOverride { enabled: Some(false) }),
             github: None, // No override
-            diffview: Some(ProjectIntegrationConfig { enabled: Some(true) }),
+            diffview: Some(IntegrationOverride { enabled: Some(true) }),
         };
 
         let config = Config::from_parts(global, Some(project));
@@ -538,5 +548,51 @@ workflow = "pull"
         assert!(!resolved.linear.enabled); // Was true globally, disabled by project
         assert!(resolved.github.enabled);  // No project override, uses global (true)
         assert!(resolved.diffview.enabled); // Was false globally, enabled by project
+    }
+
+    #[test]
+    fn test_resolved_config_worktree_overrides_all() {
+        use tempfile::TempDir;
+        use worktree::{WorktreeConfig, WorktreeSyncConfig};
+
+        // Create temp worktree directory with config
+        let temp_dir = TempDir::new().unwrap();
+        let wt_config = WorktreeConfig {
+            sync: WorktreeSyncConfig {
+                patterns: vec!["worktree-only.txt".to_string()],
+                exclude_patterns: vec![".env".to_string()], // Exclude from global patterns
+            },
+            linear: Some(IntegrationOverride { enabled: Some(true) }), // Override project's false
+            github: Some(IntegrationOverride { enabled: Some(false) }), // Override global's true
+            diffview: None, // No override - should use project's true
+        };
+        wt_config.save(temp_dir.path()).unwrap();
+
+        // Global: linear=false, github=true, diffview=false
+        let mut global = GlobalConfig::default();
+        global.github.enabled = true;
+
+        // Project: linear=false, github=None (uses global), diffview=true
+        let project = ProjectConfig {
+            project_name: None,
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig::default(),
+            linear: Some(IntegrationOverride { enabled: Some(false) }),
+            github: None,
+            diffview: Some(IntegrationOverride { enabled: Some(true) }),
+        };
+
+        let config = Config::from_parts(global, Some(project));
+        let resolved = config.resolve(Some(temp_dir.path())).unwrap();
+
+        // Worktree overrides should win
+        assert!(resolved.linear.enabled); // Worktree true overrides project false
+        assert!(!resolved.github.enabled); // Worktree false overrides global true
+        assert!(resolved.diffview.enabled); // No worktree override, uses project true
+
+        // Sync patterns: global patterns minus worktree excludes, plus worktree additions
+        assert!(resolved.sync_patterns.contains(&"worktree-only.txt".to_string()));
+        assert!(!resolved.sync_patterns.contains(&".env".to_string())); // Excluded by worktree
+        assert!(resolved.sync_patterns.contains(&".envrc".to_string())); // Global pattern not excluded
     }
 }

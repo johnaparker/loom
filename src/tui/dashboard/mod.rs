@@ -193,8 +193,6 @@ impl Dashboard {
         // Load initial Claude states
         let (claude_states, has_active_claude) = load_claude_states(cache_dir, &project_name, &worktrees);
 
-        let is_pull_workflow = config.workflow == crate::config::SyncWorkflow::Pull;
-
         let mut dashboard = Self {
             worktrees,
             filtered_indices,
@@ -243,7 +241,7 @@ impl Dashboard {
         }
 
         // Start initial git fetch to get fresh remote refs (only for pull-based workflows)
-        if is_pull_workflow {
+        if dashboard.is_pull_workflow() {
             dashboard.start_git_fetch();
         }
 

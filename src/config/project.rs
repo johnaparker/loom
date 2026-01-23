@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use super::global::SyncWorkflow;
+use super::IntegrationOverride;
 
 /// Project-specific configuration stored at .gwt.toml in repo root
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,20 +17,13 @@ pub struct ProjectConfig {
     pub git: ProjectGitConfig,
     /// Linear integration override
     #[serde(default)]
-    pub linear: Option<ProjectIntegrationConfig>,
+    pub linear: Option<IntegrationOverride>,
     /// GitHub integration override
     #[serde(default)]
-    pub github: Option<ProjectIntegrationConfig>,
+    pub github: Option<IntegrationOverride>,
     /// Diffview integration override
     #[serde(default)]
-    pub diffview: Option<ProjectIntegrationConfig>,
-}
-
-/// Project-level integration configuration override
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ProjectIntegrationConfig {
-    /// Override the enabled state for this project
-    pub enabled: Option<bool>,
+    pub diffview: Option<IntegrationOverride>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
