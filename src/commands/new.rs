@@ -2,19 +2,32 @@ use anyhow::Result;
 use colored::Colorize;
 
 use super::operations;
-use crate::cli::Category;
 use crate::config::Config;
+use crate::error::GwtError;
 use crate::git::WorktreeManager;
 use crate::github::{self, GitHubUrlType};
 use crate::tmux;
 
-pub fn new(branch: &str, category: Category) -> Result<()> {
+pub fn new(branch: &str, category: Option<String>) -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let manager = WorktreeManager::open(&current_dir)?;
     let config = Config::load(Some(manager.repo_root()))?;
 
     let project_name = config.project_name(&manager.project_name()?);
     let cache_dir = config.cache_dir()?;
+
+    // Resolve category: use provided value or default from config
+    let category = category.unwrap_or_else(|| config.default_category().to_string());
+
+    // Validate category against configured list
+    let valid_categories = config.categories();
+    if !valid_categories.iter().any(|c| c == &category) {
+        return Err(GwtError::InvalidCategory {
+            category,
+            valid: valid_categories,
+        }
+        .into());
+    }
 
     // Pre-resolve GitHub URLs (CLI-specific feature with output)
     let resolved_branch = resolve_github_url(branch, &manager)?;
@@ -25,7 +38,7 @@ pub fn new(branch: &str, category: Category) -> Result<()> {
         &config,
         &project_name,
         &resolved_branch,
-        category,
+        &category,
         &cache_dir,
     )?;
 

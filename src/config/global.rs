@@ -12,6 +12,9 @@ pub struct GlobalConfig {
     pub worktree_root: String,
     #[serde(default = "default_category")]
     pub default_category: String,
+    /// Configurable worktree categories (max 4, default: ["dev"])
+    #[serde(default = "default_categories")]
+    pub categories: Vec<String>,
     /// Cache directory (default: ~/.cache/gwt)
     #[serde(default = "default_cache_dir")]
     pub cache_dir: String,
@@ -157,6 +160,10 @@ fn default_category() -> String {
     "dev".to_string()
 }
 
+fn default_categories() -> Vec<String> {
+    vec!["dev".to_string()]
+}
+
 fn default_cache_dir() -> String {
     "~/.cache/gwt".to_string()
 }
@@ -178,6 +185,7 @@ impl Default for GlobalConfig {
         Self {
             worktree_root: default_worktree_root(),
             default_category: default_category(),
+            categories: default_categories(),
             cache_dir: default_cache_dir(),
             sync: SyncConfig::default(),
             linear: LinearConfig::default(),
@@ -245,6 +253,7 @@ mod tests {
         let config = GlobalConfig::default();
         assert_eq!(config.worktree_root, "~/.worktrees");
         assert_eq!(config.default_category, "dev");
+        assert_eq!(config.categories, vec!["dev".to_string()]);
         assert_eq!(config.cache_dir, "~/.cache/gwt");
         assert!(config.sync.patterns.contains(&".env".to_string()));
         assert!(config.sync.patterns.contains(&".envrc".to_string()));
@@ -371,5 +380,27 @@ worktree_root = "/custom/path"
         assert!(!config.linear.enabled);
         assert!(!config.github.enabled);
         assert!(!config.diffview.enabled);
+    }
+
+    #[test]
+    fn test_parse_categories() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+categories = ["dev", "feature", "review", "hotfix"]
+default_category = "feature"
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.categories, vec!["dev", "feature", "review", "hotfix"]);
+        assert_eq!(config.default_category, "feature");
+    }
+
+    #[test]
+    fn test_categories_default() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        // Should default to ["dev"]
+        assert_eq!(config.categories, vec!["dev".to_string()]);
     }
 }

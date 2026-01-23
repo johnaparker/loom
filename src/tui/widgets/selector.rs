@@ -16,6 +16,20 @@ impl<T: Clone + PartialEq> Selector<T> {
         }
     }
 
+    /// Create a selector with a specific default selection index.
+    pub fn new_with_default(label: impl Into<String>, options: Vec<(T, String)>, default_idx: usize) -> Self {
+        let selected = if default_idx < options.len() {
+            default_idx
+        } else {
+            0
+        };
+        Self {
+            label: label.into(),
+            options,
+            selected,
+        }
+    }
+
     pub fn selected_value(&self) -> Option<&T> {
         self.options.get(self.selected).map(|(v, _)| v)
     }

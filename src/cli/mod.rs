@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
 #[derive(Parser)]
@@ -18,9 +18,9 @@ pub enum Commands {
         /// Branch name for the new worktree
         branch: String,
 
-        /// Category for the worktree (dev, review, demo)
-        #[arg(short, long, value_enum, default_value = "dev")]
-        category: Category,
+        /// Category for the worktree (uses configured categories, default from config)
+        #[arg(short, long)]
+        category: Option<String>,
     },
 
     /// List all worktrees for the current project
@@ -110,19 +110,3 @@ pub enum Commands {
     },
 }
 
-#[derive(Clone, Copy, ValueEnum, Debug)]
-pub enum Category {
-    Dev,
-    Review,
-    Demo,
-}
-
-impl std::fmt::Display for Category {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Category::Dev => write!(f, "dev"),
-            Category::Review => write!(f, "review"),
-            Category::Demo => write!(f, "demo"),
-        }
-    }
-}

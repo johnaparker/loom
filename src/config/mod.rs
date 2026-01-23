@@ -74,6 +74,23 @@ impl Config {
         &self.global.default_category
     }
 
+    /// Get the configured categories (filtered, max 4).
+    /// Filters out empty strings and takes only the first 4 categories.
+    pub fn categories(&self) -> Vec<String> {
+        self.global
+            .categories
+            .iter()
+            .filter(|c| !c.is_empty())
+            .take(4)
+            .cloned()
+            .collect()
+    }
+
+    /// Validate if a category is in the configured list.
+    pub fn validate_category(&self, category: &str) -> bool {
+        self.categories().iter().any(|c| c == category)
+    }
+
     /// Get the project name (from project config or provided default)
     pub fn project_name(&self, default: &str) -> String {
         self.project
@@ -231,8 +248,8 @@ impl Config {
                 github: self.global.icons.github.clone(),
                 branch: self.global.icons.branch.clone(),
             },
-            sesh_auto_register: self.global.sesh.auto_register,
             default_category: self.global.default_category.clone(),
+            categories: self.categories(),
         })
     }
 
@@ -284,8 +301,9 @@ pub struct ResolvedConfig {
     pub diffview: ResolvedDiffviewConfig,
     pub sync_patterns: Vec<String>,
     pub icons: ResolvedIconsConfig,
-    pub sesh_auto_register: bool,
     pub default_category: String,
+    /// Configured worktree categories (max 4)
+    pub categories: Vec<String>,
 }
 
 /// Resolved Linear integration configuration

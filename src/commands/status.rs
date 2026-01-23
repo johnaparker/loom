@@ -7,7 +7,6 @@ use ratatui::prelude::*;
 use std::io::{self, stdout};
 
 use super::operations::{self, MergeResult};
-use crate::cli::Category;
 use crate::config::Config;
 use crate::git::WorktreeManager;
 use crate::github;
@@ -277,13 +276,7 @@ fn run_dashboard_loop(
                 }
             }
             DashboardResult::CreateNew { branch, category, auto_claude, plan_mode } => {
-                let cat = match category.as_str() {
-                    "review" => Category::Review,
-                    "demo" => Category::Demo,
-                    _ => Category::Dev,
-                };
-
-                match operations::create_worktree(manager, config, project_name, &branch, cat, cache_dir) {
+                match operations::create_worktree(manager, config, project_name, &branch, &category, cache_dir) {
                     Ok(create_result) => {
                         let path_str = create_result.worktree_path.to_str().unwrap();
 
