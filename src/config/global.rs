@@ -21,6 +21,10 @@ pub struct GlobalConfig {
     pub sesh: SeshConfig,
     #[serde(default)]
     pub linear: LinearConfig,
+    #[serde(default)]
+    pub github: GitHubConfig,
+    #[serde(default)]
+    pub diffview: DiffviewConfig,
     /// Workflow mode for automatic git sync behavior
     #[serde(default)]
     pub workflow: SyncWorkflow,
@@ -57,6 +61,9 @@ impl Default for SeshConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinearConfig {
+    /// Whether Linear integration is enabled (default: false - must explicitly enable)
+    #[serde(default)]
+    pub enabled: bool,
     /// API key for Linear API access (optional)
     #[serde(default)]
     pub api_key: Option<String>,
@@ -71,11 +78,50 @@ pub struct LinearConfig {
 impl Default for LinearConfig {
     fn default() -> Self {
         Self {
+            enabled: false,
             api_key: None,
             team_prefix: None,
             auto_update_status: true,
         }
     }
+}
+
+/// GitHub integration configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitHubConfig {
+    /// Whether GitHub integration is enabled (default: false - must explicitly enable)
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Default for GitHubConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
+/// Diffview integration configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiffviewConfig {
+    /// Whether Diffview integration is enabled (default: false - must explicitly enable)
+    #[serde(default)]
+    pub enabled: bool,
+    /// Command to open neovim with DiffView (default: "nvim")
+    #[serde(default = "default_nvim_command")]
+    pub command: String,
+}
+
+impl Default for DiffviewConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            command: default_nvim_command(),
+        }
+    }
+}
+
+fn default_nvim_command() -> String {
+    "nvim".to_string()
 }
 
 /// Configuration for special character icons in TUI dashboard
@@ -118,7 +164,7 @@ pub enum SyncWorkflow {
 }
 
 fn default_worktree_root() -> String {
-    "~/worktrees".to_string()
+    "~/.worktrees".to_string()
 }
 
 fn default_category() -> String {
@@ -150,6 +196,8 @@ impl Default for GlobalConfig {
             sync: SyncConfig::default(),
             sesh: SeshConfig::default(),
             linear: LinearConfig::default(),
+            github: GitHubConfig::default(),
+            diffview: DiffviewConfig::default(),
             workflow: SyncWorkflow::default(),
             icons: IconsConfig::default(),
         }
@@ -210,12 +258,16 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = GlobalConfig::default();
-        assert_eq!(config.worktree_root, "~/worktrees");
+        assert_eq!(config.worktree_root, "~/.worktrees");
         assert_eq!(config.default_category, "dev");
         assert_eq!(config.cache_dir, "~/.cache/gwt");
         assert!(config.sesh.auto_register);
         assert!(config.sync.patterns.contains(&".env".to_string()));
         assert!(config.sync.patterns.contains(&".envrc".to_string()));
+        // Integrations disabled by default
+        assert!(!config.linear.enabled);
+        assert!(!config.github.enabled);
+        assert!(!config.diffview.enabled);
     }
 
     #[test]
@@ -302,5 +354,43 @@ linear = "🎫"
         assert_eq!(config.icons.linear, Some("🎫".to_string()));
         assert!(config.icons.github.is_none());
         assert!(config.icons.branch.is_none());
+    }
+
+    #[test]
+    fn test_parse_integration_configs() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+
+[linear]
+enabled = true
+api_key = "lin_api_123"
+team_prefix = "JOH"
+
+[github]
+enabled = true
+
+[diffview]
+enabled = true
+command = "nvim"
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.linear.enabled);
+        assert_eq!(config.linear.api_key, Some("lin_api_123".to_string()));
+        assert_eq!(config.linear.team_prefix, Some("JOH".to_string()));
+        assert!(config.github.enabled);
+        assert!(config.diffview.enabled);
+        assert_eq!(config.diffview.command, "nvim");
+    }
+
+    #[test]
+    fn test_integration_defaults_disabled() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        // All integrations should be disabled by default
+        assert!(!config.linear.enabled);
+        assert!(!config.github.enabled);
+        assert!(!config.diffview.enabled);
     }
 }

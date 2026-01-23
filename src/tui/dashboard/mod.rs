@@ -63,6 +63,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use crate::claude::ClaudeSession;
+use crate::config::ResolvedConfig;
 use crate::core::FuzzyMatcher;
 use crate::git::WorktreeStats;
 use crate::github::CachedPRState;
@@ -90,7 +91,8 @@ pub struct Dashboard {
     list_state: ListState,
     project_name: String,
     repo_root: PathBuf,
-    cache_dir: PathBuf,
+    /// Resolved configuration with all levels merged
+    config: ResolvedConfig,
     mode: DashboardMode,
     search_input: String,
     matcher: FuzzyMatcher,
@@ -122,10 +124,6 @@ pub struct Dashboard {
     linear_issue_sender: Sender<LinearIssueResult>,
     /// Worktrees currently loading Linear issue data
     linear_loading: std::collections::HashSet<String>,
-    /// Linear API key from config
-    linear_api_key: Option<String>,
-    /// Linear team prefix from config
-    linear_prefix: Option<String>,
     /// Channel for receiving git fetch completion
     git_fetch_receiver: Receiver<GitFetchResult>,
     /// Sender for spawning git fetch
@@ -134,14 +132,6 @@ pub struct Dashboard {
     git_fetch_in_progress: bool,
     /// Last fetch time (for periodic fetching)
     last_fetch_time: Option<Instant>,
-    /// Whether to run periodic git fetch (only needed for pull-based workflows)
-    pull_workflow: bool,
-    /// Icon to display before Linear issue titles
-    linear_icon: Option<String>,
-    /// Icon to display before GitHub PR info
-    github_icon: Option<String>,
-    /// Icon to display before branch names
-    branch_icon: Option<String>,
     /// Channel for receiving async worktree stats results
     worktree_stats_receiver: Receiver<WorktreeStatsResult>,
     /// Sender for spawning async worktree stats loads
@@ -161,13 +151,7 @@ impl Dashboard {
         worktrees: Vec<WorktreeStats>,
         project_name: String,
         repo_root: PathBuf,
-        cache_dir: PathBuf,
-        linear_api_key: Option<String>,
-        linear_prefix: Option<String>,
-        pull_workflow: bool,
-        linear_icon: Option<String>,
-        github_icon: Option<String>,
-        branch_icon: Option<String>,
+        config: ResolvedConfig,
     ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
         let mut list_state = ListState::default();
@@ -175,11 +159,21 @@ impl Dashboard {
             list_state.select(Some(0));
         }
 
-        // Load Linear issues for all worktrees (from cache)
-        let linear_issues = load_linear_issues(&cache_dir, &project_name, &worktrees);
+        let cache_dir = &config.cache_dir;
 
-        // Load GitHub PRs from cache only (API fetch happens lazily when GitHub panel is viewed)
-        let github_prs = load_github_prs_from_cache(&cache_dir, &project_name, &worktrees);
+        // Load Linear issues for all worktrees (from cache) - only if enabled
+        let linear_issues = if config.linear.enabled {
+            load_linear_issues(cache_dir, &project_name, &worktrees)
+        } else {
+            HashMap::new()
+        };
+
+        // Load GitHub PRs from cache only (API fetch happens lazily when GitHub panel is viewed) - only if enabled
+        let github_prs = if config.github.enabled {
+            load_github_prs_from_cache(cache_dir, &project_name, &worktrees)
+        } else {
+            HashMap::new()
+        };
 
         // Create channel for async GitHub PR fetches
         let (github_pr_sender, github_pr_receiver) = mpsc::channel();
@@ -197,7 +191,9 @@ impl Dashboard {
         let (cache_sender, cache_receiver) = mpsc::channel();
 
         // Load initial Claude states
-        let (claude_states, has_active_claude) = load_claude_states(&cache_dir, &project_name, &worktrees);
+        let (claude_states, has_active_claude) = load_claude_states(cache_dir, &project_name, &worktrees);
+
+        let is_pull_workflow = config.workflow == crate::config::SyncWorkflow::Pull;
 
         let mut dashboard = Self {
             worktrees,
@@ -206,7 +202,7 @@ impl Dashboard {
             list_state,
             project_name,
             repo_root,
-            cache_dir,
+            config,
             mode: DashboardMode::Normal,
             search_input: String::new(),
             matcher: FuzzyMatcher::new(),
@@ -224,16 +220,10 @@ impl Dashboard {
             linear_issue_receiver,
             linear_issue_sender,
             linear_loading: std::collections::HashSet::new(),
-            linear_api_key,
-            linear_prefix,
             git_fetch_receiver,
             git_fetch_sender,
             git_fetch_in_progress: false,
             last_fetch_time: None,
-            pull_workflow,
-            linear_icon,
-            github_icon,
-            branch_icon,
             worktree_stats_receiver,
             worktree_stats_sender,
             worktree_stats_loading: false,
@@ -242,14 +232,18 @@ impl Dashboard {
             cache_loading: false,
         };
 
-        // GitHub panel is always visible, so fetch PR data for initial selection
-        dashboard.fetch_github_pr_for_selected();
+        // GitHub panel is always visible, so fetch PR data for initial selection - only if enabled
+        if dashboard.config.github.enabled {
+            dashboard.fetch_github_pr_for_selected();
+        }
 
-        // Linear panel is always visible, so fetch issue data for initial selection
-        dashboard.fetch_linear_issue_for_selected();
+        // Linear panel is always visible, so fetch issue data for initial selection - only if enabled
+        if dashboard.config.linear.enabled {
+            dashboard.fetch_linear_issue_for_selected();
+        }
 
         // Start initial git fetch to get fresh remote refs (only for pull-based workflows)
-        if pull_workflow {
+        if is_pull_workflow {
             dashboard.start_git_fetch();
         }
 
@@ -258,6 +252,11 @@ impl Dashboard {
 
     /// Spawn async fetch of GitHub PR for the selected worktree (non-blocking)
     fn fetch_github_pr_for_selected(&mut self) {
+        // Skip if GitHub integration is disabled
+        if !self.config.github.enabled {
+            return;
+        }
+
         let Some(worktree) = self.get_selected_worktree() else {
             return;
         };
@@ -283,7 +282,7 @@ impl Dashboard {
 
         // Clone data needed for the thread
         fetch_github_pr_async(
-            self.cache_dir.clone(),
+            self.config.cache_dir.clone(),
             worktree_name,
             branch,
             self.repo_root.clone(),
@@ -314,8 +313,11 @@ impl Dashboard {
 
     /// Spawn async fetch of Linear issue for the selected worktree (non-blocking)
     fn fetch_linear_issue_for_selected(&mut self) {
-        // Skip if no API key configured (cache-only mode)
-        let (Some(api_key), Some(prefix)) = (&self.linear_api_key, &self.linear_prefix) else {
+        // Skip if Linear integration is disabled or no API key configured
+        if !self.config.linear.enabled {
+            return;
+        }
+        let (Some(api_key), Some(prefix)) = (&self.config.linear.api_key, &self.config.linear.team_prefix) else {
             return;
         };
 
@@ -349,7 +351,7 @@ impl Dashboard {
 
         // Clone data needed for the thread
         fetch_linear_issue_async(
-            self.cache_dir.clone(),
+            self.config.cache_dir.clone(),
             worktree_name,
             issue_id,
             api_key.clone(),
@@ -413,7 +415,7 @@ impl Dashboard {
 
     /// Refresh Claude session states for all worktrees
     fn refresh_claude_states(&mut self) {
-        let (states, has_active) = load_claude_states(&self.cache_dir, &self.project_name, &self.worktrees);
+        let (states, has_active) = load_claude_states(&self.config.cache_dir, &self.project_name, &self.worktrees);
         self.claude_states = states;
         self.has_active_claude = has_active;
     }
@@ -458,7 +460,7 @@ impl Dashboard {
         }
         self.cache_loading = true;
         load_all_caches_async(
-            self.cache_dir.clone(),
+            self.config.cache_dir.clone(),
             self.project_name.clone(),
             self.worktrees.clone(),
             self.cache_sender.clone(),
@@ -538,11 +540,15 @@ impl Dashboard {
         // Remember currently selected worktree name
         let selected_name = self.get_selected_worktree().map(|w| w.info.name.clone());
 
-        // Refresh Linear issues
-        self.linear_issues = load_linear_issues(&self.cache_dir, &self.project_name, &worktrees);
+        // Refresh Linear issues (only if enabled)
+        if self.config.linear.enabled {
+            self.linear_issues = load_linear_issues(&self.config.cache_dir, &self.project_name, &worktrees);
+        }
 
-        // Refresh GitHub PRs from cache (API fetch happens lazily)
-        self.github_prs = load_github_prs_from_cache(&self.cache_dir, &self.project_name, &worktrees);
+        // Refresh GitHub PRs from cache (API fetch happens lazily) - only if enabled
+        if self.config.github.enabled {
+            self.github_prs = load_github_prs_from_cache(&self.config.cache_dir, &self.project_name, &worktrees);
+        }
 
         self.worktrees = worktrees;
         self.filter_worktrees();
@@ -664,7 +670,7 @@ impl Dashboard {
             }
 
             // Start periodic git fetch if due (only for pull-based workflows)
-            if self.pull_workflow && self.should_fetch() && !self.git_fetch_in_progress {
+            if self.is_pull_workflow() && self.should_fetch() && !self.git_fetch_in_progress {
                 self.start_git_fetch();
             }
 
@@ -733,17 +739,27 @@ impl Dashboard {
 
     /// Get the Linear icon for display
     pub(crate) fn linear_icon(&self) -> Option<&str> {
-        self.linear_icon.as_deref()
+        self.config.icons.linear.as_deref()
     }
 
     /// Get the GitHub icon for display
     pub(crate) fn github_icon(&self) -> Option<&str> {
-        self.github_icon.as_deref()
+        self.config.icons.github.as_deref()
     }
 
     /// Get the branch icon for display
     pub(crate) fn branch_icon(&self) -> Option<&str> {
-        self.branch_icon.as_deref()
+        self.config.icons.branch.as_deref()
+    }
+
+    /// Check if pull workflow is enabled
+    pub(crate) fn is_pull_workflow(&self) -> bool {
+        self.config.workflow == crate::config::SyncWorkflow::Pull
+    }
+
+    /// Get the resolved config
+    pub(crate) fn config(&self) -> &ResolvedConfig {
+        &self.config
     }
 
     fn move_selection(&mut self, delta: i32) {

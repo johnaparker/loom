@@ -21,24 +21,23 @@ pub fn status() -> Result<()> {
     let manager = WorktreeManager::open(&current_dir)?;
     let project_name = manager.project_name()?;
     let config = Config::load(Some(manager.repo_root()))?;
-    let cache_dir = config.cache_dir()?;
     let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
 
-    let linear_api_key = config.linear_api_key().map(|s| s.to_string());
-    let linear_prefix = config.linear_prefix().map(|s| s.to_string());
+    // Resolve config for current worktree context
+    let resolved = config.resolve(Some(&current_dir))?;
+    let cache_dir = resolved.cache_dir.clone();
+
+    // Check for migration warnings
+    for warning in config.check_migration_warnings() {
+        eprintln!("Warning: {}", warning);
+    }
 
     let worktrees = manager.list_worktrees_with_stats()?;
     let mut dashboard = Dashboard::new(
         worktrees,
         project_name.clone(),
         manager.repo_root().to_path_buf(),
-        cache_dir,
-        linear_api_key,
-        linear_prefix,
-        config.is_pull_workflow(),
-        config.linear_icon().map(|s| s.to_string()),
-        config.github_icon().map(|s| s.to_string()),
-        config.branch_icon().map(|s| s.to_string()),
+        resolved,
     );
     dashboard.set_main_branch(main_branch);
 
@@ -49,10 +48,8 @@ pub fn status() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let cache_dir_for_loop = config.cache_dir()?;
-
     // Use a closure to ensure cleanup happens on all exit paths
-    let result = run_dashboard_loop(&mut dashboard, &mut terminal, &manager, &config, &project_name, &cache_dir_for_loop);
+    let result = run_dashboard_loop(&mut dashboard, &mut terminal, &manager, &config, &project_name, &cache_dir);
 
     // Tear down terminal
     disable_raw_mode()?;

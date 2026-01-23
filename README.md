@@ -53,27 +53,119 @@ gwt integrates with external services via connectors:
 
 ### Configuration
 
+gwt uses a three-level config hierarchy: **global** → **project** → **worktree**. Each level can override the previous.
+
 **Global config:** `~/.config/gwt/config.toml`
 
 ```toml
-worktree_root = "~/worktrees"
+# Root directory for all worktrees (default: ~/.worktrees)
+worktree_root = "~/.worktrees"
+
+# Default category for new worktrees: dev, review, demo, etc.
 default_category = "dev"
 
+# Cache directory for connector data (default: ~/.cache/gwt)
+cache_dir = "~/.cache/gwt"
+
+# Workflow mode: "push" (local-first) or "pull" (PR-based)
+# - push: auto-push after merge, push main before new if ahead
+# - pull: auto-fetch before new, auto-pull when behind tracking
+workflow = "push"
+
 [sync]
+# Files/dirs to sync from main when creating worktrees
 patterns = [".env", ".envrc", ".claude/"]
 
 [sesh]
+# Register worktrees with sesh session picker
 auto_register = true
+
+[linear]
+# Enable Linear integration (default: false)
+# When disabled, Linear panels are hidden and 'l' key is inactive
+enabled = true
+
+# Linear API key (get from Linear settings → API)
+api_key = "lin_api_..."
+
+# Team prefix for auto-detecting issues from branch names
+# e.g., "JOH" matches branches like "john/joh-123-feature"
+team_prefix = "JOH"
+
+# Auto-update Linear issue status on gwt new/merge
+auto_update_status = true
+
+[github]
+# Enable GitHub integration (default: false)
+# When disabled, GitHub panels are hidden and 'g' key is inactive
+# Requires gh CLI to be installed and authenticated
+enabled = true
+
+[diffview]
+# Enable nvim DiffView integration (default: false)
+# When disabled, 'd' key for diff review is inactive
+enabled = true
+
+# Command to open neovim (default: "nvim")
+command = "nvim"
+
+[icons]
+# Custom icons for TUI dashboard (optional, uses defaults if omitted)
+linear = ""   # Icon before Linear issue titles
+github = ""   # Icon before GitHub PR info
+branch = ""   # Icon before branch names
 ```
 
 **Project config:** `.gwt.toml` in repo root
 
+Override global settings for a specific repository:
+
 ```toml
+# Project display name (shown in dashboard title)
 project_name = "my-project"
 
 [sync]
-patterns = [".env", ".envrc", ".claude/", ".env.local"]
+# Additional patterns to sync (merged with global patterns)
+patterns = [".env.local", "config/secrets.yml"]
+
+[git]
+# Override workflow for this project
+workflow = "pull"
+
+[linear]
+# Disable Linear for this project even if globally enabled
+enabled = false
+
+[github]
+# Enable GitHub for this project
+enabled = true
+
+[diffview]
+# Disable diffview for this project
+enabled = false
 ```
+
+**Worktree config:** `.gwt.toml` in worktree directory
+
+Override settings for a specific worktree:
+
+```toml
+[sync]
+# Additional patterns for this worktree
+patterns = ["extra-config.toml"]
+
+# Exclude patterns from syncing to this worktree
+exclude_patterns = [".claude/"]
+
+[linear]
+# Override Linear for just this worktree
+enabled = true
+
+[github]
+enabled = false
+```
+
+**Note:** All integrations (Linear, GitHub, Diffview) are **disabled by default**. You must explicitly set `enabled = true` to use them.
 
 ## Usage
 
