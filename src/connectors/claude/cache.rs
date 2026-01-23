@@ -22,3 +22,17 @@ pub fn read_state(base: &Path, project: &str, worktree: &str) -> Option<ClaudeSe
 pub fn write_state(base: &Path, project: &str, worktree: &str, session: &ClaudeSession) -> Result<()> {
     shared_cache::write_json(base, project, worktree, CACHE_FILENAME, session)
 }
+
+/// Atomically modify the Claude session state with file locking.
+///
+/// This function handles the read-modify-write cycle atomically to prevent
+/// race conditions when multiple hook processes update the state simultaneously.
+///
+/// The modifier function receives the current session (or None if no state exists)
+/// and returns the new session state to write.
+pub fn modify_state<F>(base: &Path, project: &str, worktree: &str, modifier: F) -> Result<()>
+where
+    F: FnOnce(Option<ClaudeSession>) -> ClaudeSession,
+{
+    shared_cache::with_lock_modify(base, project, worktree, CACHE_FILENAME, modifier)
+}

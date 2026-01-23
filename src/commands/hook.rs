@@ -185,31 +185,47 @@ fn handle_session_start(
     json: &serde_json::Value,
 ) -> Result<()> {
     // Extract source: startup, resume, clear, compact
-    let source = json["source"].as_str();
+    let source = json["source"].as_str().map(|s| s.to_string());
 
     // Check if this is a clear operation - combine with previous SessionEnd
-    if source == Some("clear") {
-        if let Some(mut session) = crate::claude::read_state(cache_dir, project, worktree) {
+    if source.as_deref() == Some("clear") {
+        let session_id = session_id.to_string();
+        return crate::claude::modify_state(cache_dir, project, worktree, move |current| {
+            let mut session = current.unwrap_or_else(|| {
+                crate::claude::ClaudeSession::new(session_id.clone(), ClaudeState::Working)
+            });
+
             // Check if last event was SessionEnd with reason "clear"
-            if let Some(last_event) = session.events.last() {
-                if last_event.event_type == "SessionEnd"
+            let should_replace = session.events.last().map_or(false, |last_event| {
+                last_event.event_type == "SessionEnd"
                     && last_event.kind.as_deref() == Some("clear")
-                {
-                    // Replace the SessionEnd with a SessionCleared event
-                    session.events.pop();
-                    session.events.push(ClaudeEvent {
-                        event_type: "SessionCleared".to_string(),
-                        timestamp: now_iso8601(),
-                        prompt_preview: None,
-                        kind: None,
-                        message: None,
-                    });
-                    session.session_id = session_id.to_string();
-                    session.state = ClaudeState::Working;
-                    return crate::claude::write_state(cache_dir, project, worktree, &session);
-                }
+            });
+
+            if should_replace {
+                // Replace the SessionEnd with a SessionCleared event
+                session.events.pop();
+                session.events.push(ClaudeEvent {
+                    event_type: "SessionCleared".to_string(),
+                    timestamp: now_iso8601(),
+                    prompt_preview: None,
+                    kind: None,
+                    message: None,
+                });
+            } else {
+                // No SessionEnd to replace, just add SessionStart
+                session.events.push(ClaudeEvent {
+                    event_type: "SessionStart".to_string(),
+                    timestamp: now_iso8601(),
+                    prompt_preview: None,
+                    kind: Some("clear".to_string()),
+                    message: None,
+                });
             }
-        }
+
+            session.session_id = session_id;
+            session.state = ClaudeState::Working;
+            session
+        });
     }
 
     // Normal session start
@@ -217,7 +233,7 @@ fn handle_session_start(
         event_type: "SessionStart".to_string(),
         timestamp: now_iso8601(),
         prompt_preview: None,
-        kind: source.map(|s| s.to_string()),
+        kind: source,
         message: None,
     };
 
