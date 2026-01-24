@@ -83,6 +83,10 @@ pub fn new(branch: &str, category: Option<String>) -> Result<()> {
         println!("{} Ran direnv allow", "✓".green());
     }
 
+    if result.sandbox_configured {
+        println!("{} Configured Claude sandbox mode", "✓".green());
+    }
+
     // Auto-switch to the new tmux session
     println!(
         "{} Switching to session '{}'",

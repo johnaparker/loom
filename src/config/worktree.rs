@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use super::IntegrationOverride;
+use super::{ClaudeOverride, IntegrationOverride};
 
 /// Worktree-specific configuration stored at .gwt.toml in the worktree directory.
 ///
@@ -28,6 +28,9 @@ pub struct WorktreeConfig {
     /// Diffview integration override
     #[serde(default)]
     pub diffview: Option<IntegrationOverride>,
+    /// Claude Code integration override
+    #[serde(default)]
+    pub claude: Option<ClaudeOverride>,
 }
 
 /// Worktree-level sync configuration
@@ -89,6 +92,7 @@ mod tests {
             linear: Some(IntegrationOverride { enabled: Some(false) }),
             github: None,
             diffview: None,
+            claude: None,
         };
 
         config.save(temp_dir.path()).unwrap();
@@ -133,5 +137,19 @@ enabled = false
         assert!(config.linear.is_none());
         assert!(config.github.is_none());
         assert!(config.diffview.is_none());
+        assert!(config.claude.is_none());
+    }
+
+    #[test]
+    fn test_parse_claude_override() {
+        let toml_str = r#"
+[claude]
+sandbox = false
+sandbox_auto_allow_bash = true
+"#;
+        let config: WorktreeConfig = toml::from_str(toml_str).unwrap();
+        let claude = config.claude.as_ref().unwrap();
+        assert_eq!(claude.sandbox, Some(false));
+        assert_eq!(claude.sandbox_auto_allow_bash, Some(true));
     }
 }
