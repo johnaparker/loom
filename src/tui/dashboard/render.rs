@@ -249,9 +249,9 @@ impl Dashboard {
         let content_width = inner.width.saturating_sub(5) as usize; // "> " + "▌ "
 
         let animation_frame = self.animation_frame;
-        let linear_icon = self.linear_icon().map(|s| s.to_string());
-        let github_icon = self.github_icon().map(|s| s.to_string());
-        let branch_icon = self.branch_icon().map(|s| s.to_string());
+        let linear_icon = self.linear_icon();
+        let github_icon = self.github_icon();
+        let branch_icon = self.branch_icon();
 
         let scroll = self.worktree_scroll_offset;
         let viewport_height = inner.height;
@@ -299,9 +299,9 @@ impl Dashboard {
                 github_pr,
                 claude_state,
                 animation_frame,
-                linear_icon.as_deref(),
-                github_icon.as_deref(),
-                branch_icon.as_deref(),
+                linear_icon,
+                github_icon,
+                branch_icon,
             );
 
             let is_selected = item_idx == self.selected;

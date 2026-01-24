@@ -55,7 +55,6 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::prelude::*;
-use ratatui::widgets::ListState;
 use std::collections::HashMap;
 use std::io::{self, stdout};
 use std::path::PathBuf;
@@ -88,7 +87,6 @@ pub struct Dashboard {
     worktrees: Vec<WorktreeStats>,
     filtered_indices: Vec<usize>,
     selected: usize,
-    list_state: ListState,
     project_name: String,
     repo_root: PathBuf,
     /// Resolved configuration with all levels merged
@@ -160,10 +158,6 @@ impl Dashboard {
         config: ResolvedConfig,
     ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
-        let mut list_state = ListState::default();
-        if !worktrees.is_empty() {
-            list_state.select(Some(0));
-        }
 
         let cache_dir = &config.cache_dir;
 
@@ -203,7 +197,6 @@ impl Dashboard {
             worktrees,
             filtered_indices,
             selected: 0,
-            list_state,
             project_name,
             repo_root,
             config,
@@ -519,7 +512,6 @@ impl Dashboard {
                 .position(|&i| self.worktrees[i].info.name == name)
             {
                 self.selected = pos;
-                self.list_state.select(Some(pos));
             }
         }
     }
@@ -568,7 +560,6 @@ impl Dashboard {
                 .position(|&i| self.worktrees[i].info.name == name)
             {
                 self.selected = pos;
-                self.list_state.select(Some(pos));
             }
         }
 
@@ -830,7 +821,6 @@ impl Dashboard {
         let current = self.selected as i32;
         let new = (current + delta).rem_euclid(len) as usize;
         self.selected = new;
-        self.list_state.select(Some(new));
 
         // Ensure selected item is fully visible (scroll adjustment happens in render)
         // We mark that scroll needs adjustment; actual adjustment uses viewport height from render
@@ -876,32 +866,24 @@ impl Dashboard {
             .iter()
             .map(|&i| {
                 let wt = &self.worktrees[i];
-                let linear_title = self.linear_issues.get(&wt.info.name).map(|_| true);
-                let github_pr = self
-                    .github_prs
-                    .get(&wt.info.name)
-                    .and_then(|state| match state {
-                        CachedPRState::Found(_) => Some(true),
-                        CachedPRState::NotFound => None,
-                    });
+                let has_linear = self.linear_issues.contains_key(&wt.info.name);
+                let has_github = !wt.info.is_main
+                    && self
+                        .github_prs
+                        .get(&wt.info.name)
+                        .is_some_and(|state| matches!(state, CachedPRState::Found(_)));
                 let claude_state = self
                     .claude_states
                     .get(&wt.info.name)
                     .map(|s| crate::claude::effective_state(s));
 
-                Self::calculate_item_height(
-                    wt,
-                    linear_title.is_some(),
-                    !wt.info.is_main && github_pr.is_some(),
-                    claude_state,
-                )
+                Self::calculate_item_height(has_linear, has_github, claude_state)
             })
             .collect()
     }
 
     /// Calculate how many lines a worktree card takes
     fn calculate_item_height(
-        _wt: &WorktreeStats,
         has_linear: bool,
         has_github: bool,
         claude_state: Option<crate::claude::ClaudeState>,
@@ -965,12 +947,6 @@ impl Dashboard {
 
         // Reset selection and scroll
         self.worktree_scroll_offset = 0;
-        if self.filtered_indices.is_empty() {
-            self.selected = 0;
-            self.list_state.select(None);
-        } else {
-            self.selected = 0;
-            self.list_state.select(Some(0));
-        }
+        self.selected = 0;
     }
 }
