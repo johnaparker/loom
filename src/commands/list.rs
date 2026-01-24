@@ -3,6 +3,7 @@ use colored::Colorize;
 use std::collections::HashMap;
 
 use crate::config::Config;
+use crate::core::capitalize_first;
 use crate::git::{WorktreeInfo, WorktreeManager};
 
 pub fn list() -> Result<()> {
@@ -49,29 +50,19 @@ pub fn list() -> Result<()> {
 
     // Print each category in configured order
     for cat in &categories {
-        if let Some(worktrees) = category_groups.get(cat) {
-            if !worktrees.is_empty() {
-                // Capitalize first letter for display
-                let display_name = capitalize_first(cat);
-                println!("{}", display_name.bold().underline());
-                for wt in worktrees {
-                    print_worktree(wt);
-                }
-                println!();
+        if let Some(worktrees) = category_groups.get(cat)
+            && !worktrees.is_empty()
+        {
+            let display_name = capitalize_first(cat);
+            println!("{}", display_name.bold().underline());
+            for wt in worktrees {
+                print_worktree(wt);
             }
+            println!();
         }
     }
 
     Ok(())
-}
-
-/// Capitalize the first letter of a string
-fn capitalize_first(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-    }
 }
 
 fn print_worktree(wt: &WorktreeInfo) {

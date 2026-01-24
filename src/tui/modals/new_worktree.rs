@@ -5,6 +5,7 @@ use ratatui::{
 };
 
 use super::{Modal, ModalAction};
+use crate::core::capitalize_first;
 use crate::tui::widgets::{Checkbox, Selector, TextInput};
 
 /// Modal for creating a new worktree
@@ -119,15 +120,6 @@ impl NewWorktreeModal {
 impl Default for NewWorktreeModal {
     fn default() -> Self {
         Self::new(vec!["dev".to_string()], "dev")
-    }
-}
-
-/// Capitalize the first letter of a string
-fn capitalize_first(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
     }
 }
 
