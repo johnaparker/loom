@@ -55,7 +55,6 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::prelude::*;
-use ratatui::widgets::ListState;
 use std::collections::HashMap;
 use std::io::{self, stdout};
 use std::path::PathBuf;
@@ -88,7 +87,6 @@ pub struct Dashboard {
     worktrees: Vec<WorktreeStats>,
     filtered_indices: Vec<usize>,
     selected: usize,
-    list_state: ListState,
     project_name: String,
     repo_root: PathBuf,
     /// Resolved configuration with all levels merged
@@ -146,6 +144,10 @@ pub struct Dashboard {
     cache_sender: Sender<CacheLoadResult>,
     /// Whether caches are currently loading
     cache_loading: bool,
+    /// Scroll offset in lines for the worktree list (for partial card rendering)
+    worktree_scroll_offset: u16,
+    /// Last known viewport height for the worktree list (updated during render)
+    worktree_viewport_height: u16,
 }
 
 impl Dashboard {
@@ -156,10 +158,6 @@ impl Dashboard {
         config: ResolvedConfig,
     ) -> Self {
         let filtered_indices: Vec<usize> = (0..worktrees.len()).collect();
-        let mut list_state = ListState::default();
-        if !worktrees.is_empty() {
-            list_state.select(Some(0));
-        }
 
         let cache_dir = &config.cache_dir;
 
@@ -199,7 +197,6 @@ impl Dashboard {
             worktrees,
             filtered_indices,
             selected: 0,
-            list_state,
             project_name,
             repo_root,
             config,
@@ -231,6 +228,8 @@ impl Dashboard {
             cache_receiver,
             cache_sender,
             cache_loading: false,
+            worktree_scroll_offset: 0,
+            worktree_viewport_height: 0,
         };
 
         // GitHub panel is always visible, so fetch PR data for initial selection - only if enabled
@@ -513,7 +512,6 @@ impl Dashboard {
                 .position(|&i| self.worktrees[i].info.name == name)
             {
                 self.selected = pos;
-                self.list_state.select(Some(pos));
             }
         }
     }
@@ -562,7 +560,6 @@ impl Dashboard {
                 .position(|&i| self.worktrees[i].info.name == name)
             {
                 self.selected = pos;
-                self.list_state.select(Some(pos));
             }
         }
 
@@ -824,11 +821,101 @@ impl Dashboard {
         let current = self.selected as i32;
         let new = (current + delta).rem_euclid(len) as usize;
         self.selected = new;
-        self.list_state.select(Some(new));
+
+        // Ensure selected item is fully visible (scroll adjustment happens in render)
+        // We mark that scroll needs adjustment; actual adjustment uses viewport height from render
+        self.ensure_selected_visible();
 
         // Both panels are always visible, so fetch data on selection change
         self.fetch_github_pr_for_selected();
         self.fetch_linear_issue_for_selected();
+    }
+
+    /// Ensure the selected item is fully visible by adjusting scroll offset.
+    /// Called from move_selection() and uses cached viewport height from last render.
+    fn ensure_selected_visible(&mut self) {
+        let viewport_height = self.worktree_viewport_height;
+        if viewport_height == 0 || self.filtered_indices.is_empty() {
+            return;
+        }
+
+        // Calculate Y positions for all items
+        let item_heights = self.calculate_item_heights();
+        let y_positions = Self::cumulative_y_positions(&item_heights);
+
+        let selected_y = y_positions[self.selected];
+        let selected_height = item_heights[self.selected];
+        let selected_end = selected_y + selected_height;
+
+        let scroll = self.worktree_scroll_offset;
+        let viewport_end = scroll + viewport_height;
+
+        // If selected item starts above viewport, scroll up to show it at top
+        if selected_y < scroll {
+            self.worktree_scroll_offset = selected_y;
+        }
+        // If selected item ends below viewport, scroll down to show it at bottom
+        else if selected_end > viewport_end {
+            self.worktree_scroll_offset = selected_end.saturating_sub(viewport_height);
+        }
+    }
+
+    /// Calculate heights for all filtered worktree items
+    fn calculate_item_heights(&self) -> Vec<u16> {
+        self.filtered_indices
+            .iter()
+            .map(|&i| {
+                let wt = &self.worktrees[i];
+                let has_linear = self.linear_issues.contains_key(&wt.info.name);
+                let has_github = !wt.info.is_main
+                    && self
+                        .github_prs
+                        .get(&wt.info.name)
+                        .is_some_and(|state| matches!(state, CachedPRState::Found(_)));
+                let claude_state = self
+                    .claude_states
+                    .get(&wt.info.name)
+                    .map(|s| crate::claude::effective_state(s));
+
+                Self::calculate_item_height(has_linear, has_github, claude_state)
+            })
+            .collect()
+    }
+
+    /// Calculate how many lines a worktree card takes
+    fn calculate_item_height(
+        has_linear: bool,
+        has_github: bool,
+        claude_state: Option<crate::claude::ClaudeState>,
+    ) -> u16 {
+        let mut lines = 2u16; // Name/branch line + age/commits line
+        if has_linear {
+            lines += 1;
+        }
+        if has_github {
+            lines += 1;
+        }
+        if matches!(
+            claude_state,
+            Some(crate::claude::ClaudeState::Working)
+                | Some(crate::claude::ClaudeState::Idle)
+                | Some(crate::claude::ClaudeState::WaitingPermission)
+        ) {
+            lines += 1;
+        }
+        lines += 1; // Empty spacing line
+        lines
+    }
+
+    /// Calculate cumulative Y positions for items
+    fn cumulative_y_positions(heights: &[u16]) -> Vec<u16> {
+        let mut positions = Vec::with_capacity(heights.len());
+        let mut y = 0u16;
+        for &h in heights {
+            positions.push(y);
+            y += h;
+        }
+        positions
     }
 
     fn filter_worktrees(&mut self) {
@@ -858,13 +945,8 @@ impl Dashboard {
 
         self.filtered_indices = indices;
 
-        // Reset selection
-        if self.filtered_indices.is_empty() {
-            self.selected = 0;
-            self.list_state.select(None);
-        } else {
-            self.selected = 0;
-            self.list_state.select(Some(0));
-        }
+        // Reset selection and scroll
+        self.worktree_scroll_offset = 0;
+        self.selected = 0;
     }
 }
