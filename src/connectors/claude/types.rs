@@ -78,7 +78,7 @@ impl ClaudeSession {
 
     /// Check if this session is stale (last_updated > threshold)
     pub fn is_stale(&self) -> bool {
-        use super::time::{parse_iso8601, STALE_THRESHOLD_SECS};
+        use super::time::{STALE_THRESHOLD_SECS, parse_iso8601};
 
         let Ok(last) = parse_iso8601(&self.last_updated) else {
             return true;

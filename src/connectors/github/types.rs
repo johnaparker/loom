@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Cached state for GitHub PR lookup
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "state", content = "data")]
+#[allow(clippy::large_enum_variant)]
 pub enum CachedPRState {
     Found(GitHubPR),
     NotFound,

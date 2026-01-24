@@ -1,7 +1,9 @@
 //! Dashboard state types and enums.
 
 use crate::git::WorktreeStats;
-use crate::tui::modals::{ActionResultModal, DeleteConfirmModal, MergeConfirmModal, NewWorktreeModal};
+use crate::tui::modals::{
+    ActionResultModal, DeleteConfirmModal, MergeConfirmModal, NewWorktreeModal,
+};
 
 /// Result of the dashboard interaction
 #[derive(Debug, Clone)]
@@ -28,7 +30,12 @@ pub enum DashboardResult {
     /// Open Claude in the worktree
     Claude { worktree: WorktreeStats },
     /// Create a new worktree
-    CreateNew { branch: String, category: String, auto_claude: bool, plan_mode: bool },
+    CreateNew {
+        branch: String,
+        category: String,
+        auto_claude: bool,
+        plan_mode: bool,
+    },
     /// Open Linear issue for a worktree
     Linear { worktree: WorktreeStats },
     /// Open GitHub PR for a worktree

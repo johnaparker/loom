@@ -3,7 +3,9 @@ mod project;
 mod source;
 mod worktree;
 
-pub use global::{ClaudeConfig, DiffviewConfig, GitHubConfig, GlobalConfig, LinearConfig, SyncWorkflow};
+pub use global::{
+    ClaudeConfig, DiffviewConfig, GitHubConfig, GlobalConfig, LinearConfig, SyncWorkflow,
+};
 pub use project::ProjectConfig;
 pub use source::{ConfigSource, FilesystemSource};
 pub use worktree::{WorktreeConfig, WorktreeSyncConfig};
@@ -75,7 +77,8 @@ impl Config {
     pub fn worktree_root(&self) -> Result<std::path::PathBuf> {
         let root = &self.global.worktree_root;
         if root.starts_with("~") {
-            let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+            let home =
+                dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
             Ok(home.join(root.strip_prefix("~/").unwrap_or(root)))
         } else {
             Ok(std::path::PathBuf::from(root))
@@ -152,9 +155,12 @@ impl Config {
         // Use config value, expanding ~ to home
         let dir = &self.global.cache_dir;
         if dir.starts_with("~") {
-            let home = dirs::home_dir()
-                .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-            Ok(home.join(dir.strip_prefix("~/").unwrap_or(dir.strip_prefix("~").unwrap_or(dir))))
+            let home =
+                dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+            Ok(home.join(
+                dir.strip_prefix("~/")
+                    .unwrap_or(dir.strip_prefix("~").unwrap_or(dir)),
+            ))
         } else {
             Ok(PathBuf::from(dir))
         }
@@ -216,39 +222,75 @@ impl Config {
 
         // Resolve Linear integration
         let linear_enabled = resolve_integration_enabled(
-            worktree_config.as_ref().and_then(|w| w.linear.as_ref()).and_then(|i| i.enabled),
-            self.project.as_ref().and_then(|p| p.linear.as_ref()).and_then(|i| i.enabled),
+            worktree_config
+                .as_ref()
+                .and_then(|w| w.linear.as_ref())
+                .and_then(|i| i.enabled),
+            self.project
+                .as_ref()
+                .and_then(|p| p.linear.as_ref())
+                .and_then(|i| i.enabled),
             self.global.linear.enabled,
         );
 
         // Resolve GitHub integration
         let github_enabled = resolve_integration_enabled(
-            worktree_config.as_ref().and_then(|w| w.github.as_ref()).and_then(|i| i.enabled),
-            self.project.as_ref().and_then(|p| p.github.as_ref()).and_then(|i| i.enabled),
+            worktree_config
+                .as_ref()
+                .and_then(|w| w.github.as_ref())
+                .and_then(|i| i.enabled),
+            self.project
+                .as_ref()
+                .and_then(|p| p.github.as_ref())
+                .and_then(|i| i.enabled),
             self.global.github.enabled,
         );
 
         // Resolve Diffview integration
         let diffview_enabled = resolve_integration_enabled(
-            worktree_config.as_ref().and_then(|w| w.diffview.as_ref()).and_then(|i| i.enabled),
-            self.project.as_ref().and_then(|p| p.diffview.as_ref()).and_then(|i| i.enabled),
+            worktree_config
+                .as_ref()
+                .and_then(|w| w.diffview.as_ref())
+                .and_then(|i| i.enabled),
+            self.project
+                .as_ref()
+                .and_then(|p| p.diffview.as_ref())
+                .and_then(|i| i.enabled),
             self.global.diffview.enabled,
         );
 
         // Resolve Claude integration settings
         let claude_enabled = resolve_integration_enabled(
-            worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.enabled),
-            self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.enabled),
+            worktree_config
+                .as_ref()
+                .and_then(|w| w.claude.as_ref())
+                .and_then(|c| c.enabled),
+            self.project
+                .as_ref()
+                .and_then(|p| p.claude.as_ref())
+                .and_then(|c| c.enabled),
             self.global.claude.enabled,
         );
         let claude_sandbox = resolve_integration_enabled(
-            worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.sandbox),
-            self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.sandbox),
+            worktree_config
+                .as_ref()
+                .and_then(|w| w.claude.as_ref())
+                .and_then(|c| c.sandbox),
+            self.project
+                .as_ref()
+                .and_then(|p| p.claude.as_ref())
+                .and_then(|c| c.sandbox),
             self.global.claude.sandbox,
         );
         let claude_sandbox_auto_allow_bash = resolve_integration_enabled(
-            worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.sandbox_auto_allow_bash),
-            self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.sandbox_auto_allow_bash),
+            worktree_config
+                .as_ref()
+                .and_then(|w| w.claude.as_ref())
+                .and_then(|c| c.sandbox_auto_allow_bash),
+            self.project
+                .as_ref()
+                .and_then(|p| p.claude.as_ref())
+                .and_then(|c| c.sandbox_auto_allow_bash),
             self.global.claude.sandbox_auto_allow_bash,
         );
 
@@ -303,20 +345,20 @@ impl Config {
         let mut warnings = vec![];
 
         // Check if using new default but old path exists with worktrees
-        if self.global.worktree_root == "~/.worktrees" {
-            if let Some(home) = dirs::home_dir() {
-                let old_path = home.join("worktrees");
-                if old_path.exists() && old_path.is_dir() {
-                    // Check if it contains any subdirectories (worktrees)
-                    if let Ok(entries) = std::fs::read_dir(&old_path) {
-                        if entries.filter_map(|e| e.ok()).any(|e| e.path().is_dir()) {
-                            warnings.push(format!(
-                                "Found worktrees at ~/worktrees but gwt now defaults to ~/.worktrees. \
-                                To migrate, run: mv ~/worktrees ~/.worktrees && ln -s ~/.worktrees ~/worktrees"
-                            ));
-                        }
-                    }
-                }
+        if self.global.worktree_root == "~/.worktrees"
+            && let Some(home) = dirs::home_dir()
+        {
+            let old_path = home.join("worktrees");
+            if old_path.exists()
+                && old_path.is_dir()
+                && let Ok(entries) = std::fs::read_dir(&old_path)
+                && entries.filter_map(|e| e.ok()).any(|e| e.path().is_dir())
+            {
+                warnings.push(
+                    "Found worktrees at ~/worktrees but gwt now defaults to ~/.worktrees. \
+                    To migrate, run: mv ~/worktrees ~/.worktrees && ln -s ~/.worktrees ~/worktrees"
+                        .to_string(),
+                );
             }
         }
 
@@ -405,7 +447,10 @@ mod tests {
     use super::*;
     use project::{ProjectGitConfig, ProjectSyncConfig};
 
-    fn make_config(global_workflow: SyncWorkflow, project_workflow: Option<SyncWorkflow>) -> Config {
+    fn make_config(
+        global_workflow: SyncWorkflow,
+        project_workflow: Option<SyncWorkflow>,
+    ) -> Config {
         let global = GlobalConfig {
             workflow: global_workflow,
             ..GlobalConfig::default()
@@ -487,7 +532,10 @@ mod tests {
         );
 
         assert!(config.is_pull_workflow());
-        assert_eq!(config.worktree_root().unwrap(), PathBuf::from("/custom/path"));
+        assert_eq!(
+            config.worktree_root().unwrap(),
+            PathBuf::from("/custom/path")
+        );
     }
 
     #[test]
@@ -609,9 +657,13 @@ workflow = "pull"
             project_name: None,
             sync: ProjectSyncConfig::default(),
             git: ProjectGitConfig::default(),
-            linear: Some(IntegrationOverride { enabled: Some(false) }),
+            linear: Some(IntegrationOverride {
+                enabled: Some(false),
+            }),
             github: None, // No override
-            diffview: Some(IntegrationOverride { enabled: Some(true) }),
+            diffview: Some(IntegrationOverride {
+                enabled: Some(true),
+            }),
             claude: None,
         };
 
@@ -620,7 +672,7 @@ workflow = "pull"
 
         // Project override should win
         assert!(!resolved.linear.enabled); // Was true globally, disabled by project
-        assert!(resolved.github.enabled);  // No project override, uses global (true)
+        assert!(resolved.github.enabled); // No project override, uses global (true)
         assert!(resolved.diffview.enabled); // Was false globally, enabled by project
     }
 
@@ -636,8 +688,12 @@ workflow = "pull"
                 patterns: vec!["worktree-only.txt".to_string()],
                 exclude_patterns: vec![".env".to_string()], // Exclude from global patterns
             },
-            linear: Some(IntegrationOverride { enabled: Some(true) }), // Override project's false
-            github: Some(IntegrationOverride { enabled: Some(false) }), // Override global's true
+            linear: Some(IntegrationOverride {
+                enabled: Some(true),
+            }), // Override project's false
+            github: Some(IntegrationOverride {
+                enabled: Some(false),
+            }), // Override global's true
             diffview: None, // No override - should use project's true
             claude: None,
         };
@@ -652,9 +708,13 @@ workflow = "pull"
             project_name: None,
             sync: ProjectSyncConfig::default(),
             git: ProjectGitConfig::default(),
-            linear: Some(IntegrationOverride { enabled: Some(false) }),
+            linear: Some(IntegrationOverride {
+                enabled: Some(false),
+            }),
             github: None,
-            diffview: Some(IntegrationOverride { enabled: Some(true) }),
+            diffview: Some(IntegrationOverride {
+                enabled: Some(true),
+            }),
             claude: None,
         };
 
@@ -667,7 +727,11 @@ workflow = "pull"
         assert!(resolved.diffview.enabled); // No worktree override, uses project true
 
         // Sync patterns: global patterns minus worktree excludes, plus worktree additions
-        assert!(resolved.sync_patterns.contains(&"worktree-only.txt".to_string()));
+        assert!(
+            resolved
+                .sync_patterns
+                .contains(&"worktree-only.txt".to_string())
+        );
         assert!(!resolved.sync_patterns.contains(&".env".to_string())); // Excluded by worktree
         assert!(resolved.sync_patterns.contains(&".envrc".to_string())); // Global pattern not excluded
     }
@@ -708,8 +772,8 @@ workflow = "pull"
             github: None,
             diffview: None,
             claude: Some(ClaudeOverride {
-                enabled: None, // Use global
-                sandbox: Some(false), // Override global
+                enabled: None,                 // Use global
+                sandbox: Some(false),          // Override global
                 sandbox_auto_allow_bash: None, // Use global
             }),
         };
@@ -738,8 +802,8 @@ workflow = "pull"
             github: None,
             diffview: None,
             claude: Some(ClaudeOverride {
-                enabled: Some(false), // Override global's true
-                sandbox: Some(true), // Override project's false
+                enabled: Some(false),                 // Override global's true
+                sandbox: Some(true),                  // Override project's false
                 sandbox_auto_allow_bash: Some(false), // Override global's true
             }),
         };

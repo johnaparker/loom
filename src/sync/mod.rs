@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -50,7 +50,12 @@ pub fn sync_files(source: &Path, dest: &Path, patterns: &[String]) -> Result<Vec
 }
 
 /// Recursively copy a directory, skipping git-tracked files
-fn copy_dir_recursive(source: &Path, dest: &Path, repo_root: &Path, relative_base: &str) -> Result<()> {
+fn copy_dir_recursive(
+    source: &Path,
+    dest: &Path,
+    repo_root: &Path,
+    relative_base: &str,
+) -> Result<()> {
     if !dest.exists() {
         fs::create_dir_all(dest)?;
     }
@@ -136,8 +141,8 @@ pub fn write_claude_sandbox_settings(worktree_path: &Path, auto_allow_bash: bool
     });
 
     // Write back with pretty formatting
-    let content = serde_json::to_string_pretty(&settings)
-        .with_context(|| "Failed to serialize settings")?;
+    let content =
+        serde_json::to_string_pretty(&settings).with_context(|| "Failed to serialize settings")?;
     fs::write(&settings_path, content)
         .with_context(|| format!("Failed to write {:?}", settings_path))?;
 
@@ -198,7 +203,11 @@ mod tests {
                 "CI": "true"
             }
         });
-        fs::write(&settings_path, serde_json::to_string_pretty(&existing).unwrap()).unwrap();
+        fs::write(
+            &settings_path,
+            serde_json::to_string_pretty(&existing).unwrap(),
+        )
+        .unwrap();
 
         // Write sandbox settings
         write_claude_sandbox_settings(worktree_path, true).unwrap();
@@ -232,7 +241,11 @@ mod tests {
             },
             "other": "preserved"
         });
-        fs::write(&settings_path, serde_json::to_string_pretty(&existing).unwrap()).unwrap();
+        fs::write(
+            &settings_path,
+            serde_json::to_string_pretty(&existing).unwrap(),
+        )
+        .unwrap();
 
         // Write new sandbox settings
         write_claude_sandbox_settings(worktree_path, true).unwrap();

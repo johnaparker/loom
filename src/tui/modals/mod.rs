@@ -21,7 +21,12 @@ pub enum ModalAction {
     /// Merge the selected worktree to main
     Merge { delete_branch: bool },
     /// Create a new worktree
-    CreateNew { branch: String, category: String, auto_claude: bool, plan_mode: bool },
+    CreateNew {
+        branch: String,
+        category: String,
+        auto_claude: bool,
+        plan_mode: bool,
+    },
     /// Show an action result (stays open until dismissed)
     ShowResult { success: bool, message: String },
     /// Dismiss result and return to normal mode
@@ -41,11 +46,7 @@ pub trait Modal {
 }
 
 /// Helper to render a centered modal overlay
-pub fn render_modal_overlay(
-    modal: &mut dyn Modal,
-    frame_area: Rect,
-    buf: &mut Buffer,
-) {
+pub fn render_modal_overlay(modal: &mut dyn Modal, frame_area: Rect, buf: &mut Buffer) {
     let (pref_width, pref_height) = modal.preferred_size();
 
     // Calculate centered position

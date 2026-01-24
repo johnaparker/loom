@@ -5,9 +5,9 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::OnceLock;
 
-use crate::error::GwtError;
 use super::types::{ChecksStatus, GitHubPR, PRComment};
 use super::url::get_create_pr_url;
+use crate::error::GwtError;
 
 /// Cached result of gh CLI availability check (true = available, false = not available/not authenticated)
 static GH_CLI_AVAILABLE: OnceLock<bool> = OnceLock::new();
@@ -132,11 +132,10 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
     }
 
     let json_str = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
-        GwtError::GitHubApiError {
+    let json: serde_json::Value =
+        serde_json::from_str(&json_str).map_err(|e| GwtError::GitHubApiError {
             message: format!("Failed to parse gh output: {}", e),
-        }
-    })?;
+        })?;
 
     let number = json["number"].as_u64().unwrap_or(0) as u32;
     let title = json["title"].as_str().unwrap_or("").to_string();
@@ -208,10 +207,7 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
     };
 
     // Parse author
-    let author = json["author"]["login"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let author = json["author"]["login"].as_str().unwrap_or("").to_string();
 
     // Parse assignees
     let assignees: Vec<String> = json["assignees"]
@@ -258,7 +254,14 @@ pub fn get_repo_info(repo_path: &Path) -> Result<(String, String)> {
     check_gh_cli()?;
 
     let output = Command::new("gh")
-        .args(["repo", "view", "--json", "owner,name", "-q", ".owner.login,.name"])
+        .args([
+            "repo",
+            "view",
+            "--json",
+            "owner,name",
+            "-q",
+            ".owner.login,.name",
+        ])
         .current_dir(repo_path)
         .output()
         .map_err(|e| GwtError::GitHubApiError {
@@ -294,6 +297,7 @@ pub fn open_pr_or_create(repo_path: &Path, branch: &str) -> Result<String> {
 }
 
 /// Open a URL in the default browser
+#[allow(clippy::needless_return)]
 pub fn open_url(url: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
@@ -309,9 +313,7 @@ pub fn open_url(url: &str) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", url])
-            .spawn()?;
+        Command::new("cmd").args(["/C", "start", url]).spawn()?;
         return Ok(());
     }
 

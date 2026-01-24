@@ -104,7 +104,9 @@ impl WorktreeManager {
         };
 
         // Re-open repository from the main repo root to ensure consistent behavior
-        let repo = provider.open(&repo_root).map_err(|_| GwtError::NotGitRepo)?;
+        let repo = provider
+            .open(&repo_root)
+            .map_err(|_| GwtError::NotGitRepo)?;
 
         Ok(Self { repo, repo_root })
     }
@@ -250,8 +252,8 @@ impl WorktreeManager {
 
     /// Get the best start point for a new branch
     ///
-    /// - `use_remote`: If true (pull workflow), prefers origin/main for most up-to-date remote state
-    ///                 If false (push workflow), uses local main to stay local-first
+    /// - `use_remote`: If true (pull workflow), prefers origin/main for most up-to-date remote state.
+    ///   If false (push workflow), uses local main to stay local-first.
     fn best_start_point(&self, use_remote: bool) -> Result<String> {
         if use_remote {
             // Pull workflow: prefer remote main branch (most up-to-date)
@@ -266,9 +268,14 @@ impl WorktreeManager {
 
     /// Create a new worktree
     ///
-    /// - `use_remote_start_point`: If true, new branches start from origin/main (pull workflow)
-    ///                              If false, new branches start from local main (push workflow)
-    pub fn create_worktree(&self, branch: &str, path: &Path, use_remote_start_point: bool) -> Result<()> {
+    /// - `use_remote_start_point`: If true, new branches start from origin/main (pull workflow).
+    ///   If false, new branches start from local main (push workflow).
+    pub fn create_worktree(
+        &self,
+        branch: &str,
+        path: &Path,
+        use_remote_start_point: bool,
+    ) -> Result<()> {
         // Create parent directories
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -512,11 +519,7 @@ impl WorktreeManager {
         }
 
         let output = Command::new("git")
-            .args([
-                "rev-list",
-                "--count",
-                &format!("{}..{}", branch, target),
-            ])
+            .args(["rev-list", "--count", &format!("{}..{}", branch, target)])
             .current_dir(path)
             .output()
             .ok()?;
@@ -583,7 +586,11 @@ impl WorktreeManager {
         // Only check if origin/<branch> exists (same branch name on remote)
         let remote_branch = format!("origin/{}", branch);
         let output = Command::new("git")
-            .args(["rev-parse", "--verify", &format!("refs/remotes/{}", remote_branch)])
+            .args([
+                "rev-parse",
+                "--verify",
+                &format!("refs/remotes/{}", remote_branch),
+            ])
             .current_dir(path)
             .output()
             .ok()?;
@@ -632,7 +639,11 @@ impl WorktreeManager {
         }
 
         let output = Command::new("git")
-            .args(["diff", "--shortstat", &format!("{}...{}", main_branch, branch)])
+            .args([
+                "diff",
+                "--shortstat",
+                &format!("{}...{}", main_branch, branch),
+            ])
             .current_dir(path)
             .output()
             .ok()?;
@@ -724,16 +735,15 @@ impl WorktreeManager {
         let mut args = vec!["log", "--format=%h|%s|%an|%cr", "-n", &limit_str];
 
         // For non-main worktrees, only show commits ahead of main
-        let main_branch = self.main_branch_name().unwrap_or_else(|_| "main".to_string());
+        let main_branch = self
+            .main_branch_name()
+            .unwrap_or_else(|_| "main".to_string());
         let range = format!("{}..HEAD", main_branch);
         if !is_main {
             args.push(&range);
         }
 
-        let output = Command::new("git")
-            .args(&args)
-            .current_dir(path)
-            .output();
+        let output = Command::new("git").args(&args).current_dir(path).output();
 
         match output {
             Ok(output) if output.status.success() => {
@@ -905,11 +915,11 @@ impl WorktreeManager {
             let mut conflicted_files = Vec::new();
 
             for line in stdout.lines() {
-                if line.starts_with("CONFLICT") {
-                    if let Some(idx) = line.find(" in ") {
-                        let filename = line[idx + 4..].trim();
-                        conflicted_files.push(filename.to_string());
-                    }
+                if line.starts_with("CONFLICT")
+                    && let Some(idx) = line.find(" in ")
+                {
+                    let filename = line[idx + 4..].trim();
+                    conflicted_files.push(filename.to_string());
                 }
             }
 
@@ -939,7 +949,12 @@ impl WorktreeManager {
     /// This updates the worktree's branch with the latest changes from main
     pub fn sync_branch_with_main(&self, worktree_path: &Path, source_ref: &str) -> Result<()> {
         let output = Command::new("git")
-            .args(["merge", source_ref, "-m", &format!("Sync with {}", source_ref)])
+            .args([
+                "merge",
+                source_ref,
+                "-m",
+                &format!("Sync with {}", source_ref),
+            ])
             .current_dir(worktree_path)
             .output()
             .context("Failed to run git merge")?;

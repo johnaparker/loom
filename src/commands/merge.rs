@@ -32,11 +32,7 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
         Err(GwtError::CannotMergeMain)?;
     }
 
-    let branch = worktree
-        .branch
-        .as_ref()
-        .ok_or(GwtError::NoBranch)?
-        .clone();
+    let branch = worktree.branch.as_ref().ok_or(GwtError::NoBranch)?.clone();
 
     let main_branch = manager.main_branch_name()?;
 
@@ -66,13 +62,11 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
             worktree.path.display().to_string().dimmed()
         ));
         dry_run_action(&format!("Offer to delete branch '{}'", branch.green()));
-        if config.linear_auto_update_status() && config.linear_api_key().is_some() {
-            if let Some(ref issue) = linear_issue {
-                dry_run_action(&format!(
-                    "Update Linear issue {} to Done",
-                    issue.id.cyan()
-                ));
-            }
+        if config.linear_auto_update_status()
+            && config.linear_api_key().is_some()
+            && let Some(ref issue) = linear_issue
+        {
+            dry_run_action(&format!("Update Linear issue {} to Done", issue.id.cyan()));
         }
         dry_run_footer();
         return Ok(());
@@ -90,14 +84,17 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     println!("{} Merged successfully", "✓".green());
 
     // Update Linear issue to "Done" (non-critical)
-    if config.linear_auto_update_status() {
-        if let Some(api_key) = config.linear_api_key() {
-            if let Some(ref issue) = linear_issue {
-                match linear::update_issue_status(api_key, &issue.id, "completed") {
-                    Ok(()) => println!("{} Updated Linear issue {} to Done", "✓".green(), issue.id.cyan()),
-                    Err(e) => eprintln!("{} Could not update Linear status: {}", "⚠".yellow(), e),
-                }
-            }
+    if config.linear_auto_update_status()
+        && let Some(api_key) = config.linear_api_key()
+        && let Some(ref issue) = linear_issue
+    {
+        match linear::update_issue_status(api_key, &issue.id, "completed") {
+            Ok(()) => println!(
+                "{} Updated Linear issue {} to Done",
+                "✓".green(),
+                issue.id.cyan()
+            ),
+            Err(e) => eprintln!("{} Could not update Linear status: {}", "⚠".yellow(), e),
         }
     }
 

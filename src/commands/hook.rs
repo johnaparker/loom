@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use crate::claude::{time::now_iso8601, ClaudeEvent, ClaudeState};
+use crate::claude::{ClaudeEvent, ClaudeState, time::now_iso8601};
 use crate::config::GlobalConfig;
 
 /// Handle hook events from Claude Code
@@ -36,11 +36,15 @@ pub fn hook(event: &str) -> Result<()> {
         "user-prompt" => handle_user_prompt(&cache_dir, &project, &worktree, session_id, &json)?,
         "stop" => handle_stop(&cache_dir, &project, &worktree, session_id, &json)?,
         "notification" => handle_notification(&cache_dir, &project, &worktree, session_id, &json)?,
-        "session-start" => handle_session_start(&cache_dir, &project, &worktree, session_id, &json)?,
+        "session-start" => {
+            handle_session_start(&cache_dir, &project, &worktree, session_id, &json)?
+        }
         "session-end" => handle_session_end(&cache_dir, &project, &worktree, session_id, &json)?,
         "tool-use" => handle_tool_use(&cache_dir, &project, &worktree, session_id, &json)?,
         "tool-result" => handle_tool_result(&cache_dir, &project, &worktree, session_id, &json)?,
-        "permission-request" => handle_permission_request(&cache_dir, &project, &worktree, session_id, &json)?,
+        "permission-request" => {
+            handle_permission_request(&cache_dir, &project, &worktree, session_id, &json)?
+        }
         _ => {
             // Unknown event type, ignore
         }
@@ -60,9 +64,12 @@ fn get_cache_dir() -> Result<PathBuf> {
     let config = GlobalConfig::load()?;
     let dir = &config.cache_dir;
     if dir.starts_with("~") {
-        let home = dirs::home_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-        Ok(home.join(dir.strip_prefix("~/").unwrap_or(dir.strip_prefix("~").unwrap_or(dir))))
+        let home =
+            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+        Ok(home.join(
+            dir.strip_prefix("~/")
+                .unwrap_or(dir.strip_prefix("~").unwrap_or(dir)),
+        ))
     } else {
         Ok(PathBuf::from(dir))
     }
@@ -76,16 +83,14 @@ fn handle_user_prompt(
     json: &serde_json::Value,
 ) -> Result<()> {
     // Extract prompt preview (first 200 chars - will be truncated to fit display width)
-    let prompt_preview = json["prompt"]
-        .as_str()
-        .map(|p| {
-            let trimmed = p.trim();
-            if trimmed.len() > 200 {
-                format!("{}...", &trimmed[..197])
-            } else {
-                trimmed.to_string()
-            }
-        });
+    let prompt_preview = json["prompt"].as_str().map(|p| {
+        let trimmed = p.trim();
+        if trimmed.len() > 200 {
+            format!("{}...", &trimmed[..197])
+        } else {
+            trimmed.to_string()
+        }
+    });
 
     let event = ClaudeEvent {
         event_type: "UserPromptSubmit".to_string(),
@@ -95,7 +100,14 @@ fn handle_user_prompt(
         message: None,
     };
 
-    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
+    crate::claude::update_state_from_event(
+        cache_dir,
+        project,
+        worktree,
+        event,
+        session_id,
+        ClaudeState::Working,
+    )
 }
 
 fn handle_stop(
@@ -113,7 +125,14 @@ fn handle_stop(
         message: None,
     };
 
-    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Idle)
+    crate::claude::update_state_from_event(
+        cache_dir,
+        project,
+        worktree,
+        event,
+        session_id,
+        ClaudeState::Idle,
+    )
 }
 
 fn handle_notification(
@@ -136,25 +155,32 @@ fn handle_notification(
 
     // Determine state based on notification kind, or infer from message content
     let (new_state, effective_kind) = match kind {
-        Some("permission_prompt") | Some("permission") => {
-            (ClaudeState::WaitingPermission, Some("permission".to_string()))
-        }
+        Some("permission_prompt") | Some("permission") => (
+            ClaudeState::WaitingPermission,
+            Some("permission".to_string()),
+        ),
         Some("elicitation_dialog") => {
             // MCP tool elicitation - Claude is waiting for user input
-            (ClaudeState::WaitingPermission, Some("elicitation".to_string()))
+            (
+                ClaudeState::WaitingPermission,
+                Some("elicitation".to_string()),
+            )
         }
-        Some("idle_prompt") | Some("idle") => {
-            (ClaudeState::Idle, Some("idle".to_string()))
-        }
+        Some("idle_prompt") | Some("idle") => (ClaudeState::Idle, Some("idle".to_string())),
         _ => {
             // Fallback: infer notification type from message content
             if let Some(msg) = message_raw {
-                if msg.contains("permission") || msg.contains("Permission")
-                    || msg.contains("approval") || msg.contains("Approval")
+                if msg.contains("permission")
+                    || msg.contains("Permission")
+                    || msg.contains("approval")
+                    || msg.contains("Approval")
                     || msg.contains("needs your attention")
                     || msg.contains("waiting for")
                 {
-                    (ClaudeState::WaitingPermission, Some("permission".to_string()))
+                    (
+                        ClaudeState::WaitingPermission,
+                        Some("permission".to_string()),
+                    )
                 } else if msg.contains("waiting for your input") {
                     (ClaudeState::Idle, Some("idle".to_string()))
                 } else {
@@ -174,7 +200,9 @@ fn handle_notification(
         message,
     };
 
-    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, new_state)
+    crate::claude::update_state_from_event(
+        cache_dir, project, worktree, event, session_id, new_state,
+    )
 }
 
 fn handle_session_start(
@@ -196,9 +224,8 @@ fn handle_session_start(
             });
 
             // Check if last event was SessionEnd with reason "clear"
-            let should_replace = session.events.last().map_or(false, |last_event| {
-                last_event.event_type == "SessionEnd"
-                    && last_event.kind.as_deref() == Some("clear")
+            let should_replace = session.events.last().is_some_and(|last_event| {
+                last_event.event_type == "SessionEnd" && last_event.kind.as_deref() == Some("clear")
             });
 
             if should_replace {
@@ -237,7 +264,14 @@ fn handle_session_start(
         message: None,
     };
 
-    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
+    crate::claude::update_state_from_event(
+        cache_dir,
+        project,
+        worktree,
+        event,
+        session_id,
+        ClaudeState::Working,
+    )
 }
 
 fn handle_session_end(
@@ -258,7 +292,14 @@ fn handle_session_end(
         message: None,
     };
 
-    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Inactive)
+    crate::claude::update_state_from_event(
+        cache_dir,
+        project,
+        worktree,
+        event,
+        session_id,
+        ClaudeState::Inactive,
+    )
 }
 
 fn handle_tool_use(
@@ -321,21 +362,11 @@ fn handle_tool_use(
         Some("Write") => tool_input["file_path"]
             .as_str()
             .map(|p| shorten_path(p, 200)),
-        Some("Bash") => tool_input["command"]
-            .as_str()
-            .map(|c| truncate_str(c, 200)),
-        Some("Grep") => tool_input["pattern"]
-            .as_str()
-            .map(|p| truncate_str(p, 200)),
-        Some("Glob") => tool_input["pattern"]
-            .as_str()
-            .map(|p| truncate_str(p, 200)),
-        Some("WebFetch") => tool_input["url"]
-            .as_str()
-            .map(|u| truncate_str(u, 200)),
-        Some("WebSearch") => tool_input["query"]
-            .as_str()
-            .map(|q| truncate_str(q, 200)),
+        Some("Bash") => tool_input["command"].as_str().map(|c| truncate_str(c, 200)),
+        Some("Grep") => tool_input["pattern"].as_str().map(|p| truncate_str(p, 200)),
+        Some("Glob") => tool_input["pattern"].as_str().map(|p| truncate_str(p, 200)),
+        Some("WebFetch") => tool_input["url"].as_str().map(|u| truncate_str(u, 200)),
+        Some("WebSearch") => tool_input["query"].as_str().map(|q| truncate_str(q, 200)),
         _ => None,
     };
 
@@ -347,7 +378,14 @@ fn handle_tool_use(
         message: detail,
     };
 
-    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
+    crate::claude::update_state_from_event(
+        cache_dir,
+        project,
+        worktree,
+        event,
+        session_id,
+        ClaudeState::Working,
+    )
 }
 
 fn handle_permission_request(
@@ -368,7 +406,14 @@ fn handle_permission_request(
         message,
     };
 
-    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::WaitingPermission)
+    crate::claude::update_state_from_event(
+        cache_dir,
+        project,
+        worktree,
+        event,
+        session_id,
+        ClaudeState::WaitingPermission,
+    )
 }
 
 fn handle_tool_result(
@@ -379,9 +424,7 @@ fn handle_tool_result(
     json: &serde_json::Value,
 ) -> Result<()> {
     // Extract tool name if available
-    let tool_name = json["tool_name"]
-        .as_str()
-        .or_else(|| json["tool"].as_str());
+    let tool_name = json["tool_name"].as_str().or_else(|| json["tool"].as_str());
 
     // For Task tool result: decrement depth, don't log (ToolResult events are filtered anyway)
     if tool_name == Some("Task") {
@@ -404,22 +447,24 @@ fn handle_tool_result(
         message: None,
     };
 
-    crate::claude::update_state_from_event(cache_dir, project, worktree, event, session_id, ClaudeState::Working)
+    crate::claude::update_state_from_event(
+        cache_dir,
+        project,
+        worktree,
+        event,
+        session_id,
+        ClaudeState::Working,
+    )
 }
 
 /// Shorten a file path by replacing home dir with ~ and keeping basename visible
 fn shorten_path(path: &str, max_len: usize) -> String {
     // Replace home directory with ~
-    let shortened = if let Some(home) = dirs::home_dir() {
-        if let Some(home_str) = home.to_str() {
-            if path.starts_with(home_str) {
-                format!("~{}", &path[home_str.len()..])
-            } else {
-                path.to_string()
-            }
-        } else {
-            path.to_string()
-        }
+    let shortened = if let Some(home) = dirs::home_dir()
+        && let Some(home_str) = home.to_str()
+        && let Some(stripped) = path.strip_prefix(home_str)
+    {
+        format!("~{stripped}")
     } else {
         path.to_string()
     };
@@ -453,11 +498,11 @@ fn resolve_project_worktree(cwd: &str) -> Result<(String, String)> {
     let path = Path::new(cwd);
 
     // Try to find the git repository root
-    let repo = git2::Repository::discover(path)
-        .context("Not in a git repository")?;
+    let repo = git2::Repository::discover(path).context("Not in a git repository")?;
 
     // Get the worktree root (commondir for worktrees, workdir for main)
-    let worktree_root = repo.workdir()
+    let worktree_root = repo
+        .workdir()
         .context("Cannot determine worktree directory")?;
 
     // Check if this is a worktree (path contains "worktrees")

@@ -70,15 +70,7 @@ pub fn create_session(session_name: &str, path: &str) -> Result<()> {
 /// Create a tmux session with a specific command in the first window
 pub fn create_session_with_command(session_name: &str, path: &str, command: &str) -> Result<()> {
     let output = Command::new("tmux")
-        .args([
-            "new-session",
-            "-d",
-            "-s",
-            session_name,
-            "-c",
-            path,
-            command,
-        ])
+        .args(["new-session", "-d", "-s", session_name, "-c", path, command])
         .output()?;
 
     if !output.status.success() {
@@ -89,7 +81,12 @@ pub fn create_session_with_command(session_name: &str, path: &str, command: &str
 }
 
 /// Create a new window in an existing tmux session
-pub fn create_window(session_name: &str, window_name: &str, path: &str, command: &str) -> Result<()> {
+pub fn create_window(
+    session_name: &str,
+    window_name: &str,
+    path: &str,
+    command: &str,
+) -> Result<()> {
     let output = Command::new("tmux")
         .args([
             "new-window",
@@ -172,7 +169,7 @@ pub fn find_pane_with_title(session_name: &str, title_contains: &str) -> Option<
 /// Claude Code uses various Braille patterns in its status line (U+2800-U+28FF).
 pub fn find_pane_with_braille_title(session_name: &str) -> Option<PaneLocation> {
     find_pane_matching(session_name, |title| {
-        title.chars().next().map_or(false, is_braille_char)
+        title.chars().next().is_some_and(is_braille_char)
     })
 }
 

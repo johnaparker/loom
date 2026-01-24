@@ -31,7 +31,10 @@ impl NewWorktreeModal {
                 .map(|c| (c.clone(), capitalize_first(c)))
                 .collect();
             // Find index of default category
-            let default_idx = categories.iter().position(|c| c == default_category).unwrap_or(0);
+            let default_idx = categories
+                .iter()
+                .position(|c| c == default_category)
+                .unwrap_or(0);
             Some(Selector::new_with_default("Category", options, default_idx))
         } else {
             None
@@ -70,7 +73,15 @@ impl NewWorktreeModal {
 
         // Check for invalid characters
         for c in name.chars() {
-            if c.is_whitespace() || c == '~' || c == '^' || c == ':' || c == '\\' || c == '?' || c == '*' || c == '[' {
+            if c.is_whitespace()
+                || c == '~'
+                || c == '^'
+                || c == ':'
+                || c == '\\'
+                || c == '?'
+                || c == '*'
+                || c == '['
+            {
                 return Err(format!("Branch name cannot contain '{}'", c));
             }
         }
@@ -139,7 +150,12 @@ impl Modal for NewWorktreeModal {
                             .unwrap_or_else(|| self.default_category.clone());
                         let auto_claude = self.auto_claude_checkbox.is_checked();
                         let plan_mode = self.plan_mode_checkbox.is_checked();
-                        Some(ModalAction::CreateNew { branch, category, auto_claude, plan_mode })
+                        Some(ModalAction::CreateNew {
+                            branch,
+                            category,
+                            auto_claude,
+                            plan_mode,
+                        })
                     }
                     Err(msg) => {
                         self.error_message = Some(msg);
@@ -282,20 +298,18 @@ impl Modal for NewWorktreeModal {
             } else {
                 8
             }
-        } else {
-            if has_error {
-                // Error at 6, help at 8
-                if let Some(ref err) = self.error_message {
-                    let error = Paragraph::new(Line::from(vec![Span::styled(
-                        err,
-                        Style::default().fg(Color::Red),
-                    )]));
-                    error.render(chunks[6], buf);
-                }
-                8
-            } else {
-                6
+        } else if has_error {
+            // Error at 6, help at 8
+            if let Some(ref err) = self.error_message {
+                let error = Paragraph::new(Line::from(vec![Span::styled(
+                    err,
+                    Style::default().fg(Color::Red),
+                )]));
+                error.render(chunks[6], buf);
             }
+            8
+        } else {
+            6
         };
 
         // Help text - conditionally show Tab hint only if category selector exists

@@ -14,13 +14,19 @@
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use crate::tui::modals::{ActionResultModal, DeleteConfirmModal, MergeConfirmModal, Modal, ModalAction, NewWorktreeModal};
+use crate::tui::modals::{
+    ActionResultModal, DeleteConfirmModal, MergeConfirmModal, Modal, ModalAction, NewWorktreeModal,
+};
 
-use super::state::{DashboardMode, DashboardResult};
 use super::Dashboard;
+use super::state::{DashboardMode, DashboardResult};
 
 impl Dashboard {
-    pub(super) fn handle_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> Option<DashboardResult> {
+    pub(super) fn handle_key(
+        &mut self,
+        code: KeyCode,
+        modifiers: KeyModifiers,
+    ) -> Option<DashboardResult> {
         // Clear status message on any keypress
         self.status_message = None;
 
@@ -105,9 +111,19 @@ impl Dashboard {
                     None
                 }
             }
-            ModalAction::CreateNew { branch, category, auto_claude, plan_mode } => {
+            ModalAction::CreateNew {
+                branch,
+                category,
+                auto_claude,
+                plan_mode,
+            } => {
                 self.mode = DashboardMode::Normal;
-                Some(DashboardResult::CreateNew { branch, category, auto_claude, plan_mode })
+                Some(DashboardResult::CreateNew {
+                    branch,
+                    category,
+                    auto_claude,
+                    plan_mode,
+                })
             }
             ModalAction::ShowResult { success, message } => {
                 self.mode = if success {
@@ -139,13 +155,7 @@ impl Dashboard {
                 self.mode = DashboardMode::Search;
                 None
             }
-            KeyCode::Enter => {
-                if let Some(worktree) = self.get_selected_worktree() {
-                    Some(DashboardResult::SwitchTo(worktree))
-                } else {
-                    None
-                }
-            }
+            KeyCode::Enter => self.get_selected_worktree().map(DashboardResult::SwitchTo),
             KeyCode::Up | KeyCode::Char('k') => {
                 self.move_selection(-1);
                 None
@@ -158,43 +168,48 @@ impl Dashboard {
             KeyCode::Char('n') => {
                 let categories = self.config.categories.clone();
                 let default_cat = &self.config.default_category;
-                self.mode = DashboardMode::NewWorktree(NewWorktreeModal::new(categories, default_cat));
+                self.mode =
+                    DashboardMode::NewWorktree(NewWorktreeModal::new(categories, default_cat));
                 None
             }
             KeyCode::Char('x') => {
                 // Delete - only for non-main worktrees
-                if let Some(worktree) = self.get_selected_worktree() {
-                    if !worktree.info.is_main {
-                        self.mode = DashboardMode::ConfirmDelete(DeleteConfirmModal::new(worktree));
-                    }
+                if let Some(worktree) = self.get_selected_worktree()
+                    && !worktree.info.is_main
+                {
+                    self.mode = DashboardMode::ConfirmDelete(DeleteConfirmModal::new(worktree));
                 }
                 None
             }
             KeyCode::Char('m') => {
                 // Merge - only available in push workflow, and only for non-main worktrees
                 if self.is_pull_workflow() {
-                    self.status_message = Some((false, "Merge not available in pull workflow - use GitHub PR".to_string()));
+                    self.status_message = Some((
+                        false,
+                        "Merge not available in pull workflow - use GitHub PR".to_string(),
+                    ));
                     return None;
                 }
-                if let Some(worktree) = self.get_selected_worktree() {
-                    if !worktree.info.is_main && worktree.info.branch.is_some() {
-                        // Create modal without conflict info initially
-                        // The status command will check for conflicts and update
-                        self.mode = DashboardMode::ConfirmMerge(MergeConfirmModal::new(
-                            worktree,
-                            self.main_branch.clone(),
-                            None,
-                        ));
-                    }
+                if let Some(worktree) = self.get_selected_worktree()
+                    && !worktree.info.is_main
+                    && worktree.info.branch.is_some()
+                {
+                    // Create modal without conflict info initially
+                    // The status command will check for conflicts and update
+                    self.mode = DashboardMode::ConfirmMerge(MergeConfirmModal::new(
+                        worktree,
+                        self.main_branch.clone(),
+                        None,
+                    ));
                 }
                 None
             }
             KeyCode::Char('s') => {
                 // Sync with remote - contextual push/pull based on tracking branch status
-                if let Some(worktree) = self.get_selected_worktree() {
-                    if worktree.info.branch.is_some() {
-                        return Some(DashboardResult::SyncWithRemote { worktree });
-                    }
+                if let Some(worktree) = self.get_selected_worktree()
+                    && worktree.info.branch.is_some()
+                {
+                    return Some(DashboardResult::SyncWithRemote { worktree });
                 }
                 None
             }
@@ -204,10 +219,10 @@ impl Dashboard {
                     self.status_message = Some((false, "Diffview disabled in config".to_string()));
                     return None;
                 }
-                if let Some(worktree) = self.get_selected_worktree() {
-                    if !worktree.info.is_main {
-                        return Some(DashboardResult::Review { worktree });
-                    }
+                if let Some(worktree) = self.get_selected_worktree()
+                    && !worktree.info.is_main
+                {
+                    return Some(DashboardResult::Review { worktree });
                 }
                 None
             }
@@ -228,10 +243,10 @@ impl Dashboard {
                     self.status_message = Some((false, "Linear disabled in config".to_string()));
                     return None;
                 }
-                if let Some(worktree) = self.get_selected_worktree() {
-                    if self.linear_issues.contains_key(&worktree.info.name) {
-                        return Some(DashboardResult::Linear { worktree });
-                    }
+                if let Some(worktree) = self.get_selected_worktree()
+                    && self.linear_issues.contains_key(&worktree.info.name)
+                {
+                    return Some(DashboardResult::Linear { worktree });
                 }
                 None
             }
@@ -241,10 +256,11 @@ impl Dashboard {
                     self.status_message = Some((false, "GitHub disabled in config".to_string()));
                     return None;
                 }
-                if let Some(worktree) = self.get_selected_worktree() {
-                    if !worktree.info.is_main && worktree.info.branch.is_some() {
-                        return Some(DashboardResult::GitHub { worktree });
-                    }
+                if let Some(worktree) = self.get_selected_worktree()
+                    && !worktree.info.is_main
+                    && worktree.info.branch.is_some()
+                {
+                    return Some(DashboardResult::GitHub { worktree });
                 }
                 None
             }
@@ -262,11 +278,7 @@ impl Dashboard {
             }
             KeyCode::Enter => {
                 self.mode = DashboardMode::Normal;
-                if let Some(worktree) = self.get_selected_worktree() {
-                    Some(DashboardResult::SwitchTo(worktree))
-                } else {
-                    None
-                }
+                self.get_selected_worktree().map(DashboardResult::SwitchTo)
             }
             KeyCode::Backspace => {
                 self.search_input.pop();

@@ -68,13 +68,12 @@ use crate::git::WorktreeStats;
 use crate::github::CachedPRState;
 use crate::linear::LinearIssue;
 
-pub use state::{DashboardMode, DashboardResult};
 use data::{
     CacheLoadResult, GitFetchResult, GitHubPRResult, LinearIssueResult, WorktreeStatsResult,
-    fetch_github_pr_async, fetch_linear_issue_async, fetch_origin_async,
-    load_all_caches_async, load_claude_states, load_github_prs_from_cache, load_linear_issues,
-    load_worktree_stats_async,
+    fetch_github_pr_async, fetch_linear_issue_async, fetch_origin_async, load_all_caches_async,
+    load_claude_states, load_github_prs_from_cache, load_linear_issues, load_worktree_stats_async,
 };
+pub use state::{DashboardMode, DashboardResult};
 
 /// Braille spinner frames for smooth rotation animation
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -332,7 +331,9 @@ impl Dashboard {
         if !self.config.linear.enabled {
             return;
         }
-        let (Some(api_key), Some(prefix)) = (&self.config.linear.api_key, &self.config.linear.team_prefix) else {
+        let (Some(api_key), Some(prefix)) =
+            (&self.config.linear.api_key, &self.config.linear.team_prefix)
+        else {
             return;
         };
 
@@ -433,7 +434,8 @@ impl Dashboard {
         if !self.config.claude.enabled {
             return;
         }
-        let (states, has_active) = load_claude_states(&self.config.cache_dir, &self.project_name, &self.worktrees);
+        let (states, has_active) =
+            load_claude_states(&self.config.cache_dir, &self.project_name, &self.worktrees);
         self.claude_states = states;
         self.has_active_claude = has_active;
     }
@@ -502,12 +504,12 @@ impl Dashboard {
             self.has_active_claude = has_active_claude;
 
             // Show pending error modal if any
-            if let Some((success, message)) = self.pending_result.take() {
-                if !success {
-                    self.mode = DashboardMode::ActionResult(
-                        crate::tui::modals::ActionResultModal::error(message),
-                    );
-                }
+            if let Some((success, message)) = self.pending_result.take()
+                && !success
+            {
+                self.mode = DashboardMode::ActionResult(
+                    crate::tui::modals::ActionResultModal::error(message),
+                );
             }
             return true;
         }
@@ -523,14 +525,13 @@ impl Dashboard {
         self.filter_worktrees();
 
         // Try to restore selection to the previously selected worktree
-        if let Some(name) = selected_name {
-            if let Some(pos) = self
+        if let Some(name) = selected_name
+            && let Some(pos) = self
                 .filtered_indices
                 .iter()
                 .position(|&i| self.worktrees[i].info.name == name)
-            {
-                self.selected = pos;
-            }
+        {
+            self.selected = pos;
         }
     }
 
@@ -559,33 +560,35 @@ impl Dashboard {
 
         // Refresh Linear issues (only if enabled)
         if self.config.linear.enabled {
-            self.linear_issues = load_linear_issues(&self.config.cache_dir, &self.project_name, &worktrees);
+            self.linear_issues =
+                load_linear_issues(&self.config.cache_dir, &self.project_name, &worktrees);
         }
 
         // Refresh GitHub PRs from cache (API fetch happens lazily) - only if enabled
         if self.config.github.enabled {
-            self.github_prs = load_github_prs_from_cache(&self.config.cache_dir, &self.project_name, &worktrees);
+            self.github_prs =
+                load_github_prs_from_cache(&self.config.cache_dir, &self.project_name, &worktrees);
         }
 
         self.worktrees = worktrees;
         self.filter_worktrees();
 
         // Try to restore selection to the previously selected worktree
-        if let Some(name) = selected_name {
-            if let Some(pos) = self
+        if let Some(name) = selected_name
+            && let Some(pos) = self
                 .filtered_indices
                 .iter()
                 .position(|&i| self.worktrees[i].info.name == name)
-            {
-                self.selected = pos;
-            }
+        {
+            self.selected = pos;
         }
 
         // Show pending error modal if any
-        if let Some((success, message)) = self.pending_result.take() {
-            if !success {
-                self.mode = DashboardMode::ActionResult(crate::tui::modals::ActionResultModal::error(message));
-            }
+        if let Some((success, message)) = self.pending_result.take()
+            && !success
+        {
+            self.mode =
+                DashboardMode::ActionResult(crate::tui::modals::ActionResultModal::error(message));
         }
 
         // Refresh Claude states for all worktrees
@@ -598,13 +601,13 @@ impl Dashboard {
         let worktree = self.get_selected_worktree();
         let main_branch = self.main_branch.clone();
 
-        if let DashboardMode::ConfirmMerge(ref mut modal) = self.mode {
-            if let Some(wt) = worktree {
-                let conflict_info = conflicts.map(|files| crate::tui::modals::MergeConflictInfo {
-                    conflicted_files: files,
-                });
-                *modal = crate::tui::modals::MergeConfirmModal::new(wt, main_branch, conflict_info);
-            }
+        if let DashboardMode::ConfirmMerge(ref mut modal) = self.mode
+            && let Some(wt) = worktree
+        {
+            let conflict_info = conflicts.map(|files| crate::tui::modals::MergeConflictInfo {
+                conflicted_files: files,
+            });
+            *modal = crate::tui::modals::MergeConfirmModal::new(wt, main_branch, conflict_info);
         }
     }
 
@@ -911,7 +914,7 @@ impl Dashboard {
                 let claude_state = self
                     .claude_states
                     .get(&wt.info.name)
-                    .map(|s| crate::claude::effective_state(s));
+                    .map(crate::claude::effective_state);
 
                 Self::calculate_item_height(has_linear, has_github, claude_state)
             })
@@ -956,14 +959,16 @@ impl Dashboard {
 
     fn filter_worktrees(&mut self) {
         // First apply fuzzy search filter
-        let mut indices = self.matcher.filter(&self.worktrees, &self.search_input, |wt| {
-            format!(
-                "{} {} {}",
-                wt.info.name,
-                wt.info.branch.as_deref().unwrap_or(""),
-                wt.info.category.as_deref().unwrap_or("")
-            )
-        });
+        let mut indices = self
+            .matcher
+            .filter(&self.worktrees, &self.search_input, |wt| {
+                format!(
+                    "{} {} {}",
+                    wt.info.name,
+                    wt.info.branch.as_deref().unwrap_or(""),
+                    wt.info.category.as_deref().unwrap_or("")
+                )
+            });
 
         // Then apply category filter if set
         if let Some(ref cat_filter) = self.category_filter {

@@ -79,17 +79,11 @@ impl Default for LinearConfig {
 }
 
 /// GitHub integration configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GitHubConfig {
     /// Whether GitHub integration is enabled (default: false - must explicitly enable)
     #[serde(default)]
     pub enabled: bool,
-}
-
-impl Default for GitHubConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
 }
 
 /// Diffview integration configuration
@@ -141,7 +135,7 @@ impl Default for ClaudeConfig {
 }
 
 /// Configuration for special character icons in TUI dashboard
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct IconsConfig {
     /// Icon displayed before Linear issue title
     #[serde(default)]
@@ -152,16 +146,6 @@ pub struct IconsConfig {
     /// Icon displayed before branch name
     #[serde(default)]
     pub branch: Option<String>,
-}
-
-impl Default for IconsConfig {
-    fn default() -> Self {
-        Self {
-            linear: None,
-            github: None,
-            branch: None,
-        }
-    }
 }
 
 /// Workflow mode for git synchronization.
@@ -418,7 +402,10 @@ categories = ["dev", "feature", "review", "hotfix"]
 default_category = "feature"
 "#;
         let config: GlobalConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.categories, vec!["dev", "feature", "review", "hotfix"]);
+        assert_eq!(
+            config.categories,
+            vec!["dev", "feature", "review", "hotfix"]
+        );
         assert_eq!(config.default_category, "feature");
     }
 

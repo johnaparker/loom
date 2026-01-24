@@ -22,14 +22,10 @@ pub fn sync(name: Option<&str>, dry_run: bool) -> Result<()> {
         worktrees
             .into_iter()
             .find(|w| current_dir.starts_with(&w.path))
-            .ok_or_else(|| GwtError::NotInWorktree)?
+            .ok_or(GwtError::NotInWorktree)?
     };
 
-    let branch = worktree
-        .branch
-        .as_ref()
-        .ok_or(GwtError::NoBranch)?
-        .clone();
+    let branch = worktree.branch.as_ref().ok_or(GwtError::NoBranch)?.clone();
 
     // Get sync source ref
     let source_ref = manager
@@ -51,7 +47,7 @@ pub fn sync(name: Option<&str>, dry_run: bool) -> Result<()> {
     // Dry run mode - preview actions
     if dry_run {
         dry_run_header();
-        dry_run_action(&format!("Fetch from origin"));
+        dry_run_action("Fetch from origin");
         dry_run_action(&format!(
             "Merge '{}' into '{}'",
             source_ref.yellow(),

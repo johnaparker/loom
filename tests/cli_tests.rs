@@ -476,7 +476,8 @@ mod worktree_discovery_tests {
 
         // Create a minimal config
         let config_path = config_dir.path().join("gwt").join("config.toml");
-        std::fs::create_dir_all(config_path.parent().unwrap()).expect("Failed to create config dir");
+        std::fs::create_dir_all(config_path.parent().unwrap())
+            .expect("Failed to create config dir");
         std::fs::write(
             &config_path,
             format!(
@@ -494,10 +495,7 @@ mod worktree_discovery_tests {
             .output()
             .expect("Failed to run gwt list");
 
-        assert!(
-            !output.status.success(),
-            "Should fail outside git repo"
-        );
+        assert!(!output.status.success(), "Should fail outside git repo");
     }
 }
 

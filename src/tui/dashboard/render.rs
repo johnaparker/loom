@@ -33,7 +33,8 @@ impl Dashboard {
 
         // Layout: Title | [Category Filter] | [Search] | Content Area(s) | Help
         // Content area structure depends on panel count
-        let constraints = self.build_vertical_constraints(is_search_mode, show_category_bar, panels.len());
+        let constraints =
+            self.build_vertical_constraints(is_search_mode, show_category_bar, panels.len());
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -151,7 +152,13 @@ impl Dashboard {
 
         let help_area = chunks[idx];
 
-        (title_area, category_area, search_area, content_areas, help_area)
+        (
+            title_area,
+            category_area,
+            search_area,
+            content_areas,
+            help_area,
+        )
     }
 
     /// Render panels using dynamic layout based on enabled panels
@@ -213,7 +220,12 @@ impl Dashboard {
     /// +------------------+------------------+
     /// |     Panel 3      |     Panel 4      |
     /// +------------------+------------------+
-    fn render_four_panel_layout(&mut self, f: &mut Frame, content_areas: &[Rect], panels: &[Panel]) {
+    fn render_four_panel_layout(
+        &mut self,
+        f: &mut Frame,
+        content_areas: &[Rect],
+        panels: &[Panel],
+    ) {
         // Top row: panels[0], panels[1]
         let top_chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -239,7 +251,12 @@ impl Dashboard {
     /// +--------+---------+------------------+
     /// | Commits| GitHub  |     Linear       |
     /// +--------+---------+------------------+
-    fn render_five_panel_layout(&mut self, f: &mut Frame, content_areas: &[Rect], panels: &[Panel]) {
+    fn render_five_panel_layout(
+        &mut self,
+        f: &mut Frame,
+        content_areas: &[Rect],
+        panels: &[Panel],
+    ) {
         // Top row: 50/50 split
         let top_chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -291,7 +308,10 @@ impl Dashboard {
 
         // "All" option
         if current_filter.is_none() {
-            spans.push(Span::styled("[All]", Style::default().fg(Color::Cyan).bold()));
+            spans.push(Span::styled(
+                "[All]",
+                Style::default().fg(Color::Cyan).bold(),
+            ));
         } else {
             spans.push(Span::styled("All", Style::default().fg(Color::DarkGray)));
         }
@@ -302,14 +322,23 @@ impl Dashboard {
             let is_selected = current_filter == Some(cat.as_str());
             let cat_color = Self::category_color(cat);
             if is_selected {
-                spans.push(Span::styled(format!("[{}]", cat), Style::default().fg(cat_color).bold()));
+                spans.push(Span::styled(
+                    format!("[{}]", cat),
+                    Style::default().fg(cat_color).bold(),
+                ));
             } else {
-                spans.push(Span::styled(cat.clone(), Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled(
+                    cat.clone(),
+                    Style::default().fg(Color::DarkGray),
+                ));
             }
         }
 
         // Help hint
-        spans.push(Span::styled("  (Tab to cycle)", Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(
+            "  (Tab to cycle)",
+            Style::default().fg(Color::DarkGray),
+        ));
 
         let line = Line::from(spans);
         let paragraph = Paragraph::new(line).style(Style::default().bg(Color::Rgb(35, 35, 40)));
@@ -431,7 +460,7 @@ impl Dashboard {
             let claude_state = self
                 .claude_states
                 .get(&wt.info.name)
-                .map(|s| claude::effective_state(s));
+                .map(claude::effective_state);
 
             let lines = Self::format_worktree_lines(
                 wt,
@@ -460,7 +489,11 @@ impl Dashboard {
                     }
 
                     // Render the selection indicator (only on first line of selected item)
-                    let indicator = if is_selected && line_idx == 0 { "> " } else { "  " };
+                    let indicator = if is_selected && line_idx == 0 {
+                        "> "
+                    } else {
+                        "  "
+                    };
                     buf.set_string(inner.x, y, indicator, Style::default());
 
                     // Render the line content (after the indicator)
@@ -484,6 +517,7 @@ impl Dashboard {
     }
 
     /// Format worktree item as a vector of lines (used by custom rendering)
+    #[allow(clippy::too_many_arguments)]
     fn format_worktree_lines(
         wt: &WorktreeStats,
         width: usize,
@@ -626,11 +660,11 @@ impl Dashboard {
         }
 
         // Line 4: GitHub PR indicator (if available, not for main branch)
-        if !wt.info.is_main {
-            if let Some(pr) = github_pr {
-                let github_line = Self::format_github_indicator(pr, width, github_icon);
-                lines.push(github_line);
-            }
+        if !wt.info.is_main
+            && let Some(pr) = github_pr
+        {
+            let github_line = Self::format_github_indicator(pr, width, github_icon);
+            lines.push(github_line);
         }
 
         // Line 5: Claude status (only if active session)
@@ -703,7 +737,10 @@ impl Dashboard {
         }
 
         // State
-        spans.push(Span::styled(display_state, Style::default().fg(state_color)));
+        spans.push(Span::styled(
+            display_state,
+            Style::default().fg(state_color),
+        ));
 
         // Review decision with icon
         if let Some(ref decision) = pr.review_decision {
@@ -807,23 +844,22 @@ impl Dashboard {
         }
 
         // Diff vs main (only for non-main branches)
-        if !wt.info.is_main {
-            if let (Some(added), Some(removed)) = (wt.diff_added, wt.diff_removed) {
-                if added > 0 || removed > 0 {
-                    if has_content {
-                        spans.push(Span::raw(" "));
-                    }
-                    spans.push(Span::styled(
-                        format!("+{}", added),
-                        Style::default().fg(Color::Green),
-                    ));
-                    spans.push(Span::styled(
-                        format!(" -{}", removed),
-                        Style::default().fg(Color::Red),
-                    ));
-                    has_content = true;
-                }
+        if !wt.info.is_main
+            && let (Some(added), Some(removed)) = (wt.diff_added, wt.diff_removed)
+            && (added > 0 || removed > 0)
+        {
+            if has_content {
+                spans.push(Span::raw(" "));
             }
+            spans.push(Span::styled(
+                format!("+{}", added),
+                Style::default().fg(Color::Green),
+            ));
+            spans.push(Span::styled(
+                format!(" -{}", removed),
+                Style::default().fg(Color::Red),
+            ));
+            has_content = true;
         }
 
         if has_content {
@@ -1464,10 +1500,11 @@ impl Dashboard {
             DashboardMode::Normal => {
                 let selected = self.get_selected_worktree();
                 let is_main = selected.as_ref().map(|w| w.info.is_main).unwrap_or(true);
-                let has_linear = self.config.linear.enabled && selected
-                    .as_ref()
-                    .map(|w| self.linear_issues.contains_key(&w.info.name))
-                    .unwrap_or(false);
+                let has_linear = self.config.linear.enabled
+                    && selected
+                        .as_ref()
+                        .map(|w| self.linear_issues.contains_key(&w.info.name))
+                        .unwrap_or(false);
 
                 let mut spans = vec![
                     Span::styled(" \u{2191}/\u{2193}", Style::default().fg(Color::Cyan)),

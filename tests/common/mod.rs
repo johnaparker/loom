@@ -48,7 +48,11 @@ impl TestRepo {
 
         // Create gwt config file
         // The config is looked up at {HOME}/.config/gwt/config.toml
-        let config_path = config_dir.path().join(".config").join("gwt").join("config.toml");
+        let config_path = config_dir
+            .path()
+            .join(".config")
+            .join("gwt")
+            .join("config.toml");
         fs::create_dir_all(config_path.parent().unwrap()).expect("Failed to create config dir");
 
         let config_content = format!(

@@ -68,10 +68,10 @@ pub struct MemorySource {
 impl ConfigSource for MemorySource {
     fn read_config(&self, path: &Path) -> Result<Option<String>> {
         // Check if this is the global config path
-        if let Some(ref gcp) = self.global_config_path {
-            if path == gcp {
-                return Ok(self.global_config.clone());
-            }
+        if let Some(ref gcp) = self.global_config_path
+            && path == gcp
+        {
+            return Ok(self.global_config.clone());
         }
 
         // Check project configs
@@ -89,10 +89,11 @@ impl ConfigSource for MemorySource {
 
     fn exists(&self, path: &Path) -> bool {
         // Check global config path
-        if let Some(ref gcp) = self.global_config_path {
-            if path == gcp && self.global_config.is_some() {
-                return true;
-            }
+        if let Some(ref gcp) = self.global_config_path
+            && path == gcp
+            && self.global_config.is_some()
+        {
+            return true;
         }
 
         // Check project configs

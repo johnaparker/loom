@@ -89,7 +89,9 @@ mod tests {
                 patterns: vec!["extra.txt".to_string()],
                 exclude_patterns: vec![".claude/".to_string()],
             },
-            linear: Some(IntegrationOverride { enabled: Some(false) }),
+            linear: Some(IntegrationOverride {
+                enabled: Some(false),
+            }),
             github: None,
             diffview: None,
             claude: None,

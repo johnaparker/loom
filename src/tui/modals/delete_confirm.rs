@@ -157,7 +157,10 @@ impl Modal for DeleteConfirmModal {
         // Path
         let path_str = self.worktree.info.path.display().to_string();
         let truncated_path = if path_str.len() > (area.width as usize - 10) {
-            format!("...{}", &path_str[path_str.len().saturating_sub(area.width as usize - 13)..])
+            format!(
+                "...{}",
+                &path_str[path_str.len().saturating_sub(area.width as usize - 13)..]
+            )
         } else {
             path_str
         };
@@ -197,7 +200,8 @@ impl Modal for DeleteConfirmModal {
             } else {
                 true
             };
-            self.acknowledge_checkbox.render(chunks[chunk_idx], buf, is_focused, true);
+            self.acknowledge_checkbox
+                .render(chunks[chunk_idx], buf, is_focused, true);
             chunk_idx += 1;
         }
 
@@ -207,7 +211,8 @@ impl Modal for DeleteConfirmModal {
             chunk_idx += 1;
 
             let is_focused = self.focused_checkbox == 0;
-            self.delete_branch_checkbox.render(chunks[chunk_idx], buf, is_focused, true);
+            self.delete_branch_checkbox
+                .render(chunks[chunk_idx], buf, is_focused, true);
             chunk_idx += 1;
         }
 

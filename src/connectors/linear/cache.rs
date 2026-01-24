@@ -3,13 +3,18 @@
 use anyhow::Result;
 use std::path::Path;
 
-use crate::connectors::cache as shared_cache;
 use super::types::LinearIssue;
+use crate::connectors::cache as shared_cache;
 
 const CACHE_FILENAME: &str = "linear.json";
 
 /// Write Linear issue metadata to cache directory
-pub fn write_metadata(base: &Path, project_name: &str, worktree_name: &str, issue: &LinearIssue) -> Result<()> {
+pub fn write_metadata(
+    base: &Path,
+    project_name: &str,
+    worktree_name: &str,
+    issue: &LinearIssue,
+) -> Result<()> {
     let metadata = serde_json::json!({
         "id": issue.id,
         "title": issue.title,
@@ -21,7 +26,11 @@ pub fn write_metadata(base: &Path, project_name: &str, worktree_name: &str, issu
 }
 
 /// Read Linear issue metadata from cache directory
-pub fn read_metadata(base: &Path, project_name: &str, worktree_name: &str) -> Result<Option<LinearIssue>> {
+pub fn read_metadata(
+    base: &Path,
+    project_name: &str,
+    worktree_name: &str,
+) -> Result<Option<LinearIssue>> {
     let value: Option<serde_json::Value> =
         shared_cache::read_json(base, project_name, worktree_name, CACHE_FILENAME)?;
 
@@ -30,10 +39,26 @@ pub fn read_metadata(base: &Path, project_name: &str, worktree_name: &str) -> Re
     };
 
     Ok(Some(LinearIssue {
-        id: value.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        title: value.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        url: value.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        branch_name: value.get("branch").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        id: value
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        title: value
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        url: value
+            .get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        branch_name: value
+            .get("branch")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         // Handle missing description for old caches
         description: value
             .get("description")
