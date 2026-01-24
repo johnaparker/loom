@@ -234,12 +234,12 @@ impl Config {
         );
 
         // Resolve Claude sandbox settings
-        let claude_sandbox = resolve_optional(
+        let claude_sandbox = resolve_integration_enabled(
             worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.sandbox),
             self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.sandbox),
             self.global.claude.sandbox,
         );
-        let claude_sandbox_auto_allow_bash = resolve_optional(
+        let claude_sandbox_auto_allow_bash = resolve_integration_enabled(
             worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.sandbox_auto_allow_bash),
             self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.sandbox_auto_allow_bash),
             self.global.claude.sandbox_auto_allow_bash,
@@ -316,17 +316,12 @@ impl Config {
     }
 }
 
-/// Resolve integration enabled state with priority: worktree → project → global
+/// Resolve optional value with priority: worktree → project → global
 fn resolve_integration_enabled(
     worktree: Option<bool>,
     project: Option<bool>,
     global: bool,
 ) -> bool {
-    worktree.or(project).unwrap_or(global)
-}
-
-/// Resolve optional value with priority: worktree → project → global
-fn resolve_optional<T>(worktree: Option<T>, project: Option<T>, global: T) -> T {
     worktree.or(project).unwrap_or(global)
 }
 

@@ -415,11 +415,16 @@ pub fn create_worktree(
 
     // Configure Claude sandbox if enabled
     let sandbox_configured = if config.claude_sandbox() {
-        sync::write_claude_sandbox_settings(
+        match sync::write_claude_sandbox_settings(
             &worktree_path,
             config.claude_sandbox_auto_allow_bash(),
-        )
-        .is_ok()
+        ) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("Warning: Could not configure Claude sandbox: {}", e);
+                false
+            }
+        }
     } else {
         false
     };
