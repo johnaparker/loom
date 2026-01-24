@@ -317,6 +317,8 @@ pub struct CreateWorktreeResult {
     pub synced_files: Vec<String>,
     /// Whether direnv allow was run
     pub direnv_allowed: bool,
+    /// Whether Claude sandbox settings were configured
+    pub sandbox_configured: bool,
 }
 
 /// Create a new worktree with all associated setup.
@@ -411,6 +413,22 @@ pub fn create_worktree(
         }
     }
 
+    // Configure Claude sandbox if enabled
+    let sandbox_configured = if config.claude_sandbox() {
+        match sync::write_claude_sandbox_settings(
+            &worktree_path,
+            config.claude_sandbox_auto_allow_bash(),
+        ) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("Warning: Could not configure Claude sandbox: {}", e);
+                false
+            }
+        }
+    } else {
+        false
+    };
+
     let session_name = format!("{}/{}", project_name, &resolved.worktree_name);
 
     Ok(CreateWorktreeResult {
@@ -423,5 +441,6 @@ pub fn create_worktree(
         linear_status_updated,
         synced_files,
         direnv_allowed,
+        sandbox_configured,
     })
 }

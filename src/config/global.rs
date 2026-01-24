@@ -32,6 +32,9 @@ pub struct GlobalConfig {
     /// Special character icons for TUI dashboard
     #[serde(default)]
     pub icons: IconsConfig,
+    /// Claude Code integration settings
+    #[serde(default)]
+    pub claude: ClaudeConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +114,26 @@ impl Default for DiffviewConfig {
 
 fn default_nvim_command() -> String {
     "nvim".to_string()
+}
+
+/// Claude Code integration configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeConfig {
+    /// Enable sandbox mode for new worktrees (default: false)
+    #[serde(default)]
+    pub sandbox: bool,
+    /// Auto-approve sandboxed bash commands (default: true)
+    #[serde(default = "default_true")]
+    pub sandbox_auto_allow_bash: bool,
+}
+
+impl Default for ClaudeConfig {
+    fn default() -> Self {
+        Self {
+            sandbox: false,
+            sandbox_auto_allow_bash: true,
+        }
+    }
 }
 
 /// Configuration for special character icons in TUI dashboard
@@ -193,6 +216,7 @@ impl Default for GlobalConfig {
             diffview: DiffviewConfig::default(),
             workflow: SyncWorkflow::default(),
             icons: IconsConfig::default(),
+            claude: ClaudeConfig::default(),
         }
     }
 }
@@ -402,5 +426,42 @@ worktree_root = "/custom/path"
         let config: GlobalConfig = toml::from_str(toml_str).unwrap();
         // Should default to ["dev"]
         assert_eq!(config.categories, vec!["dev".to_string()]);
+    }
+
+    #[test]
+    fn test_claude_config_defaults() {
+        let config = GlobalConfig::default();
+        // Claude sandbox disabled by default
+        assert!(!config.claude.sandbox);
+        // Auto-allow bash enabled by default
+        assert!(config.claude.sandbox_auto_allow_bash);
+    }
+
+    #[test]
+    fn test_parse_claude_config() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+
+[claude]
+sandbox = true
+sandbox_auto_allow_bash = false
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.claude.sandbox);
+        assert!(!config.claude.sandbox_auto_allow_bash);
+    }
+
+    #[test]
+    fn test_parse_claude_config_partial() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+
+[claude]
+sandbox = true
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.claude.sandbox);
+        // sandbox_auto_allow_bash should default to true
+        assert!(config.claude.sandbox_auto_allow_bash);
     }
 }

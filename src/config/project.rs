@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use super::global::SyncWorkflow;
-use super::IntegrationOverride;
+use super::{ClaudeOverride, IntegrationOverride};
 
 /// Project-specific configuration stored at .gwt.toml in repo root
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +24,9 @@ pub struct ProjectConfig {
     /// Diffview integration override
     #[serde(default)]
     pub diffview: Option<IntegrationOverride>,
+    /// Claude Code integration override
+    #[serde(default)]
+    pub claude: Option<ClaudeOverride>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -151,6 +154,7 @@ project_name = "test"
             linear: None,
             github: None,
             diffview: None,
+            claude: None,
         };
 
         config.save(temp_dir.path()).unwrap();
@@ -173,6 +177,7 @@ project_name = "test"
             linear: None,
             github: None,
             diffview: None,
+            claude: None,
         };
         repo_config.save(repo_root.path()).unwrap();
 
@@ -184,6 +189,7 @@ project_name = "test"
             linear: None,
             github: None,
             diffview: None,
+            claude: None,
         };
         wt_config.save(worktree_dir.path()).unwrap();
 
@@ -207,6 +213,7 @@ project_name = "test"
             linear: None,
             github: None,
             diffview: None,
+            claude: None,
         };
         repo_config.save(repo_root.path()).unwrap();
 
@@ -249,5 +256,34 @@ enabled = false
         assert!(config.linear.is_none());
         assert_eq!(config.github.as_ref().and_then(|g| g.enabled), Some(false));
         assert!(config.diffview.is_none());
+    }
+
+    #[test]
+    fn test_parse_claude_override() {
+        let toml_str = r#"
+project_name = "my-project"
+
+[claude]
+sandbox = false
+sandbox_auto_allow_bash = false
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        let claude = config.claude.as_ref().unwrap();
+        assert_eq!(claude.sandbox, Some(false));
+        assert_eq!(claude.sandbox_auto_allow_bash, Some(false));
+    }
+
+    #[test]
+    fn test_parse_claude_override_partial() {
+        let toml_str = r#"
+project_name = "my-project"
+
+[claude]
+sandbox = true
+"#;
+        let config: ProjectConfig = toml::from_str(toml_str).unwrap();
+        let claude = config.claude.as_ref().unwrap();
+        assert_eq!(claude.sandbox, Some(true));
+        assert!(claude.sandbox_auto_allow_bash.is_none());
     }
 }

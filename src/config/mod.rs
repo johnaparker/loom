@@ -3,7 +3,7 @@ mod project;
 mod source;
 mod worktree;
 
-pub use global::{DiffviewConfig, GitHubConfig, GlobalConfig, LinearConfig, SyncWorkflow};
+pub use global::{ClaudeConfig, DiffviewConfig, GitHubConfig, GlobalConfig, LinearConfig, SyncWorkflow};
 pub use project::ProjectConfig;
 pub use source::{ConfigSource, FilesystemSource};
 pub use worktree::{WorktreeConfig, WorktreeSyncConfig};
@@ -22,6 +22,17 @@ use std::path::{Path, PathBuf};
 pub struct IntegrationOverride {
     /// Override the enabled state at this config level
     pub enabled: Option<bool>,
+}
+
+/// Claude Code integration override configuration.
+///
+/// Used by both project and worktree configs to override Claude settings.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClaudeOverride {
+    /// Override sandbox enabled state
+    pub sandbox: Option<bool>,
+    /// Override auto-allow bash when sandboxed
+    pub sandbox_auto_allow_bash: Option<bool>,
 }
 
 /// Combined configuration from global and project sources
@@ -180,6 +191,16 @@ impl Config {
         self.global.icons.branch.as_deref()
     }
 
+    /// Whether Claude sandbox mode is enabled for new worktrees
+    pub fn claude_sandbox(&self) -> bool {
+        self.global.claude.sandbox
+    }
+
+    /// Whether to auto-approve bash commands when sandboxed
+    pub fn claude_sandbox_auto_allow_bash(&self) -> bool {
+        self.global.claude.sandbox_auto_allow_bash
+    }
+
     /// Resolve configuration for a specific worktree context.
     ///
     /// This merges all config levels with priority: worktree → project → global → defaults.
@@ -212,6 +233,18 @@ impl Config {
             self.global.diffview.enabled,
         );
 
+        // Resolve Claude sandbox settings
+        let claude_sandbox = resolve_integration_enabled(
+            worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.sandbox),
+            self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.sandbox),
+            self.global.claude.sandbox,
+        );
+        let claude_sandbox_auto_allow_bash = resolve_integration_enabled(
+            worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.sandbox_auto_allow_bash),
+            self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.sandbox_auto_allow_bash),
+            self.global.claude.sandbox_auto_allow_bash,
+        );
+
         // Resolve sync patterns: merge global + project, then apply worktree excludes
         let mut sync_patterns = self.sync_patterns();
         if let Some(ref wt_config) = worktree_config {
@@ -241,6 +274,10 @@ impl Config {
             diffview: ResolvedDiffviewConfig {
                 enabled: diffview_enabled,
                 command: self.global.diffview.command.clone(),
+            },
+            claude: ResolvedClaudeConfig {
+                sandbox: claude_sandbox,
+                sandbox_auto_allow_bash: claude_sandbox_auto_allow_bash,
             },
             sync_patterns,
             icons: ResolvedIconsConfig {
@@ -279,7 +316,7 @@ impl Config {
     }
 }
 
-/// Resolve integration enabled state with priority: worktree → project → global
+/// Resolve optional value with priority: worktree → project → global
 fn resolve_integration_enabled(
     worktree: Option<bool>,
     project: Option<bool>,
@@ -299,6 +336,7 @@ pub struct ResolvedConfig {
     pub linear: ResolvedLinearConfig,
     pub github: ResolvedGitHubConfig,
     pub diffview: ResolvedDiffviewConfig,
+    pub claude: ResolvedClaudeConfig,
     pub sync_patterns: Vec<String>,
     pub icons: ResolvedIconsConfig,
     pub default_category: String,
@@ -343,6 +381,15 @@ pub struct ResolvedIconsConfig {
     pub branch: Option<String>,
 }
 
+/// Resolved Claude Code integration configuration
+#[derive(Debug, Clone)]
+pub struct ResolvedClaudeConfig {
+    /// Whether sandbox mode is enabled for new worktrees
+    pub sandbox: bool,
+    /// Whether to auto-approve bash commands when sandboxed
+    pub sandbox_auto_allow_bash: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,6 +407,7 @@ mod tests {
             linear: None,
             github: None,
             diffview: None,
+            claude: None,
         });
         Config { global, project }
     }
@@ -392,6 +440,7 @@ mod tests {
                 linear: None,
                 github: None,
                 diffview: None,
+                claude: None,
             }),
         };
         assert_eq!(config.workflow(), SyncWorkflow::Push);
@@ -486,6 +535,7 @@ workflow = "pull"
                 linear: None,
                 github: None,
                 diffview: None,
+                claude: None,
             }),
         );
 
@@ -552,6 +602,7 @@ workflow = "pull"
             linear: Some(IntegrationOverride { enabled: Some(false) }),
             github: None, // No override
             diffview: Some(IntegrationOverride { enabled: Some(true) }),
+            claude: None,
         };
 
         let config = Config::from_parts(global, Some(project));
@@ -578,6 +629,7 @@ workflow = "pull"
             linear: Some(IntegrationOverride { enabled: Some(true) }), // Override project's false
             github: Some(IntegrationOverride { enabled: Some(false) }), // Override global's true
             diffview: None, // No override - should use project's true
+            claude: None,
         };
         wt_config.save(temp_dir.path()).unwrap();
 
@@ -593,6 +645,7 @@ workflow = "pull"
             linear: Some(IntegrationOverride { enabled: Some(false) }),
             github: None,
             diffview: Some(IntegrationOverride { enabled: Some(true) }),
+            claude: None,
         };
 
         let config = Config::from_parts(global, Some(project));
@@ -607,5 +660,99 @@ workflow = "pull"
         assert!(resolved.sync_patterns.contains(&"worktree-only.txt".to_string()));
         assert!(!resolved.sync_patterns.contains(&".env".to_string())); // Excluded by worktree
         assert!(resolved.sync_patterns.contains(&".envrc".to_string())); // Global pattern not excluded
+    }
+
+    #[test]
+    fn test_claude_config_defaults() {
+        let config = Config::from_parts(GlobalConfig::default(), None);
+        // Claude sandbox disabled by default
+        assert!(!config.claude_sandbox());
+        // Auto-allow bash enabled by default
+        assert!(config.claude_sandbox_auto_allow_bash());
+    }
+
+    #[test]
+    fn test_resolved_claude_config_defaults() {
+        let config = Config::from_parts(GlobalConfig::default(), None);
+        let resolved = config.resolve(None).unwrap();
+
+        // Claude sandbox disabled by default
+        assert!(!resolved.claude.sandbox);
+        // Auto-allow bash enabled by default
+        assert!(resolved.claude.sandbox_auto_allow_bash);
+    }
+
+    #[test]
+    fn test_resolved_claude_config_project_overrides() {
+        let mut global = GlobalConfig::default();
+        global.claude.sandbox = true;
+        global.claude.sandbox_auto_allow_bash = true;
+
+        let project = ProjectConfig {
+            project_name: None,
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig::default(),
+            linear: None,
+            github: None,
+            diffview: None,
+            claude: Some(ClaudeOverride {
+                sandbox: Some(false), // Override global
+                sandbox_auto_allow_bash: None, // Use global
+            }),
+        };
+
+        let config = Config::from_parts(global, Some(project));
+        let resolved = config.resolve(None).unwrap();
+
+        // Project override should win for sandbox
+        assert!(!resolved.claude.sandbox);
+        // No project override, uses global
+        assert!(resolved.claude.sandbox_auto_allow_bash);
+    }
+
+    #[test]
+    fn test_resolved_claude_config_worktree_overrides() {
+        use tempfile::TempDir;
+        use worktree::{WorktreeConfig, WorktreeSyncConfig};
+
+        // Create temp worktree directory with config
+        let temp_dir = TempDir::new().unwrap();
+        let wt_config = WorktreeConfig {
+            sync: WorktreeSyncConfig::default(),
+            linear: None,
+            github: None,
+            diffview: None,
+            claude: Some(ClaudeOverride {
+                sandbox: Some(true), // Override project's false
+                sandbox_auto_allow_bash: Some(false), // Override global's true
+            }),
+        };
+        wt_config.save(temp_dir.path()).unwrap();
+
+        // Global: sandbox=true, auto_allow=true
+        let mut global = GlobalConfig::default();
+        global.claude.sandbox = true;
+        global.claude.sandbox_auto_allow_bash = true;
+
+        // Project: sandbox=false
+        let project = ProjectConfig {
+            project_name: None,
+            sync: ProjectSyncConfig::default(),
+            git: ProjectGitConfig::default(),
+            linear: None,
+            github: None,
+            diffview: None,
+            claude: Some(ClaudeOverride {
+                sandbox: Some(false),
+                sandbox_auto_allow_bash: None,
+            }),
+        };
+
+        let config = Config::from_parts(global, Some(project));
+        let resolved = config.resolve(Some(temp_dir.path())).unwrap();
+
+        // Worktree overrides should win
+        assert!(resolved.claude.sandbox); // Worktree true overrides project false
+        assert!(!resolved.claude.sandbox_auto_allow_bash); // Worktree false overrides global true
     }
 }
