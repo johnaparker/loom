@@ -29,6 +29,8 @@ pub struct IntegrationOverride {
 /// Used by both project and worktree configs to override Claude settings.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClaudeOverride {
+    /// Override enabled state (whether Claude panel is shown in dashboard)
+    pub enabled: Option<bool>,
     /// Override sandbox enabled state
     pub sandbox: Option<bool>,
     /// Override auto-allow bash when sandboxed
@@ -233,7 +235,12 @@ impl Config {
             self.global.diffview.enabled,
         );
 
-        // Resolve Claude sandbox settings
+        // Resolve Claude integration settings
+        let claude_enabled = resolve_integration_enabled(
+            worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.enabled),
+            self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.enabled),
+            self.global.claude.enabled,
+        );
         let claude_sandbox = resolve_integration_enabled(
             worktree_config.as_ref().and_then(|w| w.claude.as_ref()).and_then(|c| c.sandbox),
             self.project.as_ref().and_then(|p| p.claude.as_ref()).and_then(|c| c.sandbox),
@@ -276,6 +283,7 @@ impl Config {
                 command: self.global.diffview.command.clone(),
             },
             claude: ResolvedClaudeConfig {
+                enabled: claude_enabled,
                 sandbox: claude_sandbox,
                 sandbox_auto_allow_bash: claude_sandbox_auto_allow_bash,
             },
@@ -384,6 +392,8 @@ pub struct ResolvedIconsConfig {
 /// Resolved Claude Code integration configuration
 #[derive(Debug, Clone)]
 pub struct ResolvedClaudeConfig {
+    /// Whether Claude integration is enabled (show panel in dashboard)
+    pub enabled: bool,
     /// Whether sandbox mode is enabled for new worktrees
     pub sandbox: bool,
     /// Whether to auto-approve bash commands when sandboxed
@@ -676,6 +686,8 @@ workflow = "pull"
         let config = Config::from_parts(GlobalConfig::default(), None);
         let resolved = config.resolve(None).unwrap();
 
+        // Claude enabled by default (primary feature)
+        assert!(resolved.claude.enabled);
         // Claude sandbox disabled by default
         assert!(!resolved.claude.sandbox);
         // Auto-allow bash enabled by default
@@ -696,6 +708,7 @@ workflow = "pull"
             github: None,
             diffview: None,
             claude: Some(ClaudeOverride {
+                enabled: None, // Use global
                 sandbox: Some(false), // Override global
                 sandbox_auto_allow_bash: None, // Use global
             }),
@@ -704,6 +717,8 @@ workflow = "pull"
         let config = Config::from_parts(global, Some(project));
         let resolved = config.resolve(None).unwrap();
 
+        // No project override, uses global (true)
+        assert!(resolved.claude.enabled);
         // Project override should win for sandbox
         assert!(!resolved.claude.sandbox);
         // No project override, uses global
@@ -723,13 +738,14 @@ workflow = "pull"
             github: None,
             diffview: None,
             claude: Some(ClaudeOverride {
+                enabled: Some(false), // Override global's true
                 sandbox: Some(true), // Override project's false
                 sandbox_auto_allow_bash: Some(false), // Override global's true
             }),
         };
         wt_config.save(temp_dir.path()).unwrap();
 
-        // Global: sandbox=true, auto_allow=true
+        // Global: enabled=true, sandbox=true, auto_allow=true
         let mut global = GlobalConfig::default();
         global.claude.sandbox = true;
         global.claude.sandbox_auto_allow_bash = true;
@@ -743,6 +759,7 @@ workflow = "pull"
             github: None,
             diffview: None,
             claude: Some(ClaudeOverride {
+                enabled: None, // Use global
                 sandbox: Some(false),
                 sandbox_auto_allow_bash: None,
             }),
@@ -752,6 +769,7 @@ workflow = "pull"
         let resolved = config.resolve(Some(temp_dir.path())).unwrap();
 
         // Worktree overrides should win
+        assert!(!resolved.claude.enabled); // Worktree false overrides global true
         assert!(resolved.claude.sandbox); // Worktree true overrides project false
         assert!(!resolved.claude.sandbox_auto_allow_bash); // Worktree false overrides global true
     }

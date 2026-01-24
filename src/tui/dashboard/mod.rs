@@ -82,6 +82,17 @@ const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦
 /// Interval between periodic git fetch operations
 const GIT_FETCH_INTERVAL: Duration = Duration::from_secs(15);
 
+/// Dashboard panels that can be shown based on config.
+/// Order: Worktrees is always first, Commits is always last, optional panels in between.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Panel {
+    Worktrees,
+    Claude,
+    Linear,
+    GitHub,
+    Commits,
+}
+
 /// Interactive dashboard for worktree status
 pub struct Dashboard {
     worktrees: Vec<WorktreeStats>,
@@ -190,8 +201,12 @@ impl Dashboard {
         // Create channel for async cache loading
         let (cache_sender, cache_receiver) = mpsc::channel();
 
-        // Load initial Claude states
-        let (claude_states, has_active_claude) = load_claude_states(cache_dir, &project_name, &worktrees);
+        // Load initial Claude states - only if enabled
+        let (claude_states, has_active_claude) = if config.claude.enabled {
+            load_claude_states(cache_dir, &project_name, &worktrees)
+        } else {
+            (HashMap::new(), false)
+        };
 
         let mut dashboard = Self {
             worktrees,
@@ -415,6 +430,9 @@ impl Dashboard {
 
     /// Refresh Claude session states for all worktrees
     fn refresh_claude_states(&mut self) {
+        if !self.config.claude.enabled {
+            return;
+        }
         let (states, has_active) = load_claude_states(&self.config.cache_dir, &self.project_name, &self.worktrees);
         self.claude_states = states;
         self.has_active_claude = has_active;
@@ -758,6 +776,24 @@ impl Dashboard {
     /// Get the resolved config
     pub(crate) fn config(&self) -> &ResolvedConfig {
         &self.config
+    }
+
+    /// Get enabled panels in clockwise order from worktrees.
+    /// Order: Worktrees → Claude → Linear → GitHub → Commits
+    /// Worktrees and Commits are always shown; others depend on config.
+    pub(crate) fn enabled_panels(&self) -> Vec<Panel> {
+        let mut panels = vec![Panel::Worktrees];
+        if self.config.claude.enabled {
+            panels.push(Panel::Claude);
+        }
+        if self.config.linear.enabled {
+            panels.push(Panel::Linear);
+        }
+        if self.config.github.enabled {
+            panels.push(Panel::GitHub);
+        }
+        panels.push(Panel::Commits);
+        panels
     }
 
     /// Check if category filter bar should be shown (when >2 categories configured)

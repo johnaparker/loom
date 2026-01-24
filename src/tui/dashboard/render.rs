@@ -23,58 +23,26 @@ use crate::github::{CachedPRState, GitHubPR};
 use crate::tui::modals::render_modal_overlay;
 
 use super::state::DashboardMode;
-use super::{Dashboard, SPINNER_FRAMES};
+use super::{Dashboard, Panel, SPINNER_FRAMES};
 
 impl Dashboard {
     pub(super) fn render(&mut self, f: &mut Frame) {
         let is_search_mode = matches!(self.mode, DashboardMode::Search);
         let show_category_bar = self.show_category_filter();
+        let panels = self.enabled_panels();
 
-        // Layout: Title | [Category Filter] | [Search] | Top row (50%) | Bottom row (50%) | Help
-        let constraints = match (is_search_mode, show_category_bar) {
-            (true, true) => vec![
-                Constraint::Length(1),      // Title bar
-                Constraint::Length(1),      // Category filter bar
-                Constraint::Length(3),      // Search bar
-                Constraint::Percentage(50), // Top row (Worktrees + Claude)
-                Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
-                Constraint::Length(1),      // Help bar
-            ],
-            (true, false) => vec![
-                Constraint::Length(1),      // Title bar
-                Constraint::Length(3),      // Search bar
-                Constraint::Percentage(50), // Top row (Worktrees + Claude)
-                Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
-                Constraint::Length(1),      // Help bar
-            ],
-            (false, true) => vec![
-                Constraint::Length(1),      // Title bar
-                Constraint::Length(1),      // Category filter bar
-                Constraint::Percentage(50), // Top row (Worktrees + Claude)
-                Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
-                Constraint::Length(1),      // Help bar
-            ],
-            (false, false) => vec![
-                Constraint::Length(1),      // Title bar
-                Constraint::Percentage(50), // Top row (Worktrees + Claude)
-                Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
-                Constraint::Length(1),      // Help bar
-            ],
-        };
+        // Layout: Title | [Category Filter] | [Search] | Content Area(s) | Help
+        // Content area structure depends on panel count
+        let constraints = self.build_vertical_constraints(is_search_mode, show_category_bar, panels.len());
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(constraints.clone())
+            .constraints(constraints)
             .split(f.area());
 
         // Determine chunk indices based on which optional elements are shown
-        let (title_area, category_area, search_area, top_row_area, bottom_row_area, help_area) =
-            match (is_search_mode, show_category_bar) {
-                (true, true) => (chunks[0], Some(chunks[1]), Some(chunks[2]), chunks[3], chunks[4], chunks[5]),
-                (true, false) => (chunks[0], None, Some(chunks[1]), chunks[2], chunks[3], chunks[4]),
-                (false, true) => (chunks[0], Some(chunks[1]), None, chunks[2], chunks[3], chunks[4]),
-                (false, false) => (chunks[0], None, None, chunks[1], chunks[2], chunks[3]),
-            };
+        let (title_area, category_area, search_area, content_areas, help_area) =
+            self.extract_layout_areas(&chunks, is_search_mode, show_category_bar, panels.len());
 
         self.render_title_bar(f, title_area);
 
@@ -86,32 +54,11 @@ impl Dashboard {
             self.render_search_bar(f, search_area);
         }
 
-        // Main content
+        // Main content - dynamic layout based on enabled panels
         if self.filtered_indices.is_empty() {
-            self.render_empty(f, top_row_area);
+            self.render_empty(f, content_areas[0]);
         } else {
-            // Top row: Worktrees (50%) | Claude (50%)
-            let top_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .split(top_row_area);
-
-            self.render_worktree_list(f, top_chunks[0]);
-            self.render_claude_pane(f, top_chunks[1]);
-
-            // Bottom row: Commits (33%) | GitHub (33%) | Linear (34%)
-            let bottom_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(33),
-                    Constraint::Percentage(33),
-                    Constraint::Percentage(34),
-                ])
-                .split(bottom_row_area);
-
-            self.render_commit_preview(f, bottom_chunks[0]);
-            self.render_github_panel(f, bottom_chunks[1]);
-            self.render_linear_panel(f, bottom_chunks[2]);
+            self.render_dynamic_layout(f, &content_areas, &panels);
         }
 
         self.render_help(f, help_area);
@@ -131,6 +78,200 @@ impl Dashboard {
                 render_modal_overlay(modal, f.area(), f.buffer_mut());
             }
             _ => {}
+        }
+    }
+
+    /// Build vertical layout constraints based on panel count
+    fn build_vertical_constraints(
+        &self,
+        is_search_mode: bool,
+        show_category_bar: bool,
+        panel_count: usize,
+    ) -> Vec<Constraint> {
+        let mut constraints = vec![Constraint::Length(1)]; // Title bar
+
+        if show_category_bar {
+            constraints.push(Constraint::Length(1)); // Category filter bar
+        }
+
+        if is_search_mode {
+            constraints.push(Constraint::Length(3)); // Search bar
+        }
+
+        // Content areas: 1 or 2 rows depending on panel count
+        match panel_count {
+            2 | 3 => {
+                // Single content row for 2-3 panels
+                constraints.push(Constraint::Min(0));
+            }
+            _ => {
+                // Two content rows for 4-5 panels
+                constraints.push(Constraint::Percentage(50)); // Top row
+                constraints.push(Constraint::Percentage(50)); // Bottom row
+            }
+        }
+
+        constraints.push(Constraint::Length(1)); // Help bar
+        constraints
+    }
+
+    /// Extract layout areas from chunks based on current config
+    fn extract_layout_areas(
+        &self,
+        chunks: &[Rect],
+        is_search_mode: bool,
+        show_category_bar: bool,
+        panel_count: usize,
+    ) -> (Rect, Option<Rect>, Option<Rect>, Vec<Rect>, Rect) {
+        let mut idx = 0;
+
+        let title_area = chunks[idx];
+        idx += 1;
+
+        let category_area = if show_category_bar {
+            let area = chunks[idx];
+            idx += 1;
+            Some(area)
+        } else {
+            None
+        };
+
+        let search_area = if is_search_mode {
+            let area = chunks[idx];
+            idx += 1;
+            Some(area)
+        } else {
+            None
+        };
+
+        // Collect content areas (1 or 2 depending on layout)
+        let content_count = if panel_count <= 3 { 1 } else { 2 };
+        let content_areas: Vec<Rect> = (0..content_count).map(|i| chunks[idx + i]).collect();
+        idx += content_count;
+
+        let help_area = chunks[idx];
+
+        (title_area, category_area, search_area, content_areas, help_area)
+    }
+
+    /// Render panels using dynamic layout based on enabled panels
+    fn render_dynamic_layout(&mut self, f: &mut Frame, content_areas: &[Rect], panels: &[Panel]) {
+        match panels.len() {
+            2 => self.render_two_panel_layout(f, content_areas[0], panels),
+            3 => self.render_three_panel_layout(f, content_areas[0], panels),
+            4 => self.render_four_panel_layout(f, content_areas, panels),
+            _ => self.render_five_panel_layout(f, content_areas, panels),
+        }
+    }
+
+    /// 2 panels: 50/50 horizontal split
+    /// +------------------+------------------+
+    /// |    Worktrees     |     Commits      |
+    /// |      (50%)       |      (50%)       |
+    /// +------------------+------------------+
+    fn render_two_panel_layout(&mut self, f: &mut Frame, area: Rect, panels: &[Panel]) {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(area);
+
+        for (i, panel) in panels.iter().enumerate() {
+            if i < chunks.len() {
+                self.render_panel(f, chunks[i], *panel);
+            }
+        }
+    }
+
+    /// 3 panels: Worktrees left, 2 stacked on right
+    /// +------------------+------------------+
+    /// |                  |     Panel 2      |
+    /// |    Worktrees     +------------------+
+    /// |      (50%)       |     Panel 3      |
+    /// +------------------+------------------+
+    fn render_three_panel_layout(&mut self, f: &mut Frame, area: Rect, panels: &[Panel]) {
+        let main_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(area);
+
+        // Left: Worktrees
+        self.render_panel(f, main_chunks[0], panels[0]);
+
+        // Right: 2 stacked panels
+        let right_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(main_chunks[1]);
+
+        self.render_panel(f, right_chunks[0], panels[1]);
+        self.render_panel(f, right_chunks[1], panels[2]);
+    }
+
+    /// 4 panels: 2x2 grid
+    /// +------------------+------------------+
+    /// |    Worktrees     |     Panel 2      |
+    /// +------------------+------------------+
+    /// |     Panel 3      |     Panel 4      |
+    /// +------------------+------------------+
+    fn render_four_panel_layout(&mut self, f: &mut Frame, content_areas: &[Rect], panels: &[Panel]) {
+        // Top row: panels[0], panels[1]
+        let top_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(content_areas[0]);
+
+        self.render_panel(f, top_chunks[0], panels[0]);
+        self.render_panel(f, top_chunks[1], panels[1]);
+
+        // Bottom row: panels[2], panels[3]
+        let bottom_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(content_areas[1]);
+
+        self.render_panel(f, bottom_chunks[0], panels[2]);
+        self.render_panel(f, bottom_chunks[1], panels[3]);
+    }
+
+    /// 5 panels: Current layout (2+3)
+    /// +------------------+------------------+
+    /// |    Worktrees     |     Claude       |
+    /// +--------+---------+------------------+
+    /// | Commits| GitHub  |     Linear       |
+    /// +--------+---------+------------------+
+    fn render_five_panel_layout(&mut self, f: &mut Frame, content_areas: &[Rect], panels: &[Panel]) {
+        // Top row: 50/50 split
+        let top_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(content_areas[0]);
+
+        self.render_panel(f, top_chunks[0], panels[0]); // Worktrees
+        self.render_panel(f, top_chunks[1], panels[1]); // Claude
+
+        // Bottom row: 33/33/34 split
+        let bottom_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+                Constraint::Percentage(34),
+            ])
+            .split(content_areas[1]);
+
+        self.render_panel(f, bottom_chunks[0], panels[2]); // Linear
+        self.render_panel(f, bottom_chunks[1], panels[3]); // GitHub
+        self.render_panel(f, bottom_chunks[2], panels[4]); // Commits
+    }
+
+    /// Render a single panel by type
+    fn render_panel(&mut self, f: &mut Frame, area: Rect, panel: Panel) {
+        match panel {
+            Panel::Worktrees => self.render_worktree_list(f, area),
+            Panel::Claude => self.render_claude_pane(f, area),
+            Panel::Linear => self.render_linear_panel(f, area),
+            Panel::GitHub => self.render_github_panel(f, area),
+            Panel::Commits => self.render_commit_preview(f, area),
         }
     }
 
@@ -1378,11 +1519,13 @@ impl Dashboard {
                     Span::styled(": sync  ", Style::default().fg(Color::DarkGray)),
                 ]);
 
-                // Show c: claude for all worktrees
-                spans.extend(vec![
-                    Span::styled("c", Style::default().fg(Color::Cyan)),
-                    Span::styled(": claude  ", Style::default().fg(Color::DarkGray)),
-                ]);
+                // Show c: claude only if Claude is enabled
+                if self.config.claude.enabled {
+                    spans.extend(vec![
+                        Span::styled("c", Style::default().fg(Color::Cyan)),
+                        Span::styled(": claude  ", Style::default().fg(Color::DarkGray)),
+                    ]);
+                }
 
                 // Show l: linear only if worktree has a Linear issue and Linear is enabled
                 if has_linear {

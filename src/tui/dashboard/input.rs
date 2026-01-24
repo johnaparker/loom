@@ -212,7 +212,11 @@ impl Dashboard {
                 None
             }
             KeyCode::Char('c') => {
-                // Claude - open claude in tmux window for any worktree
+                // Claude - open claude in tmux window for any worktree (only if enabled)
+                if !self.config().claude.enabled {
+                    self.status_message = Some((false, "Claude disabled in config".to_string()));
+                    return None;
+                }
                 if let Some(worktree) = self.get_selected_worktree() {
                     return Some(DashboardResult::Claude { worktree });
                 }
