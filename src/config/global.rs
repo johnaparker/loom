@@ -119,6 +119,9 @@ fn default_nvim_command() -> String {
 /// Claude Code integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeConfig {
+    /// Whether Claude integration is enabled (default: true - Claude is the primary feature)
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     /// Enable sandbox mode for new worktrees (default: false)
     #[serde(default)]
     pub sandbox: bool,
@@ -130,6 +133,7 @@ pub struct ClaudeConfig {
 impl Default for ClaudeConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             sandbox: false,
             sandbox_auto_allow_bash: true,
         }
@@ -431,6 +435,8 @@ worktree_root = "/custom/path"
     #[test]
     fn test_claude_config_defaults() {
         let config = GlobalConfig::default();
+        // Claude enabled by default (primary feature)
+        assert!(config.claude.enabled);
         // Claude sandbox disabled by default
         assert!(!config.claude.sandbox);
         // Auto-allow bash enabled by default
@@ -462,6 +468,23 @@ sandbox = true
         let config: GlobalConfig = toml::from_str(toml_str).unwrap();
         assert!(config.claude.sandbox);
         // sandbox_auto_allow_bash should default to true
+        assert!(config.claude.sandbox_auto_allow_bash);
+        // enabled should default to true
+        assert!(config.claude.enabled);
+    }
+
+    #[test]
+    fn test_parse_claude_config_disabled() {
+        let toml_str = r#"
+worktree_root = "/custom/path"
+
+[claude]
+enabled = false
+"#;
+        let config: GlobalConfig = toml::from_str(toml_str).unwrap();
+        assert!(!config.claude.enabled);
+        // Other fields should still have defaults
+        assert!(!config.claude.sandbox);
         assert!(config.claude.sandbox_auto_allow_bash);
     }
 }
