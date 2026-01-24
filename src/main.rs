@@ -31,10 +31,18 @@ fn run() -> Result<()> {
         Commands::Switch { name } => {
             commands::switch(name.as_deref())?;
         }
-        Commands::Merge { name, force, dry_run } => {
+        Commands::Merge {
+            name,
+            force,
+            dry_run,
+        } => {
             commands::merge(&name, force, dry_run)?;
         }
-        Commands::Remove { name, force, dry_run } => {
+        Commands::Remove {
+            name,
+            force,
+            dry_run,
+        } => {
             commands::remove(name.as_deref(), force, dry_run)?;
         }
         Commands::Status => {

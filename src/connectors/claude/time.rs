@@ -7,9 +7,7 @@ pub const STALE_THRESHOLD_SECS: i64 = 14400;
 pub fn now_iso8601() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap();
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
     let secs = duration.as_secs();
 
@@ -61,6 +59,7 @@ pub fn is_leap_year(year: i32) -> bool {
 }
 
 /// Parse ISO 8601 timestamp to Unix epoch seconds
+#[allow(clippy::result_unit_err)]
 pub fn parse_iso8601(s: &str) -> Result<i64, ()> {
     // Parse format: "2026-01-18T22:30:00Z"
     if s.len() < 19 {
@@ -113,14 +112,14 @@ pub fn relative_time(timestamp: &str) -> String {
     let diff = now - event_secs;
 
     if diff < 0 {
-        return "now".to_string();
+        "now".to_string()
     } else if diff < 60 {
-        return format!("{}s ago", diff);
+        format!("{}s ago", diff)
     } else if diff < 3600 {
-        return format!("{}m ago", diff / 60);
+        format!("{}m ago", diff / 60)
     } else if diff < 86400 {
-        return format!("{}h ago", diff / 3600);
+        format!("{}h ago", diff / 3600)
     } else {
-        return format!("{}d ago", diff / 86400);
+        format!("{}d ago", diff / 86400)
     }
 }

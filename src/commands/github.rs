@@ -25,10 +25,7 @@ pub fn github_cmd() -> Result<()> {
 
     // Don't try to open PR for main branch
     if worktree.is_main {
-        println!(
-            "{} Cannot open PR for main branch",
-            "!".yellow()
-        );
+        println!("{} Cannot open PR for main branch", "!".yellow());
         return Ok(());
     }
 
@@ -41,7 +38,12 @@ pub fn github_cmd() -> Result<()> {
     // Try to get PR info and cache it
     if let Ok(Some(pr)) = github::get_pr_for_branch(manager.repo_root(), &branch) {
         // Cache the PR info
-        let _ = github::write_pr_cache(&cache_dir, &project_name, &worktree.name, &github::CachedPRState::Found(pr.clone()));
+        let _ = github::write_pr_cache(
+            &cache_dir,
+            &project_name,
+            &worktree.name,
+            &github::CachedPRState::Found(pr.clone()),
+        );
         github::open_url(&pr.url)?;
         println!("{} Opening PR #{}: {}", "✓".green(), pr.number, pr.title);
     } else {
@@ -49,7 +51,11 @@ pub fn github_cmd() -> Result<()> {
         let (owner, repo) = github::get_repo_info(manager.repo_root())?;
         let create_url = github::get_create_pr_url(&owner, &repo, &branch);
         github::open_url(&create_url)?;
-        println!("{} Opening create PR page for branch '{}'", "✓".green(), branch);
+        println!(
+            "{} Opening create PR page for branch '{}'",
+            "✓".green(),
+            branch
+        );
     }
 
     Ok(())

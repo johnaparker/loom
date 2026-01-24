@@ -108,11 +108,7 @@ fn resolve_github_url(input: &str, manager: &WorktreeManager) -> Result<String> 
     if let Some(url_info) = github::parse_github_url(input) {
         let branch = match url_info.url_type {
             GitHubUrlType::PullRequest(pr_num) => {
-                println!(
-                    "{} Fetching branch from PR #{}...",
-                    "→".blue(),
-                    pr_num
-                );
+                println!("{} Fetching branch from PR #{}...", "→".blue(), pr_num);
                 github::get_pr_branch(manager.repo_root(), pr_num)?
             }
             GitHubUrlType::Branch(ref b) | GitHubUrlType::Tree(ref b) => b.clone(),

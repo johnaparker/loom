@@ -16,7 +16,8 @@ repos:
       - id: no-await-in-tui
         name: no .await in TUI
         description: Prevents async code in the synchronous TUI event loop
-        entry: bash -c 'if grep -rn "\.await" src/tui/ | grep -v "^[^:]*:[0-9]*:[[:space:]]*//" | grep -v "^[^:]*:[0-9]*:[[:space:]]*//!" | grep -v "^[^:]*:[0-9]*:[[:space:]]*\*" | grep ".await"; then echo "ERROR: .await found in src/tui/ code - TUI event loop must be synchronous"; exit 1; fi'
+        entry: >-
+          bash -c 'if grep -rn "\.await" src/tui/ | grep -v "^[^:]*:[0-9]*:[[:space:]]*//" | grep -v "^[^:]*:[0-9]*:[[:space:]]*//!" | grep -v "^[^:]*:[0-9]*:[[:space:]]*\*" | grep ".await"; then echo "ERROR: .await found in src/tui/ code - TUI event loop must be synchronous"; exit 1; fi'
         language: system
         pass_filenames: false
         types: [rust]

@@ -70,10 +70,10 @@ pub fn load_linear_issues(
 ) -> HashMap<String, LinearIssue> {
     let mut issues = HashMap::new();
     for wt in worktrees {
-        if let Ok(Some(issue)) = linear::read_metadata(cache_dir, project_name, &wt.info.name) {
-            if !issue.title.is_empty() {
-                issues.insert(wt.info.name.clone(), issue);
-            }
+        if let Ok(Some(issue)) = linear::read_metadata(cache_dir, project_name, &wt.info.name)
+            && !issue.title.is_empty()
+        {
+            issues.insert(wt.info.name.clone(), issue);
         }
     }
     issues
@@ -110,7 +110,9 @@ pub fn fetch_github_pr_async(
     sender: Sender<GitHubPRResult>,
 ) {
     thread::spawn(move || {
-        let pr = github::get_pr_for_branch(&repo_root, &branch).ok().flatten();
+        let pr = github::get_pr_for_branch(&repo_root, &branch)
+            .ok()
+            .flatten();
 
         // Convert to cached state
         let state = match pr {
@@ -237,7 +239,8 @@ pub fn load_all_caches_async(
         // Load all three caches
         let linear_issues = load_linear_issues(&cache_dir, &project_name, &worktrees);
         let github_prs = load_github_prs_from_cache(&cache_dir, &project_name, &worktrees);
-        let (claude_states, has_active_claude) = load_claude_states(&cache_dir, &project_name, &worktrees);
+        let (claude_states, has_active_claude) =
+            load_claude_states(&cache_dir, &project_name, &worktrees);
 
         let _ = sender.send((linear_issues, github_prs, claude_states, has_active_claude));
     });

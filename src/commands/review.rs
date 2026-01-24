@@ -16,7 +16,7 @@ pub fn review() -> Result<()> {
     let worktree = worktrees
         .into_iter()
         .find(|w| current_dir.starts_with(&w.path))
-        .ok_or_else(|| GwtError::NotInWorktree)?;
+        .ok_or(GwtError::NotInWorktree)?;
 
     // Can't review main worktree
     if worktree.is_main {

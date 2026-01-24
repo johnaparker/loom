@@ -57,12 +57,11 @@ impl ProjectConfig {
     /// This allows per-worktree config overrides.
     pub fn load(worktree_dir: Option<&Path>, repo_root: &Path) -> Result<Option<Self>> {
         // Check worktree directory first (allows per-worktree overrides)
-        if let Some(wt_dir) = worktree_dir {
-            if wt_dir != repo_root {
-                if let Some(config) = Self::load_from_path(&wt_dir.join(".gwt.toml"))? {
-                    return Ok(Some(config));
-                }
-            }
+        if let Some(wt_dir) = worktree_dir
+            && wt_dir != repo_root
+            && let Some(config) = Self::load_from_path(&wt_dir.join(".gwt.toml"))?
+        {
+            return Ok(Some(config));
         }
 
         // Fall back to repo root
@@ -241,7 +240,10 @@ enabled = false
         let config: ProjectConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.linear.as_ref().and_then(|l| l.enabled), Some(false));
         assert_eq!(config.github.as_ref().and_then(|g| g.enabled), Some(true));
-        assert_eq!(config.diffview.as_ref().and_then(|d| d.enabled), Some(false));
+        assert_eq!(
+            config.diffview.as_ref().and_then(|d| d.enabled),
+            Some(false)
+        );
     }
 
     #[test]

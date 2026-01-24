@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
     prelude::*,
@@ -56,7 +56,10 @@ impl Picker {
         result
     }
 
-    fn run_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<Option<usize>> {
+    fn run_loop(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    ) -> Result<Option<usize>> {
         loop {
             terminal.draw(|f| self.render(f))?;
 
@@ -73,10 +76,10 @@ impl Picker {
                 match key.code {
                     KeyCode::Esc => return Ok(None),
                     KeyCode::Enter => {
-                        if let Some(selected) = self.list_state.selected() {
-                            if selected < self.filtered_indices.len() {
-                                return Ok(Some(self.filtered_indices[selected]));
-                            }
+                        if let Some(selected) = self.list_state.selected()
+                            && selected < self.filtered_indices.len()
+                        {
+                            return Ok(Some(self.filtered_indices[selected]));
                         }
                         return Ok(None);
                     }
@@ -111,9 +114,11 @@ impl Picker {
     }
 
     fn filter(&mut self) {
-        self.filtered_indices = self.matcher.filter(&self.items, &self.input, |(name, details, _)| {
-            format!("{} {}", name, details)
-        });
+        self.filtered_indices =
+            self.matcher
+                .filter(&self.items, &self.input, |(name, details, _)| {
+                    format!("{} {}", name, details)
+                });
 
         // Reset selection
         if self.filtered_indices.is_empty() {

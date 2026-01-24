@@ -18,8 +18,5 @@ pub fn dry_run_warning(msg: &str) {
 pub fn dry_run_footer() {
     println!();
     println!("{}", "No changes were made.".dimmed());
-    println!(
-        "Remove {} to execute these actions.",
-        "--dry-run".cyan()
-    );
+    println!("Remove {} to execute these actions.", "--dry-run".cyan());
 }

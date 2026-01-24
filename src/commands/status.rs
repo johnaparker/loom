@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crossterm::{
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::prelude::*;
 use std::io::{self, stdout};
@@ -19,7 +19,9 @@ pub fn status() -> Result<()> {
     let manager = WorktreeManager::open(&current_dir)?;
     let project_name = manager.project_name()?;
     let config = Config::load(Some(manager.repo_root()))?;
-    let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
+    let main_branch = manager
+        .main_branch_name()
+        .unwrap_or_else(|_| "main".to_string());
 
     // Resolve config for current worktree context
     let resolved = config.resolve(Some(&current_dir))?;
@@ -47,7 +49,14 @@ pub fn status() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Use a closure to ensure cleanup happens on all exit paths
-    let result = run_dashboard_loop(&mut dashboard, &mut terminal, &manager, &config, &project_name, &cache_dir);
+    let result = run_dashboard_loop(
+        &mut dashboard,
+        &mut terminal,
+        &manager,
+        &config,
+        &project_name,
+        &cache_dir,
+    );
 
     // Tear down terminal
     disable_raw_mode()?;
@@ -77,7 +86,10 @@ fn run_dashboard_loop(
                     && !wt.has_uncommitted_changes()
                     && let Some(branch) = &wt.info.branch
                 {
-                    manager.pull_from_remote(&wt.info.path, branch).ok().map(|_| behind)
+                    manager
+                        .pull_from_remote(&wt.info.path, branch)
+                        .ok()
+                        .map(|_| behind)
                 } else {
                     None
                 };
@@ -87,7 +99,10 @@ fn run_dashboard_loop(
                 if let Some(behind) = pulled {
                     dashboard.show_result(
                         true,
-                        format!("Pulled {} commit(s), switching to '{}'", behind, wt.info.name),
+                        format!(
+                            "Pulled {} commit(s), switching to '{}'",
+                            behind, wt.info.name
+                        ),
                     );
                 } else {
                     dashboard.show_result(true, format!("Switched to '{}'", wt.info.name));
@@ -130,20 +145,25 @@ fn run_dashboard_loop(
                 worktree,
                 delete_branch,
             } => {
-                let branch = worktree.info.branch.as_deref().unwrap_or(&worktree.info.name);
+                let branch = worktree
+                    .info
+                    .branch
+                    .as_deref()
+                    .unwrap_or(&worktree.info.name);
 
                 // Read Linear metadata BEFORE merge (merge deletes the cache)
                 // Fallback: if no cache, try to extract issue from branch name
-                let linear_issue = linear::read_metadata(cache_dir, project_name, &worktree.info.name)
-                    .ok()
-                    .flatten()
-                    .or_else(|| {
-                        let branch = worktree.info.branch.as_deref()?;
-                        let prefix = config.linear_prefix()?;
-                        let api_key = config.linear_api_key()?;
-                        let issue_id = linear::extract_issue_id(branch, prefix)?;
-                        linear::get_issue(api_key, &issue_id).ok()
-                    });
+                let linear_issue =
+                    linear::read_metadata(cache_dir, project_name, &worktree.info.name)
+                        .ok()
+                        .flatten()
+                        .or_else(|| {
+                            let branch = worktree.info.branch.as_deref()?;
+                            let prefix = config.linear_prefix()?;
+                            let api_key = config.linear_api_key()?;
+                            let issue_id = linear::extract_issue_id(branch, prefix)?;
+                            linear::get_issue(api_key, &issue_id).ok()
+                        });
 
                 let result = operations::merge_worktree_to_main(
                     manager,
@@ -187,7 +207,9 @@ fn run_dashboard_loop(
             DashboardResult::Review { worktree } => {
                 let session = format!("{}/{}", project_name, &worktree.info.name);
                 let path_str = worktree.info.path.to_str().unwrap();
-                let main_branch = manager.main_branch_name().unwrap_or_else(|_| "main".to_string());
+                let main_branch = manager
+                    .main_branch_name()
+                    .unwrap_or_else(|_| "main".to_string());
                 let nvim_command = tmux::build_review_command(&main_branch);
 
                 if tmux::session_exists(&session) {
@@ -222,73 +244,108 @@ fn run_dashboard_loop(
                 dashboard.trigger_stats_refresh();
             }
             DashboardResult::Linear { worktree } => {
-                if let Ok(Some(issue)) = linear::read_metadata(cache_dir, project_name, &worktree.info.name) {
-                    if !issue.url.is_empty() {
-                        let desktop_url = linear::to_desktop_url(&issue.url);
-                        #[cfg(target_os = "macos")]
-                        {
-                            std::process::Command::new("open").arg(&desktop_url).spawn()?;
-                        }
-                        #[cfg(target_os = "linux")]
-                        {
-                            std::process::Command::new("xdg-open").arg(&desktop_url).spawn()?;
-                        }
-                        #[cfg(target_os = "windows")]
-                        {
-                            std::process::Command::new("cmd")
-                                .args(["/C", "start", &desktop_url])
-                                .spawn()?;
-                        }
-                        dashboard.show_result(true, format!("Opened {}", issue.id));
+                if let Ok(Some(issue)) =
+                    linear::read_metadata(cache_dir, project_name, &worktree.info.name)
+                    && !issue.url.is_empty()
+                {
+                    let desktop_url = linear::to_desktop_url(&issue.url);
+                    #[cfg(target_os = "macos")]
+                    {
+                        std::process::Command::new("open")
+                            .arg(&desktop_url)
+                            .spawn()?;
                     }
+                    #[cfg(target_os = "linux")]
+                    {
+                        std::process::Command::new("xdg-open")
+                            .arg(&desktop_url)
+                            .spawn()?;
+                    }
+                    #[cfg(target_os = "windows")]
+                    {
+                        std::process::Command::new("cmd")
+                            .args(["/C", "start", &desktop_url])
+                            .spawn()?;
+                    }
+                    dashboard.show_result(true, format!("Opened {}", issue.id));
                 }
             }
             DashboardResult::GitHub { worktree } => {
                 if let Some(branch) = &worktree.info.branch {
                     match github::get_pr_for_branch(manager.repo_root(), branch) {
                         Ok(Some(pr)) => {
-                            let _ = github::write_pr_cache(cache_dir, project_name, &worktree.info.name, &github::CachedPRState::Found(pr.clone()));
+                            let _ = github::write_pr_cache(
+                                cache_dir,
+                                project_name,
+                                &worktree.info.name,
+                                &github::CachedPRState::Found(pr.clone()),
+                            );
                             if let Err(e) = github::open_url(&pr.url) {
                                 dashboard.show_result(false, format!("Failed to open URL: {}", e));
                             } else {
-                                dashboard.show_result(true, format!("Opening PR #{}: {}", pr.number, pr.title));
+                                dashboard.show_result(
+                                    true,
+                                    format!("Opening PR #{}: {}", pr.number, pr.title),
+                                );
                             }
                         }
-                        Ok(None) => {
-                            match github::get_repo_info(manager.repo_root()) {
-                                Ok((owner, repo)) => {
-                                    let create_url = github::get_create_pr_url(&owner, &repo, branch);
-                                    if let Err(e) = github::open_url(&create_url) {
-                                        dashboard.show_result(false, format!("Failed to open URL: {}", e));
-                                    } else {
-                                        dashboard.show_result(true, format!("Opening create PR page for '{}'", branch));
-                                    }
-                                }
-                                Err(e) => {
-                                    dashboard.show_result(false, format!("GitHub: {}", e));
+                        Ok(None) => match github::get_repo_info(manager.repo_root()) {
+                            Ok((owner, repo)) => {
+                                let create_url = github::get_create_pr_url(&owner, &repo, branch);
+                                if let Err(e) = github::open_url(&create_url) {
+                                    dashboard
+                                        .show_result(false, format!("Failed to open URL: {}", e));
+                                } else {
+                                    dashboard.show_result(
+                                        true,
+                                        format!("Opening create PR page for '{}'", branch),
+                                    );
                                 }
                             }
-                        }
+                            Err(e) => {
+                                dashboard.show_result(false, format!("GitHub: {}", e));
+                            }
+                        },
                         Err(e) => {
                             dashboard.show_result(false, format!("GitHub: {}", e));
                         }
                     }
                 }
             }
-            DashboardResult::CreateNew { branch, category, auto_claude, plan_mode } => {
-                match operations::create_worktree(manager, config, project_name, &branch, &category, cache_dir) {
+            DashboardResult::CreateNew {
+                branch,
+                category,
+                auto_claude,
+                plan_mode,
+            } => {
+                match operations::create_worktree(
+                    manager,
+                    config,
+                    project_name,
+                    &branch,
+                    &category,
+                    cache_dir,
+                ) {
                     Ok(create_result) => {
                         let path_str = create_result.worktree_path.to_str().unwrap();
 
                         if auto_claude {
                             let issue_id = create_result.issue.as_ref().map(|i| i.id.as_str());
                             let claude_cmd = tmux::build_claude_command(plan_mode, issue_id);
-                            tmux::create_session_with_command(&create_result.session_name, path_str, &claude_cmd)?;
+                            tmux::create_session_with_command(
+                                &create_result.session_name,
+                                path_str,
+                                &claude_cmd,
+                            )?;
                             tmux::switch_to_session(&create_result.session_name, path_str)?;
-                            dashboard.show_result(true, format!("Created '{}' and started Claude", branch));
+                            dashboard.show_result(
+                                true,
+                                format!("Created '{}' and started Claude", branch),
+                            );
                         } else {
                             tmux::switch_to_session(&create_result.session_name, path_str)?;
-                            dashboard.show_result(true, format!("Created and switched to '{}'", branch));
+                            dashboard
+                                .show_result(true, format!("Created and switched to '{}'", branch));
                         }
                     }
                     Err(e) => {

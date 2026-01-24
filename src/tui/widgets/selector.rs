@@ -17,7 +17,11 @@ impl<T: Clone + PartialEq> Selector<T> {
     }
 
     /// Create a selector with a specific default selection index.
-    pub fn new_with_default(label: impl Into<String>, options: Vec<(T, String)>, default_idx: usize) -> Self {
+    pub fn new_with_default(
+        label: impl Into<String>,
+        options: Vec<(T, String)>,
+        default_idx: usize,
+    ) -> Self {
         let selected = if default_idx < options.len() {
             default_idx
         } else {
@@ -51,12 +55,10 @@ impl<T: Clone + PartialEq> Selector<T> {
     }
 
     pub fn render(&self, area: Rect, buf: &mut Buffer, focused: bool) {
-        let mut spans = vec![
-            Span::styled(
-                format!("{}: ", self.label),
-                Style::default().fg(Color::DarkGray),
-            ),
-        ];
+        let mut spans = vec![Span::styled(
+            format!("{}: ", self.label),
+            Style::default().fg(Color::DarkGray),
+        )];
 
         for (i, (_, label)) in self.options.iter().enumerate() {
             let is_selected = i == self.selected;

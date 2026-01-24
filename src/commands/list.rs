@@ -37,7 +37,10 @@ pub fn list() -> Result<()> {
         if categories.contains(&cat.to_string()) {
             category_groups.entry(cat.to_string()).or_default().push(wt);
         } else {
-            category_groups.entry(default_category.to_string()).or_default().push(wt);
+            category_groups
+                .entry(default_category.to_string())
+                .or_default()
+                .push(wt);
         }
     }
 

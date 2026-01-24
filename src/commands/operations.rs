@@ -36,13 +36,19 @@ impl SyncResult {
             SyncResult::AlreadySynced { worktree_name } => {
                 format!("'{}' already synced with remote", worktree_name)
             }
-            SyncResult::Pushed { worktree_name, commits } => {
+            SyncResult::Pushed {
+                worktree_name,
+                commits,
+            } => {
                 format!("Pushed {} commit(s) for '{}'", commits, worktree_name)
             }
             SyncResult::CreatedRemoteBranch { worktree_name } => {
                 format!("Created remote branch and pushed '{}'", worktree_name)
             }
-            SyncResult::Pulled { worktree_name, commits } => {
+            SyncResult::Pulled {
+                worktree_name,
+                commits,
+            } => {
                 format!("Pulled {} commit(s) for '{}'", commits, worktree_name)
             }
             SyncResult::CannotSync { reason } => reason.clone(),
@@ -64,11 +70,12 @@ impl SyncResult {
 /// - If behind: pull
 /// - If ahead: push
 /// - If synced: report already synced
-pub fn sync_with_remote(
-    manager: &WorktreeManager,
-    worktree: &WorktreeStats,
-) -> SyncResult {
-    let branch = worktree.info.branch.as_deref().unwrap_or(&worktree.info.name);
+pub fn sync_with_remote(manager: &WorktreeManager, worktree: &WorktreeStats) -> SyncResult {
+    let branch = worktree
+        .info
+        .branch
+        .as_deref()
+        .unwrap_or(&worktree.info.name);
     let worktree_name = worktree.info.name.clone();
 
     // Check for uncommitted changes first
@@ -178,7 +185,11 @@ pub enum MergeResult {
 /// Call this AFTER removing the worktree itself.
 /// IMPORTANT: tmux kill is done last because if running from within the tmux session
 /// being killed, the process will terminate and nothing after will execute.
-pub fn cleanup_worktree_resources(cache_dir: &Path, project_name: &str, worktree_name: &str) -> Result<CleanupResult> {
+pub fn cleanup_worktree_resources(
+    cache_dir: &Path,
+    project_name: &str,
+    worktree_name: &str,
+) -> Result<CleanupResult> {
     let session_name = format!("{}/{}", project_name, worktree_name);
 
     // Do these BEFORE killing tmux - tmux kill may terminate this process
@@ -207,6 +218,7 @@ pub struct CleanupResult {
 /// Delete a worktree and clean up all associated resources.
 ///
 /// This is the complete delete operation used by both CLI and TUI.
+#[allow(clippy::too_many_arguments)]
 pub fn delete_worktree(
     manager: &WorktreeManager,
     cache_dir: &Path,
@@ -224,10 +236,8 @@ pub fn delete_worktree(
     let result = cleanup_worktree_resources(cache_dir, project_name, worktree_name)?;
 
     // Delete branch if requested
-    if delete_branch {
-        if let Some(branch) = branch {
-            manager.delete_branch(branch, true)?;
-        }
+    if delete_branch && let Some(branch) = branch {
+        manager.delete_branch(branch, true)?;
     }
 
     Ok(result)
@@ -240,6 +250,7 @@ pub fn delete_worktree(
 ///
 /// Linear status is updated BEFORE cleanup because cleanup kills the tmux session,
 /// which may terminate the process if running from within that session.
+#[allow(clippy::too_many_arguments)]
 pub fn merge_worktree_to_main(
     manager: &WorktreeManager,
     cache_dir: &Path,
@@ -279,11 +290,13 @@ pub fn merge_worktree_to_main(
 
     // Update Linear issue to "Done" BEFORE cleanup (cleanup may kill our process)
     let linear_updated = if linear_auto_update {
-        linear_api_key.and_then(|api_key| {
-            linear_issue.and_then(|issue| {
-                linear::update_issue_status(api_key, &issue.id, "completed").ok()
+        linear_api_key
+            .and_then(|api_key| {
+                linear_issue.and_then(|issue| {
+                    linear::update_issue_status(api_key, &issue.id, "completed").ok()
+                })
             })
-        }).is_some()
+            .is_some()
     } else {
         false
     };
@@ -351,11 +364,7 @@ pub fn create_worktree(
     let _ = manager.fetch_origin(); // Ignore errors - we can still create from local refs
 
     // Resolve Linear input (issue ID, branch with issue ID, or regular branch)
-    let resolved = linear::resolve_input(
-        branch,
-        config.linear_prefix(),
-        config.linear_api_key(),
-    )?;
+    let resolved = linear::resolve_input(branch, config.linear_prefix(), config.linear_api_key())?;
 
     // Check if worktree already exists
     if manager.get_worktree(&resolved.worktree_name)?.is_some() {
@@ -379,7 +388,11 @@ pub fn create_worktree(
     if track_remote {
         manager.create_worktree_tracking(&resolved.git_branch, &worktree_path)?;
     } else {
-        manager.create_worktree(&resolved.git_branch, &worktree_path, config.is_pull_workflow())?;
+        manager.create_worktree(
+            &resolved.git_branch,
+            &worktree_path,
+            config.is_pull_workflow(),
+        )?;
     }
 
     // Write Linear metadata and update status if we have issue info
@@ -388,12 +401,11 @@ pub fn create_worktree(
         linear::write_metadata(cache_dir, project_name, &resolved.worktree_name, issue)?;
 
         // Update Linear issue to "In Progress" (non-critical)
-        if config.linear_auto_update_status() {
-            if let Some(api_key) = config.linear_api_key() {
-                if linear::update_issue_status(api_key, &issue.id, "started").is_ok() {
-                    linear_status_updated = true;
-                }
-            }
+        if config.linear_auto_update_status()
+            && let Some(api_key) = config.linear_api_key()
+            && linear::update_issue_status(api_key, &issue.id, "started").is_ok()
+        {
+            linear_status_updated = true;
         }
     }
 
@@ -406,10 +418,10 @@ pub fn create_worktree(
         synced_files = sync::sync_files(manager.repo_root(), &worktree_path, &patterns)?;
 
         // Run direnv allow if .envrc was synced
-        if synced_files.iter().any(|p| p == ".envrc") {
-            if sync::run_direnv_allow(&worktree_path).unwrap_or(false) {
-                direnv_allowed = true;
-            }
+        if synced_files.iter().any(|p| p == ".envrc")
+            && sync::run_direnv_allow(&worktree_path).unwrap_or(false)
+        {
+            direnv_allowed = true;
         }
     }
 

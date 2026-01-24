@@ -19,9 +19,8 @@ pub fn update_state_from_event(
     let session_id = session_id.to_string();
 
     modify_state(base, project, worktree, move |current| {
-        let mut session = current.unwrap_or_else(|| {
-            ClaudeSession::new(session_id.clone(), ClaudeState::Inactive)
-        });
+        let mut session = current
+            .unwrap_or_else(|| ClaudeSession::new(session_id.clone(), ClaudeState::Inactive));
 
         // Update session ID if changed (preserve events for continuous log)
         session.session_id = session_id;
@@ -59,12 +58,10 @@ pub fn effective_state(session: &ClaudeSession) -> ClaudeState {
             "SessionCleared" => ClaudeState::Idle,
             // SessionStart: startup and resume mean Claude is waiting for user input
             // compact means Claude is doing background work
-            "SessionStart" => {
-                match event.kind.as_deref() {
-                    Some("startup") | Some("resume") => ClaudeState::Idle,
-                    _ => ClaudeState::Working,
-                }
-            }
+            "SessionStart" => match event.kind.as_deref() {
+                Some("startup") | Some("resume") => ClaudeState::Idle,
+                _ => ClaudeState::Working,
+            },
             // UserPromptSubmit, ToolUse all mean working
             _ => ClaudeState::Working,
         }
@@ -90,9 +87,8 @@ pub fn increment_subagent_depth(
     let session_id = session_id.to_string();
 
     modify_state(base, project, worktree, move |current| {
-        let mut session = current.unwrap_or_else(|| {
-            ClaudeSession::new(session_id.clone(), ClaudeState::Working)
-        });
+        let mut session =
+            current.unwrap_or_else(|| ClaudeSession::new(session_id.clone(), ClaudeState::Working));
 
         session.session_id = session_id;
         session.subagent_depth = session.subagent_depth.saturating_add(1);
@@ -112,9 +108,8 @@ pub fn decrement_subagent_depth(
     let session_id = session_id.to_string();
 
     modify_state(base, project, worktree, move |current| {
-        let mut session = current.unwrap_or_else(|| {
-            ClaudeSession::new(session_id.clone(), ClaudeState::Working)
-        });
+        let mut session =
+            current.unwrap_or_else(|| ClaudeSession::new(session_id.clone(), ClaudeState::Working));
 
         session.session_id = session_id;
         session.subagent_depth = session.subagent_depth.saturating_sub(1);
@@ -126,18 +121,12 @@ pub fn decrement_subagent_depth(
 
 /// Touch the session to update the timestamp without adding an event
 /// Used to keep the session fresh during subagent execution
-pub fn touch_session(
-    base: &Path,
-    project: &str,
-    worktree: &str,
-    session_id: &str,
-) -> Result<()> {
+pub fn touch_session(base: &Path, project: &str, worktree: &str, session_id: &str) -> Result<()> {
     let session_id = session_id.to_string();
 
     modify_state(base, project, worktree, move |current| {
-        let mut session = current.unwrap_or_else(|| {
-            ClaudeSession::new(session_id.clone(), ClaudeState::Working)
-        });
+        let mut session =
+            current.unwrap_or_else(|| ClaudeSession::new(session_id.clone(), ClaudeState::Working));
 
         session.session_id = session_id;
         session.last_updated = now_iso8601();

@@ -79,7 +79,10 @@ pub enum GwtError {
     MergeNotAllowedInPullWorkflow,
 
     #[error("Invalid category '{category}'")]
-    InvalidCategory { category: String, valid: Vec<String> },
+    InvalidCategory {
+        category: String,
+        valid: Vec<String>,
+    },
 }
 
 impl GwtError {

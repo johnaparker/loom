@@ -35,8 +35,8 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use crate::error::GwtError;
 use super::types::LinearIssue;
+use crate::error::GwtError;
 
 /// API timeout for Linear requests (5 seconds)
 const API_TIMEOUT: Duration = Duration::from_secs(5);
@@ -85,12 +85,12 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
     let body: serde_json::Value = response.json()?;
 
     // Check for GraphQL errors
-    if let Some(errors) = body.get("errors") {
-        if errors.as_array().and_then(|arr| arr.first()).is_some() {
-            Err(GwtError::LinearIssueNotFound {
-                issue_id: issue_id.to_string(),
-            })?;
-        }
+    if let Some(errors) = body.get("errors")
+        && errors.as_array().and_then(|arr| arr.first()).is_some()
+    {
+        Err(GwtError::LinearIssueNotFound {
+            issue_id: issue_id.to_string(),
+        })?;
     }
 
     let issue_data = body
@@ -197,16 +197,16 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
     let body: serde_json::Value = response.json()?;
 
     // Check for GraphQL errors
-    if let Some(errors) = body.get("errors") {
-        if let Some(first_error) = errors.as_array().and_then(|arr| arr.first()) {
-            let msg = first_error
-                .get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("Unknown error");
-            Err(GwtError::LinearApiError {
-                message: msg.to_string(),
-            })?;
-        }
+    if let Some(errors) = body.get("errors")
+        && let Some(first_error) = errors.as_array().and_then(|arr| arr.first())
+    {
+        let msg = first_error
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Unknown error");
+        Err(GwtError::LinearApiError {
+            message: msg.to_string(),
+        })?;
     }
 
     let issue_data = body
@@ -301,16 +301,16 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
     let update_body: serde_json::Value = update_response.json()?;
 
     // Check for GraphQL errors
-    if let Some(errors) = update_body.get("errors") {
-        if let Some(first_error) = errors.as_array().and_then(|arr| arr.first()) {
-            let msg = first_error
-                .get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("Unknown error");
-            Err(GwtError::LinearApiError {
-                message: msg.to_string(),
-            })?;
-        }
+    if let Some(errors) = update_body.get("errors")
+        && let Some(first_error) = errors.as_array().and_then(|arr| arr.first())
+    {
+        let msg = first_error
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Unknown error");
+        Err(GwtError::LinearApiError {
+            message: msg.to_string(),
+        })?;
     }
 
     // Check success field

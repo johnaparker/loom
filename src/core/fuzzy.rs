@@ -79,7 +79,8 @@ impl FuzzyMatcher {
             .enumerate()
             .filter_map(|(i, item)| {
                 let haystack = to_haystack(item);
-                self.score(&haystack, query).map(|score| ScoredItem { index: i, score })
+                self.score(&haystack, query)
+                    .map(|score| ScoredItem { index: i, score })
             })
             .collect();
 

@@ -18,7 +18,7 @@
 
 use anyhow::Result;
 use fs2::FileExt;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -50,10 +50,10 @@ impl LockGuard {
 /// The lock file is created if it doesn't exist.
 pub fn acquire_lock(lock_path: &Path) -> Option<LockGuard> {
     // Ensure parent directory exists
-    if let Some(parent) = lock_path.parent() {
-        if let Err(_) = fs::create_dir_all(parent) {
-            return None;
-        }
+    if let Some(parent) = lock_path.parent()
+        && fs::create_dir_all(parent).is_err()
+    {
+        return None;
     }
 
     // Open or create the lock file
@@ -197,7 +197,12 @@ pub fn write_json<T: Serialize>(
 /// Delete a specific cache file.
 ///
 /// Returns `Ok(())` even if the file doesn't exist.
-pub fn delete_file(base: &Path, project_name: &str, worktree_name: &str, filename: &str) -> Result<()> {
+pub fn delete_file(
+    base: &Path,
+    project_name: &str,
+    worktree_name: &str,
+    filename: &str,
+) -> Result<()> {
     let path = file_path(base, project_name, worktree_name, filename);
 
     if path.exists() {
@@ -242,7 +247,10 @@ mod tests {
     fn test_file_path() {
         let base = Path::new("/tmp/gwt-cache");
         let path = file_path(base, "my-project", "my-worktree", "test.json");
-        assert_eq!(path, PathBuf::from("/tmp/gwt-cache/my-project/my-worktree/test.json"));
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/gwt-cache/my-project/my-worktree/test.json")
+        );
     }
 
     #[test]
@@ -264,7 +272,8 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let base = temp.path();
 
-        let result: Result<Option<serde_json::Value>> = read_json(base, "proj", "wt", "missing.json");
+        let result: Result<Option<serde_json::Value>> =
+            read_json(base, "proj", "wt", "missing.json");
         assert!(result.unwrap().is_none());
     }
 
@@ -348,11 +357,17 @@ mod tests {
                 let base = &base;
                 s.spawn(move || {
                     for _ in 0..INCREMENTS_PER_THREAD {
-                        with_lock_modify::<Counter, _>(base, "proj", "wt", "counter.json", |current| {
-                            let mut c = current.unwrap_or(Counter { value: 0 });
-                            c.value += 1;
-                            c
-                        })
+                        with_lock_modify::<Counter, _>(
+                            base,
+                            "proj",
+                            "wt",
+                            "counter.json",
+                            |current| {
+                                let mut c = current.unwrap_or(Counter { value: 0 });
+                                c.value += 1;
+                                c
+                            },
+                        )
                         .unwrap();
                     }
                 });
@@ -383,13 +398,19 @@ mod tests {
 
         // Second lock should fail (we still hold the first)
         let guard2 = acquire_lock(&lock_path);
-        assert!(guard2.is_none(), "Second lock should fail while first is held");
+        assert!(
+            guard2.is_none(),
+            "Second lock should fail while first is held"
+        );
 
         // Drop first lock
         drop(guard1);
 
         // Now lock should succeed again
         let guard3 = acquire_lock(&lock_path);
-        assert!(guard3.is_some(), "Lock should succeed after first is released");
+        assert!(
+            guard3.is_some(),
+            "Lock should succeed after first is released"
+        );
     }
 }
