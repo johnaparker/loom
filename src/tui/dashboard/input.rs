@@ -127,6 +127,14 @@ impl Dashboard {
     fn handle_normal_key(&mut self, code: KeyCode) -> Option<DashboardResult> {
         match code {
             KeyCode::Char('q') | KeyCode::Esc => Some(DashboardResult::Quit),
+            KeyCode::Tab => {
+                self.cycle_category_next();
+                None
+            }
+            KeyCode::BackTab => {
+                self.cycle_category_prev();
+                None
+            }
             KeyCode::Char('/') => {
                 self.mode = DashboardMode::Search;
                 None
@@ -148,7 +156,9 @@ impl Dashboard {
             }
             // Quick actions
             KeyCode::Char('n') => {
-                self.mode = DashboardMode::NewWorktree(NewWorktreeModal::new());
+                let categories = self.config.categories.clone();
+                let default_cat = &self.config.default_category;
+                self.mode = DashboardMode::NewWorktree(NewWorktreeModal::new(categories, default_cat));
                 None
             }
             KeyCode::Char('x') => {

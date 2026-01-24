@@ -60,7 +60,11 @@ gwt uses a three-level config hierarchy: **global** → **project** → **worktr
 # Root directory for all worktrees (default: ~/.worktrees)
 worktree_root = "~/.worktrees"
 
-# Default category for new worktrees: dev, review, demo, etc.
+# Worktree categories (max 4, default: ["dev"])
+# When >2 categories, Tab cycles through filter in dashboard
+categories = ["dev", "feature", "review", "hotfix"]
+
+# Default category for new worktrees (used when -c not specified)
 default_category = "dev"
 
 # Cache directory for connector data (default: ~/.cache/gwt)
@@ -196,10 +200,12 @@ gwt main
 Worktrees are created at `~/worktrees/{project}/{category}/{branch-name}`:
 
 ```bash
-gwt new feature-auth              # dev category (default)
-gwt new bugfix-123 -c review      # review category
-gwt new demo-client -c demo       # demo category
+gwt new feature-auth              # uses default_category from config
+gwt new bugfix-123 -c review      # specify category explicitly
+gwt new hotfix-urgent -c hotfix   # any configured category works
 ```
+
+Categories are configurable (max 4). When you have 3+ categories, the dashboard shows a filter bar and Tab cycles through them.
 
 ## How it works
 

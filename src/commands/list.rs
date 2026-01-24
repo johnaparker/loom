@@ -1,11 +1,15 @@
 use anyhow::Result;
 use colored::Colorize;
+use std::collections::HashMap;
 
+use crate::config::Config;
+use crate::core::capitalize_first;
 use crate::git::{WorktreeInfo, WorktreeManager};
 
 pub fn list() -> Result<()> {
     let current_dir = std::env::current_dir()?;
     let manager = WorktreeManager::open(&current_dir)?;
+    let config = Config::load(Some(manager.repo_root()))?;
 
     let worktrees = manager.list_worktrees()?;
 
@@ -14,19 +18,26 @@ pub fn list() -> Result<()> {
         return Ok(());
     }
 
+    // Get configured categories
+    let categories = config.categories();
+    let default_category = config.default_category();
+
     // Separate main from others and group by category
     let (main_wt, others): (Vec<_>, Vec<_>) = worktrees.into_iter().partition(|wt| wt.is_main);
 
-    let mut dev: Vec<&WorktreeInfo> = Vec::new();
-    let mut review: Vec<&WorktreeInfo> = Vec::new();
-    let mut demo: Vec<&WorktreeInfo> = Vec::new();
+    // Build dynamic category groups
+    let mut category_groups: HashMap<String, Vec<&WorktreeInfo>> = HashMap::new();
+    for cat in &categories {
+        category_groups.insert(cat.clone(), Vec::new());
+    }
 
     for wt in &others {
-        match wt.category.as_deref() {
-            Some("dev") => dev.push(wt),
-            Some("review") => review.push(wt),
-            Some("demo") => demo.push(wt),
-            _ => dev.push(wt), // default to dev
+        let cat = wt.category.as_deref().unwrap_or(default_category);
+        // If the category exists in configured list, use it; otherwise use default
+        if categories.contains(&cat.to_string()) {
+            category_groups.entry(cat.to_string()).or_default().push(wt);
+        } else {
+            category_groups.entry(default_category.to_string()).or_default().push(wt);
         }
     }
 
@@ -37,29 +48,18 @@ pub fn list() -> Result<()> {
         println!();
     }
 
-    // Print each category with header
-    if !dev.is_empty() {
-        println!("{}", "Dev".bold().underline());
-        for wt in dev {
-            print_worktree(wt);
+    // Print each category in configured order
+    for cat in &categories {
+        if let Some(worktrees) = category_groups.get(cat)
+            && !worktrees.is_empty()
+        {
+            let display_name = capitalize_first(cat);
+            println!("{}", display_name.bold().underline());
+            for wt in worktrees {
+                print_worktree(wt);
+            }
+            println!();
         }
-        println!();
-    }
-
-    if !review.is_empty() {
-        println!("{}", "Review".bold().underline());
-        for wt in review {
-            print_worktree(wt);
-        }
-        println!();
-    }
-
-    if !demo.is_empty() {
-        println!("{}", "Demo".bold().underline());
-        for wt in demo {
-            print_worktree(wt);
-        }
-        println!();
     }
 
     Ok(())

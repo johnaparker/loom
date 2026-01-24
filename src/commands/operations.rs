@@ -7,7 +7,6 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-use crate::cli::Category;
 use crate::config::Config;
 use crate::error::GwtError;
 use crate::git::{PushResult, WorktreeManager, WorktreeStats};
@@ -341,7 +340,7 @@ pub fn create_worktree(
     config: &Config,
     project_name: &str,
     branch: &str,
-    category: Category,
+    category: &str,
     cache_dir: &Path,
 ) -> Result<CreateWorktreeResult> {
     let worktree_root = config.worktree_root()?;
@@ -367,7 +366,7 @@ pub fn create_worktree(
     // Build worktree path: ~/worktrees/{project}/{category}/{name}
     let worktree_path = worktree_root
         .join(project_name)
-        .join(category.to_string())
+        .join(category)
         .join(&resolved.worktree_name);
 
     // Check if remote branch exists

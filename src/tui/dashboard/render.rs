@@ -28,23 +28,38 @@ use super::{Dashboard, SPINNER_FRAMES};
 impl Dashboard {
     pub(super) fn render(&mut self, f: &mut Frame) {
         let is_search_mode = matches!(self.mode, DashboardMode::Search);
+        let show_category_bar = self.show_category_filter();
 
-        // Layout: Title | [Search] | Top row (50%) | Bottom row (50%) | Help
-        let constraints = if is_search_mode {
-            vec![
+        // Layout: Title | [Category Filter] | [Search] | Top row (50%) | Bottom row (50%) | Help
+        let constraints = match (is_search_mode, show_category_bar) {
+            (true, true) => vec![
+                Constraint::Length(1),      // Title bar
+                Constraint::Length(1),      // Category filter bar
+                Constraint::Length(3),      // Search bar
+                Constraint::Percentage(50), // Top row (Worktrees + Claude)
+                Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
+                Constraint::Length(1),      // Help bar
+            ],
+            (true, false) => vec![
                 Constraint::Length(1),      // Title bar
                 Constraint::Length(3),      // Search bar
                 Constraint::Percentage(50), // Top row (Worktrees + Claude)
                 Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
                 Constraint::Length(1),      // Help bar
-            ]
-        } else {
-            vec![
+            ],
+            (false, true) => vec![
+                Constraint::Length(1),      // Title bar
+                Constraint::Length(1),      // Category filter bar
+                Constraint::Percentage(50), // Top row (Worktrees + Claude)
+                Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
+                Constraint::Length(1),      // Help bar
+            ],
+            (false, false) => vec![
                 Constraint::Length(1),      // Title bar
                 Constraint::Percentage(50), // Top row (Worktrees + Claude)
                 Constraint::Percentage(50), // Bottom row (Commits + GitHub + Linear)
                 Constraint::Length(1),      // Help bar
-            ]
+            ],
         };
 
         let chunks = Layout::default()
@@ -52,16 +67,23 @@ impl Dashboard {
             .constraints(constraints.clone())
             .split(f.area());
 
-        let (title_area, top_row_area, bottom_row_area, help_area) = if is_search_mode {
-            (chunks[0], chunks[2], chunks[3], chunks[4])
-        } else {
-            (chunks[0], chunks[1], chunks[2], chunks[3])
-        };
+        // Determine chunk indices based on which optional elements are shown
+        let (title_area, category_area, search_area, top_row_area, bottom_row_area, help_area) =
+            match (is_search_mode, show_category_bar) {
+                (true, true) => (chunks[0], Some(chunks[1]), Some(chunks[2]), chunks[3], chunks[4], chunks[5]),
+                (true, false) => (chunks[0], None, Some(chunks[1]), chunks[2], chunks[3], chunks[4]),
+                (false, true) => (chunks[0], Some(chunks[1]), None, chunks[2], chunks[3], chunks[4]),
+                (false, false) => (chunks[0], None, None, chunks[1], chunks[2], chunks[3]),
+            };
 
         self.render_title_bar(f, title_area);
 
-        if is_search_mode {
-            self.render_search_bar(f, chunks[1]);
+        if let Some(cat_area) = category_area {
+            self.render_category_filter_bar(f, cat_area);
+        }
+
+        if let Some(search_area) = search_area {
+            self.render_search_bar(f, search_area);
         }
 
         // Main content
@@ -118,6 +140,39 @@ impl Dashboard {
             .title(" / Search (Esc to cancel) ");
         let search_paragraph = Paragraph::new(self.search_input.as_str()).block(search_block);
         f.render_widget(search_paragraph, area);
+    }
+
+    fn render_category_filter_bar(&self, f: &mut Frame, area: Rect) {
+        let categories = &self.config.categories;
+        let current_filter = self.category_filter();
+
+        let mut spans = vec![Span::raw(" ")];
+
+        // "All" option
+        if current_filter.is_none() {
+            spans.push(Span::styled("[All]", Style::default().fg(Color::Cyan).bold()));
+        } else {
+            spans.push(Span::styled("All", Style::default().fg(Color::DarkGray)));
+        }
+
+        // Each category
+        for cat in categories {
+            spans.push(Span::raw("  "));
+            let is_selected = current_filter == Some(cat.as_str());
+            let cat_color = Self::category_color(cat);
+            if is_selected {
+                spans.push(Span::styled(format!("[{}]", cat), Style::default().fg(cat_color).bold()));
+            } else {
+                spans.push(Span::styled(cat.clone(), Style::default().fg(Color::DarkGray)));
+            }
+        }
+
+        // Help hint
+        spans.push(Span::styled("  (Tab to cycle)", Style::default().fg(Color::DarkGray)));
+
+        let line = Line::from(spans);
+        let paragraph = Paragraph::new(line).style(Style::default().bg(Color::Rgb(35, 35, 40)));
+        f.render_widget(paragraph, area);
     }
 
     fn render_title_bar(&self, f: &mut Frame, area: Rect) {
@@ -1209,13 +1264,24 @@ impl Dashboard {
                 let mut spans = vec![
                     Span::styled(" \u{2191}/\u{2193}", Style::default().fg(Color::Cyan)),
                     Span::styled(": nav  ", Style::default().fg(Color::DarkGray)),
+                ];
+
+                // Show Tab: filter only when category filter is available
+                if self.show_category_filter() {
+                    spans.extend(vec![
+                        Span::styled("Tab", Style::default().fg(Color::Cyan)),
+                        Span::styled(": filter  ", Style::default().fg(Color::DarkGray)),
+                    ]);
+                }
+
+                spans.extend(vec![
                     Span::styled("/", Style::default().fg(Color::Cyan)),
                     Span::styled(": search  ", Style::default().fg(Color::DarkGray)),
                     Span::styled("Enter", Style::default().fg(Color::Cyan)),
                     Span::styled(": switch  ", Style::default().fg(Color::DarkGray)),
                     Span::styled("n", Style::default().fg(Color::Cyan)),
                     Span::styled(": new  ", Style::default().fg(Color::DarkGray)),
-                ];
+                ]);
 
                 // Only show d/x for non-main worktrees, m only in push workflow
                 if !is_main {

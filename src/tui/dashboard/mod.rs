@@ -97,6 +97,8 @@ pub struct Dashboard {
     search_input: String,
     matcher: FuzzyMatcher,
     main_branch: String,
+    /// Category filter: None means "All", Some(cat) filters to that category
+    category_filter: Option<String>,
     /// Pending action result to show after refresh
     pending_result: Option<(bool, String)>,
     /// Status message to show in title bar (auto-clears on keypress)
@@ -205,6 +207,7 @@ impl Dashboard {
             search_input: String::new(),
             matcher: FuzzyMatcher::new(),
             main_branch: "main".to_string(),
+            category_filter: None,
             pending_result: None,
             status_message: None,
             linear_issues,
@@ -760,6 +763,58 @@ impl Dashboard {
         &self.config
     }
 
+    /// Check if category filter bar should be shown (when >2 categories configured)
+    pub(crate) fn show_category_filter(&self) -> bool {
+        self.config.categories.len() > 2
+    }
+
+    /// Get the current category filter for rendering
+    pub(crate) fn category_filter(&self) -> Option<&str> {
+        self.category_filter.as_deref()
+    }
+
+    /// Cycle to the next category filter (All → Cat1 → Cat2 → ... → All)
+    pub(crate) fn cycle_category_next(&mut self) {
+        let categories = &self.config.categories;
+        if categories.len() <= 2 {
+            return;
+        }
+
+        self.category_filter = match &self.category_filter {
+            None => categories.first().cloned(),
+            Some(current) => {
+                let idx = categories.iter().position(|c| c == current).unwrap_or(0);
+                if idx + 1 >= categories.len() {
+                    None // Wrap to "All"
+                } else {
+                    Some(categories[idx + 1].clone())
+                }
+            }
+        };
+        self.filter_worktrees();
+    }
+
+    /// Cycle to the previous category filter
+    pub(crate) fn cycle_category_prev(&mut self) {
+        let categories = &self.config.categories;
+        if categories.len() <= 2 {
+            return;
+        }
+
+        self.category_filter = match &self.category_filter {
+            None => categories.last().cloned(),
+            Some(current) => {
+                let idx = categories.iter().position(|c| c == current).unwrap_or(0);
+                if idx == 0 {
+                    None // Wrap to "All"
+                } else {
+                    Some(categories[idx - 1].clone())
+                }
+            }
+        };
+        self.filter_worktrees();
+    }
+
     fn move_selection(&mut self, delta: i32) {
         if self.filtered_indices.is_empty() {
             return;
@@ -777,7 +832,8 @@ impl Dashboard {
     }
 
     fn filter_worktrees(&mut self) {
-        self.filtered_indices = self.matcher.filter(&self.worktrees, &self.search_input, |wt| {
+        // First apply fuzzy search filter
+        let mut indices = self.matcher.filter(&self.worktrees, &self.search_input, |wt| {
             format!(
                 "{} {} {}",
                 wt.info.name,
@@ -785,6 +841,22 @@ impl Dashboard {
                 wt.info.category.as_deref().unwrap_or("")
             )
         });
+
+        // Then apply category filter if set
+        if let Some(ref cat_filter) = self.category_filter {
+            let default_cat = &self.config.default_category;
+            indices.retain(|&i| {
+                let wt = &self.worktrees[i];
+                // Main worktree is always shown regardless of category filter
+                if wt.info.is_main {
+                    return true;
+                }
+                let wt_cat = wt.info.category.as_deref().unwrap_or(default_cat);
+                wt_cat == cat_filter
+            });
+        }
+
+        self.filtered_indices = indices;
 
         // Reset selection
         if self.filtered_indices.is_empty() {

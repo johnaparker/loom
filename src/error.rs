@@ -77,6 +77,9 @@ pub enum GwtError {
 
     #[error("Merge to local main is not available in pull workflow")]
     MergeNotAllowedInPullWorkflow,
+
+    #[error("Invalid category '{category}'")]
+    InvalidCategory { category: String, valid: Vec<String> },
 }
 
 impl GwtError {
@@ -159,6 +162,9 @@ impl GwtError {
             }
             GwtError::MergeNotAllowedInPullWorkflow => {
                 Some("In pull workflow, merge via GitHub PR instead. Use 'gh pr create' to open a PR.".to_string())
+            }
+            GwtError::InvalidCategory { valid, .. } => {
+                Some(format!("Valid categories: {}", valid.join(", ")))
             }
         }
     }
