@@ -218,47 +218,6 @@ impl Dashboard {
     }
 
     fn render_worktree_list(&mut self, f: &mut Frame, area: Rect) {
-        // Calculate available width for content (subtract borders, highlight symbol, and bar)
-        let content_width = area.width.saturating_sub(7) as usize; // 2 borders + "> " + "▌ "
-
-        let animation_frame = self.animation_frame;
-        let linear_icon = self.linear_icon();
-        let github_icon = self.github_icon();
-        let branch_icon = self.branch_icon();
-        let items: Vec<ListItem> = self
-            .filtered_indices
-            .iter()
-            .map(|&i| {
-                let wt = &self.worktrees[i];
-                let linear_title = self
-                    .linear_issues
-                    .get(&wt.info.name)
-                    .map(|issue| issue.title.as_str());
-                let github_pr = self
-                    .github_prs
-                    .get(&wt.info.name)
-                    .and_then(|state| match state {
-                        CachedPRState::Found(pr) => Some(pr),
-                        CachedPRState::NotFound => None,
-                    });
-                let claude_state = self
-                    .claude_states
-                    .get(&wt.info.name)
-                    .map(|s| claude::effective_state(s));
-                Self::format_worktree_item(
-                    wt,
-                    content_width,
-                    linear_title,
-                    github_pr,
-                    claude_state,
-                    animation_frame,
-                    linear_icon,
-                    github_icon,
-                    branch_icon,
-                )
-            })
-            .collect();
-
         let is_search = matches!(self.mode, DashboardMode::Search);
         let title = if is_search && !self.search_input.is_empty() {
             format!(" Worktrees ({} matches) ", self.filtered_indices.len())
@@ -266,15 +225,125 @@ impl Dashboard {
             " Worktrees ".to_string()
         };
 
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title(title))
-            .highlight_style(Style::default().bg(Color::Rgb(40, 44, 52)))
-            .highlight_symbol("> ");
+        // Render the block and get inner area
+        let block = Block::default().borders(Borders::ALL).title(title);
+        let inner = block.inner(area);
+        f.render_widget(block, area);
 
-        f.render_stateful_widget(list, area, &mut self.list_state);
+        // Store viewport height for scroll calculations in move_selection()
+        self.worktree_viewport_height = inner.height;
+
+        if self.filtered_indices.is_empty() {
+            return;
+        }
+
+        // Calculate item heights and cumulative Y positions
+        let item_heights = self.calculate_item_heights();
+        let y_positions = Self::cumulative_y_positions(&item_heights);
+
+        // Ensure selected item is visible (adjust scroll if needed)
+        // This handles the case where viewport was resized
+        self.ensure_selected_visible();
+
+        // Calculate available width for content (subtract highlight symbol and bar)
+        let content_width = inner.width.saturating_sub(5) as usize; // "> " + "▌ "
+
+        let animation_frame = self.animation_frame;
+        let linear_icon = self.linear_icon().map(|s| s.to_string());
+        let github_icon = self.github_icon().map(|s| s.to_string());
+        let branch_icon = self.branch_icon().map(|s| s.to_string());
+
+        let scroll = self.worktree_scroll_offset;
+        let viewport_height = inner.height;
+
+        // Find first visible item (item where y + height > scroll)
+        let first_visible = y_positions
+            .iter()
+            .enumerate()
+            .position(|(i, &y)| y + item_heights[i] > scroll)
+            .unwrap_or(0);
+
+        // Render visible items with clipping
+        let buf = f.buffer_mut();
+        let highlight_style = Style::default().bg(Color::Rgb(40, 44, 52));
+
+        let mut render_y = y_positions[first_visible] as i32 - scroll as i32;
+
+        for (list_idx, &actual_idx) in self.filtered_indices[first_visible..].iter().enumerate() {
+            let item_idx = first_visible + list_idx;
+            if render_y >= viewport_height as i32 {
+                break;
+            }
+
+            let wt = &self.worktrees[actual_idx];
+            let linear_title = self
+                .linear_issues
+                .get(&wt.info.name)
+                .map(|issue| issue.title.as_str());
+            let github_pr = self
+                .github_prs
+                .get(&wt.info.name)
+                .and_then(|state| match state {
+                    CachedPRState::Found(pr) => Some(pr),
+                    CachedPRState::NotFound => None,
+                });
+            let claude_state = self
+                .claude_states
+                .get(&wt.info.name)
+                .map(|s| claude::effective_state(s));
+
+            let lines = Self::format_worktree_lines(
+                wt,
+                content_width,
+                linear_title,
+                github_pr,
+                claude_state,
+                animation_frame,
+                linear_icon.as_deref(),
+                github_icon.as_deref(),
+                branch_icon.as_deref(),
+            );
+
+            let is_selected = item_idx == self.selected;
+
+            for (line_idx, line) in lines.iter().enumerate() {
+                if render_y >= 0 && render_y < viewport_height as i32 {
+                    let y = inner.y + render_y as u16;
+
+                    // Apply highlight style to the entire row if selected
+                    if is_selected {
+                        // Fill the row with highlight background first
+                        for x in inner.x..inner.x + inner.width {
+                            buf[(x, y)].set_style(highlight_style);
+                        }
+                    }
+
+                    // Render the selection indicator (only on first line of selected item)
+                    let indicator = if is_selected && line_idx == 0 { "> " } else { "  " };
+                    buf.set_string(inner.x, y, indicator, Style::default());
+
+                    // Render the line content (after the indicator)
+                    let line_x = inner.x + 2;
+                    let mut x = line_x;
+                    for span in &line.spans {
+                        let style = if is_selected {
+                            span.style.patch(highlight_style)
+                        } else {
+                            span.style
+                        };
+                        let remaining_width = (inner.x + inner.width).saturating_sub(x) as usize;
+                        let text: String = span.content.chars().take(remaining_width).collect();
+                        buf.set_string(x, y, &text, style);
+                        x += text.len() as u16;
+                    }
+                }
+                render_y += 1;
+            }
+        }
     }
 
-    fn format_worktree_item(
+    /// Format worktree item as a vector of lines (used by custom rendering)
+    fn format_worktree_lines(
         wt: &WorktreeStats,
         width: usize,
         linear_title: Option<&str>,
@@ -284,7 +353,7 @@ impl Dashboard {
         linear_icon: Option<&str>,
         github_icon: Option<&str>,
         branch_icon: Option<&str>,
-    ) -> ListItem<'static> {
+    ) -> Vec<Line<'static>> {
         // Determine bar color based on Claude state
         let bar_color = match claude_state {
             None => Color::Rgb(60, 60, 60),
@@ -449,16 +518,14 @@ impl Dashboard {
         lines.push(Line::from(""));
 
         // Prepend colored bar to each line
-        let lines: Vec<Line> = lines
+        lines
             .into_iter()
             .map(|line| {
                 let mut spans = vec![Span::styled("▌ ", Style::default().fg(bar_color))];
                 spans.extend(line.spans);
                 Line::from(spans)
             })
-            .collect();
-
-        ListItem::new(lines)
+            .collect()
     }
 
     /// Format a compact GitHub PR indicator line for the worktree list.
