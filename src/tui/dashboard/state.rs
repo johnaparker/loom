@@ -1,7 +1,10 @@
 //! Dashboard state types and enums.
 
 use crate::git::WorktreeStats;
-use crate::tui::modals::{ActionResultModal, DeleteConfirmModal, MergeConfirmModal, NewWorktreeModal};
+use crate::tui::modals::{
+    ActionResultModal, DeleteConfirmModal, MergeConfirmModal, NewWorktreeModal, PruneConfirmModal,
+    PruneWorktreeInfo,
+};
 
 /// Result of the dashboard interaction
 #[derive(Debug, Clone)]
@@ -35,6 +38,8 @@ pub enum DashboardResult {
     GitHub { worktree: WorktreeStats },
     /// Refresh the dashboard (after an action)
     Refresh,
+    /// Prune all worktrees with merged PRs
+    Prune { worktrees: Vec<PruneWorktreeInfo> },
 }
 
 /// Dashboard mode
@@ -51,4 +56,6 @@ pub enum DashboardMode {
     NewWorktree(NewWorktreeModal),
     /// Showing action result
     ActionResult(ActionResultModal),
+    /// Showing prune confirmation modal
+    ConfirmPrune(PruneConfirmModal),
 }
