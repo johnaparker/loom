@@ -61,6 +61,9 @@ fn run() -> Result<()> {
         Commands::Hook { event } => {
             commands::hook(&event)?;
         }
+        Commands::Prune { force, dry_run } => {
+            commands::prune(force, dry_run)?;
+        }
     }
 
     Ok(())
