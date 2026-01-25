@@ -37,18 +37,11 @@ impl ConfigSource for FilesystemSource {
     }
 
     fn global_config_path(&self) -> Result<PathBuf> {
-        // Prefer XDG-style path (~/.config/grove/config.toml)
-        if let Some(home) = dirs::home_dir() {
-            let xdg_path = home.join(".config").join("grove").join("config.toml");
-            if xdg_path.exists() {
-                return Ok(xdg_path);
-            }
-        }
-
-        // Fall back to platform default
-        let config_dir =
-            dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
-        Ok(config_dir.join("grove").join("config.toml"))
+        // Always prefer XDG-style path (~/.config/grove/config.toml)
+        // This is consistent across platforms and avoids macOS using ~/Library/Application Support
+        let home =
+            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+        Ok(home.join(".config").join("grove").join("config.toml"))
     }
 }
 

@@ -6,7 +6,7 @@ mod worktree;
 pub use global::{
     ClaudeConfig, DiffviewConfig, GitHubConfig, GlobalConfig, LinearConfig, SyncWorkflow,
 };
-pub use project::ProjectConfig;
+pub use project::{ProjectConfig, ProjectGitConfig, ProjectSyncConfig};
 pub use source::{ConfigSource, FilesystemSource};
 pub use worktree::{WorktreeConfig, WorktreeSyncConfig};
 

@@ -35,7 +35,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use super::types::LinearIssue;
+use super::types::{LinearIssue, LinearTeam};
 use crate::error::GroveError;
 
 /// API timeout for Linear requests (5 seconds)
@@ -328,4 +328,77 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
     }
 
     Ok(())
+}
+
+/// Fetch available teams from Linear.
+///
+/// # Thread Safety: BLOCKING
+///
+/// This function makes a blocking HTTP request. Do NOT call from the TUI event
+/// loop. Safe to call from CLI commands or background threads.
+pub fn fetch_teams(api_key: &str) -> Result<Vec<LinearTeam>> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(API_TIMEOUT)
+        .build()?;
+
+    let query = r#"
+        query {
+            teams {
+                nodes {
+                    key
+                    name
+                }
+            }
+        }
+    "#;
+
+    let response = client
+        .post("https://api.linear.app/graphql")
+        .header("Authorization", api_key)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "query": query
+        }))
+        .send()?;
+
+    if !response.status().is_success() {
+        Err(GroveError::LinearApiError {
+            message: format!("API returned status {}", response.status()),
+        })?;
+    }
+
+    let body: serde_json::Value = response.json()?;
+
+    // Check for GraphQL errors
+    if let Some(errors) = body.get("errors")
+        && let Some(first_error) = errors.as_array().and_then(|arr| arr.first())
+    {
+        let msg = first_error
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Unknown error");
+        Err(GroveError::LinearApiError {
+            message: msg.to_string(),
+        })?;
+    }
+
+    let teams_data = body
+        .get("data")
+        .and_then(|d| d.get("teams"))
+        .and_then(|t| t.get("nodes"))
+        .and_then(|n| n.as_array())
+        .ok_or_else(|| GroveError::LinearApiError {
+            message: "Could not parse teams response".to_string(),
+        })?;
+
+    let teams: Vec<LinearTeam> = teams_data
+        .iter()
+        .filter_map(|team| {
+            let key = team.get("key")?.as_str()?.to_string();
+            let name = team.get("name")?.as_str()?.to_string();
+            Some(LinearTeam { key, name })
+        })
+        .collect();
+
+    Ok(teams)
 }

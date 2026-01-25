@@ -1,5 +1,73 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+
+/// Scope for configuration changes
+#[derive(Clone, Copy, Debug, ValueEnum, Default)]
+pub enum ConfigScope {
+    /// User-wide settings (~/.config/grove/config.toml)
+    #[default]
+    User,
+    /// Project-specific settings (.grove.toml in repo root)
+    Project,
+}
+
+/// Workflow mode for git synchronization
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum WorkflowArg {
+    /// Local-first workflow: auto-push after merge
+    Push,
+    /// Team/PR workflow: auto-fetch before new, auto-pull when behind
+    Pull,
+}
+
+/// Features that can be enabled/disabled
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum ConfigFeature {
+    /// Claude Code integration (hooks for state tracking)
+    Claude,
+    /// GitHub integration (PR status, checks)
+    Github,
+    /// Linear integration (issue linking)
+    Linear,
+}
+
+/// Config subcommands for enabling/disabling features
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Enable an integration
+    Enable {
+        /// The feature to enable
+        feature: ConfigFeature,
+        /// Configuration scope
+        #[arg(long, short, default_value = "user")]
+        scope: ConfigScope,
+    },
+    /// Disable an integration
+    Disable {
+        /// The feature to disable
+        feature: ConfigFeature,
+        /// Configuration scope
+        #[arg(long, short, default_value = "user")]
+        scope: ConfigScope,
+    },
+    /// Set git workflow mode (push or pull)
+    SetWorkflow {
+        /// Workflow mode
+        #[arg(value_enum)]
+        workflow: WorkflowArg,
+        /// Configuration scope
+        #[arg(long, short, default_value = "user")]
+        scope: ConfigScope,
+    },
+    /// Manage worktree categories interactively
+    Categories,
+    /// Manage sync patterns interactively
+    SyncPatterns {
+        /// Configuration scope
+        #[arg(long, short, default_value = "user")]
+        scope: ConfigScope,
+    },
+}
 
 #[derive(Parser)]
 #[command(name = "grove")]
@@ -119,5 +187,12 @@ pub enum Commands {
         /// Preview what would happen without making changes
         #[arg(long)]
         dry_run: bool,
+    },
+
+    /// Configure grove integrations
+    #[command(visible_alias = "cfg")]
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
     },
 }

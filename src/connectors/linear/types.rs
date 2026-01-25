@@ -12,6 +12,15 @@ pub struct LinearIssue {
     pub description: Option<String>,
 }
 
+/// Linear team metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinearTeam {
+    /// Team key/prefix (e.g., "JOH", "ENG")
+    pub key: String,
+    /// Team name (e.g., "John's Team", "Engineering")
+    pub name: String,
+}
+
 /// Result of resolving user input for Linear integration
 #[derive(Debug, Clone)]
 pub struct ResolvedInput {

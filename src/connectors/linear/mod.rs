@@ -13,13 +13,13 @@ mod resolve;
 mod types;
 
 // Re-export types
-pub use types::{LinearIssue, ResolvedInput};
+pub use types::{LinearIssue, LinearTeam, ResolvedInput};
 
 // Re-export parser functions
 pub use parser::{extract_issue_id, is_issue_id};
 
 // Re-export API functions
-pub use api::{get_issue, update_issue_status};
+pub use api::{fetch_teams, get_issue, update_issue_status};
 
 // Re-export resolution functions
 pub use resolve::resolve_input;

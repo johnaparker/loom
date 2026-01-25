@@ -1,4 +1,5 @@
 mod completions;
+pub mod config;
 mod github;
 mod hook;
 mod linear;
@@ -16,6 +17,7 @@ mod sync;
 mod ui;
 
 pub use completions::completions;
+pub use config::run as config;
 pub use github::github_cmd;
 pub use hook::hook;
 pub use linear::linear_cmd;

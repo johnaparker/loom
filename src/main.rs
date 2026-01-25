@@ -72,6 +72,9 @@ fn run() -> Result<()> {
         Commands::Prune { force, dry_run } => {
             commands::prune(force, dry_run)?;
         }
+        Commands::Config { command } => {
+            commands::config(command)?;
+        }
     }
 
     Ok(())
