@@ -15,7 +15,7 @@ pub struct LinearIssue {
 /// Linear team metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinearTeam {
-    /// Team key/prefix (e.g., "JOH", "ENG")
+    /// Team key/prefix (e.g., "LIN", "ENG")
     pub key: String,
     /// Team name (e.g., "John's Team", "Engineering")
     pub name: String,

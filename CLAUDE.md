@@ -24,7 +24,7 @@ The killer feature. Via Claude Code hooks (`loom hook`):
 - **Log access**: Quick jump to Claude session from any worktree
 
 ### Worktree Management
-- Create worktrees linked to Linear issues (`loom new JOH-123`)
+- Create worktrees linked to Linear issues (`loom new LIN-123`)
 - Merge to main with cleanup (`loom merge`)
 - Sync files from main (.env, .envrc, .claude/)
 
@@ -76,7 +76,7 @@ src/
 │   ├── linear/           # Linear issue tracking
 │   │   ├── mod.rs        # Re-exports
 │   │   ├── types.rs      # LinearIssue, ResolvedInput
-│   │   ├── parser.rs     # Issue ID parsing (JOH-123)
+│   │   ├── parser.rs     # Issue ID parsing (LIN-123)
 │   │   ├── api.rs        # GraphQL API calls
 │   │   ├── resolve.rs    # Input resolution (URL, ID, branch)
 │   │   └── cache.rs      # Metadata caching

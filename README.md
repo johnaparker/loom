@@ -119,8 +119,8 @@ enabled = true
 api_key = "lin_api_..."
 
 # Team prefix for auto-detecting issues from branch names
-# e.g., "JOH" matches branches like "john/joh-123-feature"
-team_prefix = "JOH"
+# e.g., "LIN" matches branches like "john/lin-123-feature"
+team_prefix = "LIN"
 
 # Auto-update Linear issue status on loom new/merge
 auto_update_status = true

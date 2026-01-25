@@ -222,7 +222,7 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         })?;
     }
 
-    // Get the issue's UUID (not the identifier like JOH-123)
+    // Get the issue's UUID (not the identifier like LIN-123)
     let issue_uuid = issue_data
         .get("id")
         .and_then(|i| i.as_str())

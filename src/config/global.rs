@@ -364,7 +364,7 @@ worktree_root = "/custom/path"
 [linear]
 enabled = true
 api_key = "lin_api_123"
-team_prefix = "JOH"
+team_prefix = "LIN"
 
 [github]
 enabled = true
@@ -376,7 +376,7 @@ command = "nvim"
         let config: GlobalConfig = toml::from_str(toml_str).unwrap();
         assert!(config.linear.enabled);
         assert_eq!(config.linear.api_key, Some("lin_api_123".to_string()));
-        assert_eq!(config.linear.team_prefix, Some("JOH".to_string()));
+        assert_eq!(config.linear.team_prefix, Some("LIN".to_string()));
         assert!(config.github.enabled);
         assert!(config.diffview.enabled);
         assert_eq!(config.diffview.command, "nvim");
