@@ -1,3 +1,6 @@
+[![CI](https://github.com/johnaparker/grove/actions/workflows/ci.yml/badge.svg)](https://github.com/johnaparker/grove/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-0.2.0-blue)
+
 # grove - Git Worktree Manager
 
 A TUI control center for managing git worktrees with Claude Code integration. Monitor multiple Claude agents, track Linear issues and GitHub PRs, all from a single dashboard.
