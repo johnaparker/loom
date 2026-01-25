@@ -57,50 +57,49 @@ mod list_tests {
     }
 }
 
-/// Tests for `grove status` command
+/// Tests for dashboard (invoked by running `grove` with no arguments)
 ///
-/// Note: The status command uses a full TUI dashboard that requires a terminal,
-/// so these tests are skipped in CI environments. The status command itself
-/// is tested indirectly through the Dashboard unit tests.
-mod status_tests {
+/// Note: The dashboard uses a full TUI that requires a terminal,
+/// so these tests are skipped in CI environments. The dashboard is
+/// tested indirectly through the Dashboard unit tests.
+mod dashboard_tests {
     use super::*;
 
     #[test]
-    #[ignore = "status command requires a terminal (TUI dashboard)"]
-    fn test_status_main_repo() {
+    #[ignore = "dashboard requires a terminal (TUI)"]
+    fn test_dashboard_main_repo() {
         let repo = TestRepo::new();
 
-        // Status should work from the main repo
-        repo.run_grove(&["status"]).success();
+        // Dashboard should work from the main repo
+        repo.run_grove(&[]).success();
     }
 
     #[test]
-    #[ignore = "status command requires a terminal (TUI dashboard)"]
-    fn test_status_from_worktree() {
+    #[ignore = "dashboard requires a terminal (TUI)"]
+    fn test_dashboard_from_worktree() {
         let repo = TestRepo::new();
         let wt_path = repo.create_worktree("feature-1", "dev");
 
-        // Run grove status from within the worktree
+        // Run grove (dashboard) from within the worktree
         let output = std::process::Command::new(env!("CARGO_BIN_EXE_grove"))
             .current_dir(&wt_path)
             .env("XDG_CONFIG_HOME", repo.config_dir.path())
             .env("HOME", repo.config_dir.path())
-            .args(["status"])
             .output()
-            .expect("Failed to run grove status");
+            .expect("Failed to run grove");
 
         assert!(output.status.success());
     }
 
     #[test]
-    #[ignore = "status command requires a terminal (TUI dashboard)"]
-    fn test_status_shows_worktree_info() {
+    #[ignore = "dashboard requires a terminal (TUI)"]
+    fn test_dashboard_shows_worktree_info() {
         let repo = TestRepo::new();
         repo.create_worktree("feature-1", "dev");
 
-        let output = repo.run_grove_output(&["status"]);
+        let output = repo.run_grove_output(&[]);
 
-        // Status should show project info
+        // Dashboard should show project info
         assert!(
             output.contains("main") || output.contains("Main"),
             "Should show main branch info"

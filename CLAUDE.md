@@ -10,7 +10,7 @@ grove (Git Worktree) is a **TUI-first** tool for managing git worktrees with dee
 
 ### Design Philosophy
 
-- **TUI-first**: The dashboard (`grove status`) is the primary interface. CLI commands exist for one-off operations and automated testing (TUI cannot be tested).
+- **TUI-first**: The dashboard (`grove`) is the primary interface. CLI commands exist for one-off operations and automated testing (TUI cannot be tested).
 - **Human in control**: Surface agent activity so developers can monitor, interrupt, or redirect multiple Claude sessions
 - **Trunk-based workflow**: All feature work happens in worktrees; main branch stays clean for merging
 
@@ -57,7 +57,7 @@ src/
 │   ├── switch.rs         # grove switch [name] - TUI picker or fuzzy match
 │   ├── merge.rs          # grove merge - merge to main (supports --dry-run)
 │   ├── remove.rs         # grove remove [name] - TUI picker or fuzzy match (supports --dry-run)
-│   ├── status.rs         # grove status - interactive dashboard
+│   ├── status.rs         # interactive dashboard (default when no command)
 │   ├── main_cmd.rs       # grove main - switch to main
 │   ├── hook.rs           # Claude Code hook integration
 │   └── completions.rs    # grove completions <shell> - generate shell completions

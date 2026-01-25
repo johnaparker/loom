@@ -132,10 +132,6 @@ pub enum Commands {
         dry_run: bool,
     },
 
-    /// Show status of all worktrees
-    #[command(visible_alias = "st")]
-    Status,
-
     /// Sync worktree with main (merge origin/main into current branch)
     #[command(visible_alias = "sy")]
     Sync {

@@ -21,59 +21,59 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command.unwrap_or(Commands::Status) {
-        Commands::New { branch, category } => {
+    match cli.command {
+        Some(Commands::New { branch, category }) => {
             commands::new(&branch, category)?;
         }
-        Commands::List => {
+        Some(Commands::List) => {
             commands::list()?;
         }
-        Commands::Switch { name } => {
+        Some(Commands::Switch { name }) => {
             commands::switch(name.as_deref())?;
         }
-        Commands::Merge {
+        Some(Commands::Merge {
             name,
             force,
             dry_run,
-        } => {
+        }) => {
             commands::merge(&name, force, dry_run)?;
         }
-        Commands::Remove {
+        Some(Commands::Remove {
             name,
             force,
             dry_run,
-        } => {
+        }) => {
             commands::remove(name.as_deref(), force, dry_run)?;
         }
-        Commands::Status => {
-            commands::status()?;
-        }
-        Commands::Sync { name, dry_run } => {
+        Some(Commands::Sync { name, dry_run }) => {
             commands::sync(name.as_deref(), dry_run)?;
         }
-        Commands::Review => {
+        Some(Commands::Review) => {
             commands::review()?;
         }
-        Commands::Main => {
+        Some(Commands::Main) => {
             commands::main_cmd()?;
         }
-        Commands::Linear => {
+        Some(Commands::Linear) => {
             commands::linear_cmd()?;
         }
-        Commands::GitHub => {
+        Some(Commands::GitHub) => {
             commands::github_cmd()?;
         }
-        Commands::Completions { shell } => {
+        Some(Commands::Completions { shell }) => {
             commands::completions(shell)?;
         }
-        Commands::Hook { event } => {
+        Some(Commands::Hook { event }) => {
             commands::hook(&event)?;
         }
-        Commands::Prune { force, dry_run } => {
+        Some(Commands::Prune { force, dry_run }) => {
             commands::prune(force, dry_run)?;
         }
-        Commands::Config { command } => {
+        Some(Commands::Config { command }) => {
             commands::config(command)?;
+        }
+        None => {
+            commands::status()?;
         }
     }
 

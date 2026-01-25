@@ -162,7 +162,7 @@ For PR-based development where merging happens on GitHub. New worktrees branch f
 
 ## Dashboard
 
-Run `grove status` to open the interactive dashboard. This is the primary interface for managing worktrees.
+Run `grove` to open the interactive dashboard. This is the primary interface for managing worktrees.
 
 ### Keyboard Shortcuts
 
@@ -190,7 +190,7 @@ All commands support `--help` for detailed usage.
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `grove status` | `st` | Open interactive dashboard |
+| `grove` | | Open interactive dashboard |
 | `grove new <branch>` | `n` | Create new worktree |
 | `grove switch [name]` | `s` | Switch worktree (fuzzy picker if no name) |
 | `grove list` | `l`, `ls` | List all worktrees |
