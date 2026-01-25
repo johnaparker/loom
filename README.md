@@ -3,8 +3,6 @@
 
 # Grove
 
-Grove is a TUI control center for managing git worktrees in tmux with Claude Code integration.
-Monitor multiple Claude agents, optionally track Linear issues and GitHub PRs, all from a single dashboard.
 
 ## What is this?
 
