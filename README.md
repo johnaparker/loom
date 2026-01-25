@@ -8,8 +8,6 @@ Monitor multiple Claude agents, optionally track Linear issues and GitHub PRs, a
 
 ![grove demo](assets/grove.gif)
 
-## What is this?
-
 If you work on multiple features simultaneously using git worktrees, `grove` gives you:
 
 - **Claude agent monitoring** - See which agents are working, waiting for permission, or idle across all your worktrees
