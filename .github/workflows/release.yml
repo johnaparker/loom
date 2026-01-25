@@ -120,3 +120,15 @@ jobs:
             install.sh
             artifacts/loom-aarch64-apple-darwin/*
             artifacts/loom-x86_64-unknown-linux-gnu/*
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CRATES_API_TOKEN }}
