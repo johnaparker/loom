@@ -6,7 +6,7 @@ use std::path::Path;
 use super::global::SyncWorkflow;
 use super::{ClaudeOverride, IntegrationOverride};
 
-/// Project-specific configuration stored at .gwt.toml in repo root
+/// Project-specific configuration stored at .grove.toml in repo root
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectConfig {
     pub project_name: Option<String>,
@@ -59,18 +59,18 @@ impl ProjectConfig {
         // Check worktree directory first (allows per-worktree overrides)
         if let Some(wt_dir) = worktree_dir
             && wt_dir != repo_root
-            && let Some(config) = Self::load_from_path(&wt_dir.join(".gwt.toml"))?
+            && let Some(config) = Self::load_from_path(&wt_dir.join(".grove.toml"))?
         {
             return Ok(Some(config));
         }
 
         // Fall back to repo root
-        Self::load_from_path(&repo_root.join(".gwt.toml"))
+        Self::load_from_path(&repo_root.join(".grove.toml"))
     }
 
     /// Save project config to repo root
     pub fn save(&self, repo_root: &Path) -> Result<()> {
-        let path = repo_root.join(".gwt.toml");
+        let path = repo_root.join(".grove.toml");
         let content = toml::to_string_pretty(self)?;
         fs::write(&path, content)?;
         Ok(())

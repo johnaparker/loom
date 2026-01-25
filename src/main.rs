@@ -2,15 +2,15 @@ use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 
-use gwt::cli::{Cli, Commands};
-use gwt::commands;
-use gwt::error::GwtError;
+use grove::cli::{Cli, Commands};
+use grove::commands;
+use grove::error::GroveError;
 
 fn main() {
     if let Err(err) = run() {
-        // Check if the error is a GwtError for enhanced display
-        if let Some(gwt_err) = err.downcast_ref::<GwtError>() {
-            eprintln!("{}", gwt_err.display_with_suggestion());
+        // Check if the error is a GroveError for enhanced display
+        if let Some(grove_err) = err.downcast_ref::<GroveError>() {
+            eprintln!("{}", grove_err.display_with_suggestion());
         } else {
             eprintln!("{} {}", "Error:".red().bold(), err);
         }

@@ -2,7 +2,7 @@ use colored::Colorize;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum GwtError {
+pub enum GroveError {
     #[error("Worktree '{name}' not found")]
     WorktreeNotFound { name: String },
 
@@ -88,92 +88,92 @@ pub enum GwtError {
     PruneNotAllowedInPushWorkflow,
 }
 
-impl GwtError {
+impl GroveError {
     pub fn suggestion(&self) -> Option<String> {
         match self {
-            GwtError::WorktreeNotFound { .. } => {
-                Some("Run 'gwt list' to see available worktrees".to_string())
+            GroveError::WorktreeNotFound { .. } => {
+                Some("Run 'grove list' to see available worktrees".to_string())
             }
-            GwtError::WorktreeAlreadyExists { name } => {
-                Some(format!("Use 'gwt switch {}' to switch to it, or choose a different name", name))
+            GroveError::WorktreeAlreadyExists { name } => {
+                Some(format!("Use 'grove switch {}' to switch to it, or choose a different name", name))
             }
-            GwtError::CannotMergeMain => {
+            GroveError::CannotMergeMain => {
                 Some("You can only merge feature branches into main".to_string())
             }
-            GwtError::NoBranch => Some(
+            GroveError::NoBranch => Some(
                 "The worktree is in detached HEAD state. Check out a branch first.".to_string(),
             ),
-            GwtError::NoMatch { .. } => {
-                Some("Run 'gwt list' to see available worktrees".to_string())
+            GroveError::NoMatch { .. } => {
+                Some("Run 'grove list' to see available worktrees".to_string())
             }
-            GwtError::NotGitRepo => {
+            GroveError::NotGitRepo => {
                 Some("Run this command from within a git repository".to_string())
             }
-            GwtError::NoMainBranch => Some(
+            GroveError::NoMainBranch => Some(
                 "Create a 'main' or 'master' branch, or check that you have fetched from remote"
                     .to_string(),
             ),
-            GwtError::GitCommandFailed { stderr, .. } => {
+            GroveError::GitCommandFailed { stderr, .. } => {
                 if !stderr.is_empty() {
                     Some(stderr.trim().to_string())
                 } else {
                     None
                 }
             }
-            GwtError::ConfigError { path, .. } => Some(format!("Check config file at: {}", path)),
-            GwtError::NotInWorktree => {
+            GroveError::ConfigError { path, .. } => Some(format!("Check config file at: {}", path)),
+            GroveError::NotInWorktree => {
                 Some("Run this command from within a worktree, or provide a worktree name".to_string())
             }
-            GwtError::UncommittedChanges => {
+            GroveError::UncommittedChanges => {
                 Some("Commit or stash your changes before syncing".to_string())
             }
-            GwtError::LinearIssueNotFound { .. } => {
+            GroveError::LinearIssueNotFound { .. } => {
                 Some("Check the issue ID and try again, or provide the full branch name".to_string())
             }
-            GwtError::LinearApiKeyRequired { .. } => {
-                Some("Configure linear.api_key in ~/.config/gwt/config.toml, or provide the full branch name".to_string())
+            GroveError::LinearApiKeyRequired { .. } => {
+                Some("Configure linear.api_key in ~/.config/grove/config.toml, or provide the full branch name".to_string())
             }
-            GwtError::LinearApiError { .. } => {
+            GroveError::LinearApiError { .. } => {
                 Some("Check your Linear API key and network connection".to_string())
             }
-            GwtError::NoLinearIssue => {
+            GroveError::NoLinearIssue => {
                 Some("This worktree was not created from a Linear issue ID".to_string())
             }
-            GwtError::GitHubCliNotFound => {
+            GroveError::GitHubCliNotFound => {
                 Some("Install the GitHub CLI: https://cli.github.com/".to_string())
             }
-            GwtError::GitHubNotAuthenticated => {
+            GroveError::GitHubNotAuthenticated => {
                 Some("Run 'gh auth login' to authenticate with GitHub".to_string())
             }
-            GwtError::GitHubApiError { .. } => {
+            GroveError::GitHubApiError { .. } => {
                 Some("Check your network connection and GitHub authentication".to_string())
             }
-            GwtError::NoGitHubRemote => {
+            GroveError::NoGitHubRemote => {
                 Some("Ensure the repository has a GitHub remote (origin)".to_string())
             }
-            GwtError::NoGitHubPR => {
+            GroveError::NoGitHubPR => {
                 Some("Create a PR first with 'gh pr create' or push the branch".to_string())
             }
-            GwtError::PushRejected => {
+            GroveError::PushRejected => {
                 Some("Pull remote changes first with 'P' or 'git pull'".to_string())
             }
-            GwtError::NoTrackingBranch { .. } => {
+            GroveError::NoTrackingBranch { .. } => {
                 Some("Push first with 'p' to create a remote tracking branch".to_string())
             }
-            GwtError::CannotReviewMain => {
+            GroveError::CannotReviewMain => {
                 Some("Switch to a feature worktree first - main has no changes to compare".to_string())
             }
-            GwtError::DryRunRequiresName { command } => {
-                Some(format!("Usage: gwt {} <name> --dry-run", command))
+            GroveError::DryRunRequiresName { command } => {
+                Some(format!("Usage: grove {} <name> --dry-run", command))
             }
-            GwtError::MergeNotAllowedInPullWorkflow => {
+            GroveError::MergeNotAllowedInPullWorkflow => {
                 Some("In pull workflow, merge via GitHub PR instead. Use 'gh pr create' to open a PR.".to_string())
             }
-            GwtError::InvalidCategory { valid, .. } => {
+            GroveError::InvalidCategory { valid, .. } => {
                 Some(format!("Valid categories: {}", valid.join(", ")))
             }
-            GwtError::PruneNotAllowedInPushWorkflow => {
-                Some("Prune relies on GitHub PR status. Switch to pull workflow or use 'gwt remove' to manually remove worktrees.".to_string())
+            GroveError::PruneNotAllowedInPushWorkflow => {
+                Some("Prune relies on GitHub PR status. Switch to pull workflow or use 'grove remove' to manually remove worktrees.".to_string())
             }
         }
     }

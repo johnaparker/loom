@@ -3,7 +3,7 @@ use colored::Colorize;
 
 use super::operations;
 use crate::config::Config;
-use crate::error::GwtError;
+use crate::error::GroveError;
 use crate::git::WorktreeManager;
 use crate::github::{self, GitHubUrlType};
 use crate::tmux;
@@ -22,7 +22,7 @@ pub fn new(branch: &str, category: Option<String>) -> Result<()> {
     // Validate category against configured list
     let valid_categories = config.categories();
     if !valid_categories.iter().any(|c| c == &category) {
-        return Err(GwtError::InvalidCategory {
+        return Err(GroveError::InvalidCategory {
             category,
             valid: valid_categories,
         }

@@ -71,7 +71,7 @@ Return: List of files/functions needing tests with confidence scores.
 **Agent 2: CLAUDE.md Compliance Reviewer (sonnet)**
 ```
 Audit changes against CLAUDE.md conventions:
-- Error handling: anyhow::Result in commands, GwtError for user-facing
+- Error handling: anyhow::Result in commands, GroveError for user-facing
 - Module organization: business logic in core/connectors, not commands/tui
 - Async patterns: never .await in TUI event loop, use channels
 - Anti-patterns: no global state, use existing parsers/cache helpers

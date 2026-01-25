@@ -37,7 +37,7 @@ impl Drop for AlternateScreenGuard {
 /// # Example
 ///
 /// ```ignore
-/// use gwt::core::with_alternate_screen;
+/// use grove::core::with_alternate_screen;
 ///
 /// with_alternate_screen(|terminal| {
 ///     terminal.draw(|f| {
@@ -79,7 +79,7 @@ where
 /// # Example
 ///
 /// ```ignore
-/// use gwt::core::terminal::setup_terminal;
+/// use grove::core::terminal::setup_terminal;
 ///
 /// let (mut terminal, _guard) = setup_terminal()?;
 /// // Use terminal...

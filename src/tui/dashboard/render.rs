@@ -366,7 +366,7 @@ impl Dashboard {
             return;
         }
 
-        let title = format!(" gwt status - {} ", self.project_name);
+        let title = format!(" grove status - {} ", self.project_name);
         let quit_hint = "(q to quit)";
         let padding = area
             .width

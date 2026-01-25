@@ -762,7 +762,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gwt"
+name = "grove"
 version = "0.2.0"
 dependencies = [
  "anyhow",

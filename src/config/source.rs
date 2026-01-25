@@ -37,9 +37,9 @@ impl ConfigSource for FilesystemSource {
     }
 
     fn global_config_path(&self) -> Result<PathBuf> {
-        // Prefer XDG-style path (~/.config/gwt/config.toml)
+        // Prefer XDG-style path (~/.config/grove/config.toml)
         if let Some(home) = dirs::home_dir() {
-            let xdg_path = home.join(".config").join("gwt").join("config.toml");
+            let xdg_path = home.join(".config").join("grove").join("config.toml");
             if xdg_path.exists() {
                 return Ok(xdg_path);
             }
@@ -48,7 +48,7 @@ impl ConfigSource for FilesystemSource {
         // Fall back to platform default
         let config_dir =
             dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
-        Ok(config_dir.join("gwt").join("config.toml"))
+        Ok(config_dir.join("grove").join("config.toml"))
     }
 }
 
@@ -80,7 +80,7 @@ impl ConfigSource for MemorySource {
         }
 
         // Default: if no custom global path set, assume any config.toml is global
-        if path.ends_with("gwt/config.toml") || path.ends_with("gwt\\config.toml") {
+        if path.ends_with("grove/config.toml") || path.ends_with("grove\\config.toml") {
             return Ok(self.global_config.clone());
         }
 
@@ -102,7 +102,7 @@ impl ConfigSource for MemorySource {
         }
 
         // Check if it's the global config
-        if (path.ends_with("gwt/config.toml") || path.ends_with("gwt\\config.toml"))
+        if (path.ends_with("grove/config.toml") || path.ends_with("grove\\config.toml"))
             && self.global_config.is_some()
         {
             return true;
@@ -116,7 +116,7 @@ impl ConfigSource for MemorySource {
             Ok(path.clone())
         } else {
             // Return a fake path for testing
-            Ok(PathBuf::from("/test/.config/gwt/config.toml"))
+            Ok(PathBuf::from("/test/.config/grove/config.toml"))
         }
     }
 }
@@ -151,7 +151,7 @@ mod tests {
     fn test_memory_source_project_config() {
         let mut project_configs = std::collections::HashMap::new();
         project_configs.insert(
-            PathBuf::from("/repo/.gwt.toml"),
+            PathBuf::from("/repo/.grove.toml"),
             r#"project_name = "test""#.to_string(),
         );
 
@@ -160,7 +160,7 @@ mod tests {
             ..Default::default()
         };
 
-        let content = source.read_config(Path::new("/repo/.gwt.toml")).unwrap();
+        let content = source.read_config(Path::new("/repo/.grove.toml")).unwrap();
         assert!(content.is_some());
         assert!(content.unwrap().contains("project_name"));
     }

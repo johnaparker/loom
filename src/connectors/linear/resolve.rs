@@ -7,7 +7,7 @@ use anyhow::Result;
 use super::api::get_issue;
 use super::parser::{extract_issue_id, is_issue_id, sanitize_for_filesystem};
 use super::types::ResolvedInput;
-use crate::error::GwtError;
+use crate::error::GroveError;
 
 /// Resolve user input into worktree name, git branch, and optional issue metadata
 pub fn resolve_input(
@@ -26,9 +26,11 @@ pub fn resolve_input(
             })
         }
         // Case 2: Have prefix (no API key), input looks like an issue ID -> error
-        (Some(prefix), None) if is_issue_id(name, prefix) => Err(GwtError::LinearApiKeyRequired {
-            issue_id: name.to_string(),
-        })?,
+        (Some(prefix), None) if is_issue_id(name, prefix) => {
+            Err(GroveError::LinearApiKeyRequired {
+                issue_id: name.to_string(),
+            })?
+        }
         // Case 3: Have prefix and API key, input contains issue ID in branch name
         // Fetch issue metadata so we can cache it
         (Some(prefix), Some(key)) if extract_issue_id(name, prefix).is_some() => {

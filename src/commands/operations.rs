@@ -8,7 +8,7 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
-use crate::error::GwtError;
+use crate::error::GroveError;
 use crate::git::{PushResult, WorktreeManager, WorktreeStats};
 use crate::linear::{self, LinearIssue};
 use crate::sync;
@@ -368,7 +368,7 @@ pub fn create_worktree(
 
     // Check if worktree already exists
     if manager.get_worktree(&resolved.worktree_name)?.is_some() {
-        return Err(GwtError::WorktreeAlreadyExists {
+        return Err(GroveError::WorktreeAlreadyExists {
             name: resolved.worktree_name,
         }
         .into());

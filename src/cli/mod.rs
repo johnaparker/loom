@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use clap_complete::Shell;
 
 #[derive(Parser)]
-#[command(name = "gwt")]
+#[command(name = "grove")]
 #[command(about = "Git worktree manager with tmux integration")]
 #[command(version)]
 pub struct Cli {

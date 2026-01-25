@@ -1,7 +1,7 @@
 //! Core shared utilities for TUI and CLI.
 //!
 //! This module contains reusable components that are shared between
-//! the terminal UI (TUI) and command-line interface (CLI) parts of gwt.
+//! the terminal UI (TUI) and command-line interface (CLI) parts of grove.
 
 pub mod fuzzy;
 pub mod terminal;

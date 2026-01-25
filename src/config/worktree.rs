@@ -1,7 +1,7 @@
 //! Worktree-level configuration.
 //!
-//! Worktree configs are stored at `.gwt.toml` in each worktree directory
-//! (separate from the project-level `.gwt.toml` at the repo root).
+//! Worktree configs are stored at `.grove.toml` in each worktree directory
+//! (separate from the project-level `.grove.toml` at the repo root).
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -10,10 +10,10 @@ use std::path::Path;
 
 use super::{ClaudeOverride, IntegrationOverride};
 
-/// Worktree-specific configuration stored at .gwt.toml in the worktree directory.
+/// Worktree-specific configuration stored at .grove.toml in the worktree directory.
 ///
 /// This config only applies once the worktree exists - it cannot be used during
-/// `gwt new` since the directory doesn't exist yet.
+/// `grove new` since the directory doesn't exist yet.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorktreeConfig {
     /// Sync configuration overrides for this worktree
@@ -50,7 +50,7 @@ impl WorktreeConfig {
     /// The worktree config is separate from the project config - it's stored
     /// in the worktree directory itself, not the repo root.
     pub fn load(worktree_path: &Path) -> Result<Option<Self>> {
-        let config_path = worktree_path.join(".gwt.toml");
+        let config_path = worktree_path.join(".grove.toml");
         if config_path.exists() {
             let content = fs::read_to_string(&config_path)?;
             let config: WorktreeConfig = toml::from_str(&content)?;
@@ -62,7 +62,7 @@ impl WorktreeConfig {
 
     /// Save worktree config to the worktree directory.
     pub fn save(&self, worktree_path: &Path) -> Result<()> {
-        let config_path = worktree_path.join(".gwt.toml");
+        let config_path = worktree_path.join(".grove.toml");
         let content = toml::to_string_pretty(self)?;
         fs::write(&config_path, content)?;
         Ok(())

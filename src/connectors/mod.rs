@@ -1,4 +1,4 @@
-//! External service connectors for gwt.
+//! External service connectors for grove.
 //!
 //! This module contains integrations with external services:
 //! - `linear` - Linear issue tracking integration

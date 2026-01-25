@@ -56,7 +56,7 @@ pub fn hook(event: &str) -> Result<()> {
 /// Get the cache directory from config
 fn get_cache_dir() -> Result<PathBuf> {
     // Check environment variable first (fast path)
-    if let Ok(env_dir) = std::env::var("GWT_CACHE_DIR") {
+    if let Ok(env_dir) = std::env::var("GROVE_CACHE_DIR") {
         return Ok(PathBuf::from(env_dir));
     }
 

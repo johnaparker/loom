@@ -9,7 +9,7 @@ use std::io::{self, Write};
 use super::operations;
 use super::ui;
 use crate::config::Config;
-use crate::error::GwtError;
+use crate::error::GroveError;
 use crate::git::{WorktreeInfo, WorktreeManager};
 use crate::github::{self, GitHubPR};
 use crate::output::{dry_run_action, dry_run_footer, dry_run_header, dry_run_warning};
@@ -33,7 +33,7 @@ pub fn prune(force: bool, dry_run: bool) -> Result<()> {
 
     // Check that we're in pull workflow
     if !config.is_pull_workflow() {
-        return Err(GwtError::PruneNotAllowedInPushWorkflow.into());
+        return Err(GroveError::PruneNotAllowedInPushWorkflow.into());
     }
 
     // Check that gh CLI is available

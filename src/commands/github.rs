@@ -2,7 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 
 use crate::config::Config;
-use crate::error::GwtError;
+use crate::error::GroveError;
 use crate::git::WorktreeManager;
 use crate::github;
 
@@ -18,10 +18,10 @@ pub fn github_cmd() -> Result<()> {
     let worktree = worktrees
         .into_iter()
         .find(|w| current_dir.starts_with(&w.path))
-        .ok_or(GwtError::NotInWorktree)?;
+        .ok_or(GroveError::NotInWorktree)?;
 
     // Get the branch name
-    let branch = worktree.branch.ok_or(GwtError::NoBranch)?;
+    let branch = worktree.branch.ok_or(GroveError::NoBranch)?;
 
     // Don't try to open PR for main branch
     if worktree.is_main {

@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::config::Config;
-use crate::error::GwtError;
+use crate::error::GroveError;
 use crate::git::WorktreeManager;
 use crate::tmux;
 
@@ -16,11 +16,11 @@ pub fn review() -> Result<()> {
     let worktree = worktrees
         .into_iter()
         .find(|w| current_dir.starts_with(&w.path))
-        .ok_or(GwtError::NotInWorktree)?;
+        .ok_or(GroveError::NotInWorktree)?;
 
     // Can't review main worktree
     if worktree.is_main {
-        Err(GwtError::CannotReviewMain)?;
+        Err(GroveError::CannotReviewMain)?;
     }
 
     let session = format!("{}/{}", project_name, &worktree.name);

@@ -1,4 +1,4 @@
-//! Integration tests for gwt CLI commands.
+//! Integration tests for grove CLI commands.
 //!
 //! These tests use ephemeral git repositories to test CLI functionality
 //! without polluting the user's `~/worktrees` folder.
@@ -8,7 +8,7 @@ mod common;
 use common::TestRepo;
 use predicates::prelude::*;
 
-/// Tests for `gwt list` command
+/// Tests for `grove list` command
 mod list_tests {
     use super::*;
 
@@ -16,7 +16,7 @@ mod list_tests {
     fn test_list_empty_repo() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["list"])
+        repo.run_grove(&["list"])
             .success()
             .stdout(predicate::str::contains("Main"));
     }
@@ -29,7 +29,7 @@ mod list_tests {
         repo.create_worktree("feature-1", "dev");
         repo.create_worktree("feature-2", "dev");
 
-        let output = repo.run_gwt_output(&["list"]);
+        let output = repo.run_grove_output(&["list"]);
 
         assert!(output.contains("Main"), "Should show Main section");
         assert!(output.contains("Dev"), "Should show Dev section");
@@ -45,7 +45,7 @@ mod list_tests {
         repo.create_worktree("feature-1", "dev");
         repo.create_worktree("review-branch", "review");
 
-        let output = repo.run_gwt_output(&["list"]);
+        let output = repo.run_grove_output(&["list"]);
 
         assert!(output.contains("Dev"), "Should show Dev section");
         assert!(output.contains("Review"), "Should show Review section");
@@ -57,7 +57,7 @@ mod list_tests {
     }
 }
 
-/// Tests for `gwt status` command
+/// Tests for `grove status` command
 ///
 /// Note: The status command uses a full TUI dashboard that requires a terminal,
 /// so these tests are skipped in CI environments. The status command itself
@@ -71,7 +71,7 @@ mod status_tests {
         let repo = TestRepo::new();
 
         // Status should work from the main repo
-        repo.run_gwt(&["status"]).success();
+        repo.run_grove(&["status"]).success();
     }
 
     #[test]
@@ -80,14 +80,14 @@ mod status_tests {
         let repo = TestRepo::new();
         let wt_path = repo.create_worktree("feature-1", "dev");
 
-        // Run gwt status from within the worktree
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_gwt"))
+        // Run grove status from within the worktree
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_grove"))
             .current_dir(&wt_path)
             .env("XDG_CONFIG_HOME", repo.config_dir.path())
             .env("HOME", repo.config_dir.path())
             .args(["status"])
             .output()
-            .expect("Failed to run gwt status");
+            .expect("Failed to run grove status");
 
         assert!(output.status.success());
     }
@@ -98,7 +98,7 @@ mod status_tests {
         let repo = TestRepo::new();
         repo.create_worktree("feature-1", "dev");
 
-        let output = repo.run_gwt_output(&["status"]);
+        let output = repo.run_grove_output(&["status"]);
 
         // Status should show project info
         assert!(
@@ -108,7 +108,7 @@ mod status_tests {
     }
 }
 
-/// Tests for `gwt remove` command (dry-run only)
+/// Tests for `grove remove` command (dry-run only)
 mod remove_tests {
     use super::*;
 
@@ -118,7 +118,7 @@ mod remove_tests {
         repo.create_worktree("feature-to-remove", "dev");
 
         // Dry run should show what would be removed
-        let output = repo.run_gwt_output(&["remove", "feature-to-remove", "--dry-run"]);
+        let output = repo.run_grove_output(&["remove", "feature-to-remove", "--dry-run"]);
 
         assert!(
             output.contains("DRY RUN") || output.contains("dry run"),
@@ -143,7 +143,7 @@ mod remove_tests {
         repo.create_worktree("feature-1", "dev");
 
         // Trying to remove a non-existent worktree should fail with "No match"
-        let output = repo.run_gwt_output(&["remove", "nonexistent-wt-xyz", "--dry-run"]);
+        let output = repo.run_grove_output(&["remove", "nonexistent-wt-xyz", "--dry-run"]);
 
         // Should fail because no worktree matches "nonexistent-wt-xyz"
         assert!(
@@ -159,7 +159,7 @@ mod remove_tests {
         repo.create_worktree("feature-1", "dev");
 
         // Dry run without name should fail (can't use picker in dry run)
-        repo.run_gwt(&["remove", "--dry-run"]).failure();
+        repo.run_grove(&["remove", "--dry-run"]).failure();
     }
 
     #[test]
@@ -170,7 +170,7 @@ mod remove_tests {
 
         // Trying to remove main should fail
         // Main is filtered out from removable worktrees, so "main" won't match anything
-        let output = repo.run_gwt_output(&["remove", "main", "--dry-run"]);
+        let output = repo.run_grove_output(&["remove", "main", "--dry-run"]);
 
         // Should fail because "main" doesn't match any removable worktree
         assert!(
@@ -185,7 +185,7 @@ mod remove_tests {
         let repo = TestRepo::new();
 
         // When there are no worktrees (only main), should show appropriate message
-        let output = repo.run_gwt_output(&["remove", "anything", "--dry-run"]);
+        let output = repo.run_grove_output(&["remove", "anything", "--dry-run"]);
 
         assert!(
             output.contains("No worktrees to remove"),
@@ -195,7 +195,7 @@ mod remove_tests {
     }
 }
 
-/// Tests for `gwt merge` command (dry-run only)
+/// Tests for `grove merge` command (dry-run only)
 mod merge_tests {
     use super::*;
 
@@ -221,7 +221,7 @@ mod merge_tests {
             .expect("Failed to git commit");
 
         // Dry run should show merge plan
-        let output = repo.run_gwt_output(&["merge", "feature-to-merge", "--dry-run"]);
+        let output = repo.run_grove_output(&["merge", "feature-to-merge", "--dry-run"]);
 
         assert!(
             output.contains("DRY RUN") || output.contains("dry run"),
@@ -247,7 +247,7 @@ mod merge_tests {
     fn test_merge_nonexistent_worktree() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["merge", "nonexistent", "--dry-run"])
+        repo.run_grove(&["merge", "nonexistent", "--dry-run"])
             .failure();
     }
 
@@ -256,11 +256,11 @@ mod merge_tests {
         let repo = TestRepo::new();
 
         // Trying to merge main should fail
-        repo.run_gwt(&["merge", "main"]).failure();
+        repo.run_grove(&["merge", "main"]).failure();
     }
 }
 
-/// Tests for `gwt completions` command
+/// Tests for `grove completions` command
 mod completions_tests {
     use super::*;
 
@@ -268,7 +268,7 @@ mod completions_tests {
     fn test_completions_bash() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["completions", "bash"])
+        repo.run_grove(&["completions", "bash"])
             .success()
             .stdout(predicate::str::contains("complete"));
     }
@@ -277,7 +277,7 @@ mod completions_tests {
     fn test_completions_zsh() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["completions", "zsh"])
+        repo.run_grove(&["completions", "zsh"])
             .success()
             .stdout(predicate::str::contains("#compdef"));
     }
@@ -286,13 +286,13 @@ mod completions_tests {
     fn test_completions_fish() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["completions", "fish"])
+        repo.run_grove(&["completions", "fish"])
             .success()
             .stdout(predicate::str::contains("complete"));
     }
 }
 
-/// Tests for `gwt new` command
+/// Tests for `grove new` command
 ///
 /// Note: The new command switches to tmux at the end, which won't work
 /// in CI environments. These tests verify the behavior up to that point.
@@ -305,7 +305,7 @@ mod new_tests {
         let repo = TestRepo::new();
 
         // This will fail at the tmux switch step, but the worktree should be created
-        let _ = repo.run_gwt(&["new", "test-branch", "--category", "dev"]);
+        let _ = repo.run_grove(&["new", "test-branch", "--category", "dev"]);
 
         // Check if worktree was created (it may have been)
         // Note: This test is ignored because tmux switching will fail
@@ -315,7 +315,7 @@ mod new_tests {
     fn test_new_help() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["new", "--help"])
+        repo.run_grove(&["new", "--help"])
             .success()
             .stdout(predicate::str::contains("Create a new worktree"));
     }
@@ -325,11 +325,11 @@ mod new_tests {
         let repo = TestRepo::new();
 
         // Missing required branch argument should fail
-        repo.run_gwt(&["new"]).failure();
+        repo.run_grove(&["new"]).failure();
     }
 }
 
-/// Tests for `gwt switch` command
+/// Tests for `grove switch` command
 ///
 /// Note: The switch command uses TUI picker or tmux, which won't work
 /// in CI environments.
@@ -340,7 +340,7 @@ mod switch_tests {
     fn test_switch_help() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["switch", "--help"])
+        repo.run_grove(&["switch", "--help"])
             .success()
             .stdout(predicate::str::contains("switch"));
     }
@@ -352,7 +352,7 @@ mod switch_tests {
         repo.create_worktree("feature-1", "dev");
 
         // This will fail at the tmux switch step
-        let _ = repo.run_gwt(&["switch", "feature-1"]);
+        let _ = repo.run_grove(&["switch", "feature-1"]);
     }
 
     #[test]
@@ -362,11 +362,11 @@ mod switch_tests {
         repo.create_worktree("feature-1", "dev");
 
         // Without name, switch uses TUI picker which requires terminal
-        let _ = repo.run_gwt(&["switch"]);
+        let _ = repo.run_grove(&["switch"]);
     }
 }
 
-/// Tests for `gwt main` command
+/// Tests for `grove main` command
 ///
 /// Note: The main command switches to tmux, which won't work in CI.
 mod main_tests {
@@ -376,7 +376,7 @@ mod main_tests {
     fn test_main_help() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["main", "--help"])
+        repo.run_grove(&["main", "--help"])
             .success()
             .stdout(predicate::str::contains("Switch"));
     }
@@ -387,11 +387,11 @@ mod main_tests {
         let repo = TestRepo::new();
 
         // This will fail at the tmux switch step
-        let _ = repo.run_gwt(&["main"]);
+        let _ = repo.run_grove(&["main"]);
     }
 }
 
-/// Tests for `gwt sync` command (dry-run only)
+/// Tests for `grove sync` command (dry-run only)
 mod sync_tests {
     use super::*;
 
@@ -406,13 +406,13 @@ mod sync_tests {
         repo.create_commit("Main commit after worktree");
 
         // Run sync dry-run from the worktree directory
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_gwt"))
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_grove"))
             .current_dir(&wt_path)
             .env("XDG_CONFIG_HOME", repo.config_dir.path())
             .env("HOME", repo.config_dir.path())
             .args(["sync", "--dry-run"])
             .output()
-            .expect("Failed to run gwt sync");
+            .expect("Failed to run grove sync");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -435,7 +435,7 @@ mod sync_tests {
         let repo = TestRepo::new();
 
         // Running sync from main repo should fail
-        let result = repo.run_gwt(&["sync", "--dry-run"]);
+        let result = repo.run_grove(&["sync", "--dry-run"]);
 
         // Should fail because you can't sync main with itself
         // Or succeed with no-op
@@ -454,13 +454,13 @@ mod worktree_discovery_tests {
         let wt_path = repo.create_worktree("test-worktree", "dev");
 
         // List should work from within a worktree
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_gwt"))
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_grove"))
             .current_dir(&wt_path)
             .env("XDG_CONFIG_HOME", repo.config_dir.path())
             .env("HOME", repo.config_dir.path())
             .args(["list"])
             .output()
-            .expect("Failed to run gwt list");
+            .expect("Failed to run grove list");
 
         assert!(output.status.success());
 
@@ -475,7 +475,7 @@ mod worktree_discovery_tests {
         let config_dir = tempfile::TempDir::new().expect("Failed to create config dir");
 
         // Create a minimal config
-        let config_path = config_dir.path().join("gwt").join("config.toml");
+        let config_path = config_dir.path().join("grove").join("config.toml");
         std::fs::create_dir_all(config_path.parent().unwrap())
             .expect("Failed to create config dir");
         std::fs::write(
@@ -487,13 +487,13 @@ mod worktree_discovery_tests {
         )
         .expect("Failed to write config");
 
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_gwt"))
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_grove"))
             .current_dir(temp_dir.path())
             .env("XDG_CONFIG_HOME", config_dir.path())
             .env("HOME", config_dir.path())
             .args(["list"])
             .output()
-            .expect("Failed to run gwt list");
+            .expect("Failed to run grove list");
 
         assert!(!output.status.success(), "Should fail outside git repo");
     }
@@ -507,14 +507,14 @@ mod error_tests {
     fn test_invalid_command() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["invalid-command"]).failure();
+        repo.run_grove(&["invalid-command"]).failure();
     }
 
     #[test]
     fn test_help_flag() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["--help"])
+        repo.run_grove(&["--help"])
             .success()
             .stdout(predicate::str::contains("Usage"));
     }
@@ -523,16 +523,16 @@ mod error_tests {
     fn test_version_flag() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["--version"])
+        repo.run_grove(&["--version"])
             .success()
-            .stdout(predicate::str::contains("gwt"));
+            .stdout(predicate::str::contains("grove"));
     }
 
     #[test]
     fn test_list_help() {
         let repo = TestRepo::new();
 
-        repo.run_gwt(&["list", "--help"])
+        repo.run_grove(&["list", "--help"])
             .success()
             .stdout(predicate::str::contains("List"));
     }

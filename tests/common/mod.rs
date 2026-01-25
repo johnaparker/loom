@@ -46,12 +46,12 @@ impl TestRepo {
         // Rename branch to main (git might default to master)
         run_git(&repo_dir, &["branch", "-M", "main"]);
 
-        // Create gwt config file
-        // The config is looked up at {HOME}/.config/gwt/config.toml
+        // Create grove config file
+        // The config is looked up at {HOME}/.config/grove/config.toml
         let config_path = config_dir
             .path()
             .join(".config")
-            .join("gwt")
+            .join("grove")
             .join("config.toml");
         fs::create_dir_all(config_path.parent().unwrap()).expect("Failed to create config dir");
 
@@ -181,10 +181,10 @@ patterns = []
         worktrees
     }
 
-    /// Run gwt command in this test repo with the test config
+    /// Run grove command in this test repo with the test config
     #[allow(deprecated)]
-    pub fn run_gwt(&self, args: &[&str]) -> assert_cmd::assert::Assert {
-        let mut cmd = assert_cmd::Command::cargo_bin("gwt").expect("Failed to find gwt binary");
+    pub fn run_grove(&self, args: &[&str]) -> assert_cmd::assert::Assert {
+        let mut cmd = assert_cmd::Command::cargo_bin("grove").expect("Failed to find grove binary");
         cmd.current_dir(self.repo_dir.path())
             .env("XDG_CONFIG_HOME", self.config_dir.path())
             .env("HOME", self.config_dir.path())
@@ -192,15 +192,15 @@ patterns = []
         cmd.assert()
     }
 
-    /// Run gwt command and return output as string
-    pub fn run_gwt_output(&self, args: &[&str]) -> String {
-        let output = Command::new(env!("CARGO_BIN_EXE_gwt"))
+    /// Run grove command and return output as string
+    pub fn run_grove_output(&self, args: &[&str]) -> String {
+        let output = Command::new(env!("CARGO_BIN_EXE_grove"))
             .current_dir(self.repo_dir.path())
             .env("XDG_CONFIG_HOME", self.config_dir.path())
             .env("HOME", self.config_dir.path())
             .args(args)
             .output()
-            .expect("Failed to run gwt");
+            .expect("Failed to run grove");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

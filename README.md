@@ -1,16 +1,16 @@
-# gwt - Git Worktree Manager
+# grove - Git Worktree Manager
 
 A TUI control center for managing git worktrees with Claude Code integration. Monitor multiple Claude agents, track Linear issues and GitHub PRs, all from a single dashboard.
 
 ## What is this?
 
-If you work on multiple features simultaneously using git worktrees, `gwt` gives you:
+If you work on multiple features simultaneously using git worktrees, `grove` gives you:
 
 - **Claude agent monitoring** - See which agents are working, waiting for permission, or idle across all your worktrees
 - **Worktree lifecycle** - Create, switch, merge, and remove worktrees without leaving the dashboard
 - **Project context** - Link worktrees to Linear issues and GitHub PRs for at-a-glance status
 
-The dashboard (`gwt status`) is the primary interface. CLI commands exist for quick one-off operations.
+The dashboard (`grove status`) is the primary interface. CLI commands exist for quick one-off operations.
 
 ## Setup
 
@@ -27,21 +27,21 @@ Add the hook to your Claude Code settings (`~/.claude/settings.json`):
 ```json
 {
   "hooks": {
-    "PreToolUse": [{"hooks": [{"type": "command", "command": "gwt hook tool-use"}]}],
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "gwt hook user-prompt"}]}],
-    "Stop": [{"hooks": [{"type": "command", "command": "gwt hook stop"}]}],
-    "Notification": [{"hooks": [{"type": "command", "command": "gwt hook notification"}]}],
-    "SessionStart": [{"hooks": [{"type": "command", "command": "gwt hook session-start"}]}],
-    "SessionEnd": [{"hooks": [{"type": "command", "command": "gwt hook session-end"}]}]
+    "PreToolUse": [{"hooks": [{"type": "command", "command": "grove hook tool-use"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "grove hook user-prompt"}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "grove hook stop"}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "grove hook notification"}]}],
+    "SessionStart": [{"hooks": [{"type": "command", "command": "grove hook session-start"}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "grove hook session-end"}]}]
   }
 }
 ```
 
-This enables gwt to track Claude agent state (working/waiting/idle) per worktree.
+This enables grove to track Claude agent state (working/waiting/idle) per worktree.
 
 ### Connectors
 
-gwt integrates with external services via connectors:
+grove integrates with external services via connectors:
 
 | Connector | Purpose | Setup |
 |-----------|---------|-------|
@@ -52,9 +52,9 @@ gwt integrates with external services via connectors:
 
 ### Configuration
 
-gwt uses a three-level config hierarchy: **global** → **project** → **worktree**. Each level can override the previous.
+grove uses a three-level config hierarchy: **global** → **project** → **worktree**. Each level can override the previous.
 
-**Global config:** `~/.config/gwt/config.toml`
+**Global config:** `~/.config/grove/config.toml`
 
 ```toml
 # Root directory for all worktrees (default: ~/.worktrees)
@@ -67,12 +67,12 @@ categories = ["dev", "feature", "review", "hotfix"]
 # Default category for new worktrees (used when -c not specified)
 default_category = "dev"
 
-# Cache directory for connector data (default: ~/.cache/gwt)
-cache_dir = "~/.cache/gwt"
+# Cache directory for connector data (default: ~/.cache/grove)
+cache_dir = "~/.cache/grove"
 
 # Workflow mode: "push" (local-first) or "pull" (PR-based)
-# - push: auto-push after merge, push main before new if ahead
-# - pull: auto-fetch before new, auto-pull when behind tracking
+# - push: auto-push after merge, push main before grove new if ahead
+# - pull: auto-fetch before grove new, auto-pull when behind tracking
 workflow = "push"
 
 [sync]
@@ -91,7 +91,7 @@ api_key = "lin_api_..."
 # e.g., "JOH" matches branches like "john/joh-123-feature"
 team_prefix = "JOH"
 
-# Auto-update Linear issue status on gwt new/merge
+# Auto-update Linear issue status on grove new/merge
 auto_update_status = true
 
 [github]
@@ -115,7 +115,7 @@ github = ""   # Icon before GitHub PR info
 branch = ""   # Icon before branch names
 ```
 
-**Project config:** `.gwt.toml` in repo root
+**Project config:** `.grove.toml` in repo root
 
 Override global settings for a specific repository:
 
@@ -144,7 +144,7 @@ enabled = true
 enabled = false
 ```
 
-**Worktree config:** `.gwt.toml` in worktree directory
+**Worktree config:** `.grove.toml` in worktree directory
 
 Override settings for a specific worktree:
 
@@ -171,7 +171,7 @@ enabled = false
 ### Dashboard (primary interface)
 
 ```bash
-gwt status
+grove status
 ```
 
 Interactive dashboard showing all worktrees with Claude state, Linear issues, and GitHub PRs. Keyboard shortcuts for common actions.
@@ -180,19 +180,19 @@ Interactive dashboard showing all worktrees with Claude state, Linear issues, an
 
 ```bash
 # Create worktree linked to Linear issue
-gwt new JOH-123
+grove new JOH-123
 
 # Switch worktrees (fuzzy picker)
-gwt switch
+grove switch
 
 # Merge to main and cleanup
-gwt merge
+grove merge
 
 # Remove worktree
-gwt remove
+grove remove
 
 # Jump to main branch
-gwt main
+grove main
 ```
 
 ### Worktree organization
@@ -200,9 +200,9 @@ gwt main
 Worktrees are created at `~/worktrees/{project}/{category}/{branch-name}`:
 
 ```bash
-gwt new feature-auth              # uses default_category from config
-gwt new bugfix-123 -c review      # specify category explicitly
-gwt new hotfix-urgent -c hotfix   # any configured category works
+grove new feature-auth              # uses default_category from config
+grove new bugfix-123 -c review      # specify category explicitly
+grove new hotfix-urgent -c hotfix   # any configured category works
 ```
 
 Categories are configurable (max 4). When you have 3+ categories, the dashboard shows a filter bar and Tab cycles through them.
@@ -211,7 +211,7 @@ Categories are configurable (max 4). When you have 3+ categories, the dashboard 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  gwt status (dashboard)                                      │
+│  grove status (dashboard)                                    │
 ├─────────────────────────────────────────────────────────────┤
 │  Worktree          │ Claude    │ Linear      │ GitHub       │
 │  ────────────────────────────────────────────────────────── │

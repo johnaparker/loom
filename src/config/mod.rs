@@ -48,7 +48,7 @@ pub struct Config {
 
 impl Config {
     /// Load configuration from global config and optional project config.
-    /// Checks current working directory for .gwt.toml first, then falls back to repo root.
+    /// Checks current working directory for .grove.toml first, then falls back to repo root.
     pub fn load(repo_root: Option<&Path>) -> Result<Self> {
         Self::load_with_source(repo_root, &FilesystemSource)
     }
@@ -145,10 +145,10 @@ impl Config {
 
     /// Get the cache directory, expanding ~ to home
     ///
-    /// Priority: GWT_CACHE_DIR env var > config file > default (~/.cache/gwt)
+    /// Priority: GROVE_CACHE_DIR env var > config file > default (~/.cache/grove)
     pub fn cache_dir(&self) -> Result<PathBuf> {
         // Environment variable takes precedence
-        if let Ok(env_dir) = std::env::var("GWT_CACHE_DIR") {
+        if let Ok(env_dir) = std::env::var("GROVE_CACHE_DIR") {
             return Ok(PathBuf::from(env_dir));
         }
 
@@ -355,7 +355,7 @@ impl Config {
                 && entries.filter_map(|e| e.ok()).any(|e| e.path().is_dir())
             {
                 warnings.push(
-                    "Found worktrees at ~/worktrees but gwt now defaults to ~/.worktrees. \
+                    "Found worktrees at ~/worktrees but grove now defaults to ~/.worktrees. \
                     To migrate, run: mv ~/worktrees ~/.worktrees && ln -s ~/.worktrees ~/worktrees"
                         .to_string(),
                 );
@@ -403,7 +403,7 @@ pub struct ResolvedLinearConfig {
     pub api_key: Option<String>,
     /// Team prefix for issue detection (from global config)
     pub team_prefix: Option<String>,
-    /// Auto-update status on gwt new/merge
+    /// Auto-update status on grove new/merge
     pub auto_update_status: bool,
 }
 

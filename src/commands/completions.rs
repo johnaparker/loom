@@ -6,6 +6,6 @@ use crate::cli::Cli;
 
 pub fn completions(shell: Shell) -> Result<()> {
     let mut cmd = Cli::command();
-    generate(shell, &mut cmd, "gwt", &mut std::io::stdout());
+    generate(shell, &mut cmd, "grove", &mut std::io::stdout());
     Ok(())
 }

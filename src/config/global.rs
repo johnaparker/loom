@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use super::source::{ConfigSource, FilesystemSource};
 
-/// Global configuration stored at ~/.config/gwt/config.toml
+/// Global configuration stored at ~/.config/grove/config.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalConfig {
     #[serde(default = "default_worktree_root")]
@@ -15,7 +15,7 @@ pub struct GlobalConfig {
     /// Configurable worktree categories (max 4, default: ["dev"])
     #[serde(default = "default_categories")]
     pub categories: Vec<String>,
-    /// Cache directory (default: ~/.cache/gwt)
+    /// Cache directory (default: ~/.cache/grove)
     #[serde(default = "default_cache_dir")]
     pub cache_dir: String,
     #[serde(default)]
@@ -62,7 +62,7 @@ pub struct LinearConfig {
     /// Team prefix to detect Linear issue patterns (e.g., "ABC")
     #[serde(default)]
     pub team_prefix: Option<String>,
-    /// Automatically update Linear issue status on gwt new/merge (default: true)
+    /// Automatically update Linear issue status on grove new/merge (default: true)
     #[serde(default = "default_true")]
     pub auto_update_status: bool,
 }
@@ -151,7 +151,7 @@ pub struct IconsConfig {
 /// Workflow mode for git synchronization.
 ///
 /// Determines automatic sync behavior based on how you work:
-/// - `push`: Local-first workflow. After merging to main, auto-push. Before `gwt new`, auto-push main if ahead.
+/// - `push`: Local-first workflow. After merging to main, auto-push. Before `grove new`, auto-push main if ahead.
 /// - `pull`: Team/PR-based workflow. Auto-pull main on switch, auto-pull branches when behind tracking.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -176,7 +176,7 @@ fn default_categories() -> Vec<String> {
 }
 
 fn default_cache_dir() -> String {
-    "~/.cache/gwt".to_string()
+    "~/.cache/grove".to_string()
 }
 
 fn default_sync_patterns() -> Vec<String> {
@@ -211,7 +211,7 @@ impl Default for GlobalConfig {
 
 impl GlobalConfig {
     /// Get the path to the global config file
-    /// Prefers ~/.config/gwt/config.toml (XDG-style) if it exists,
+    /// Prefers ~/.config/grove/config.toml (XDG-style) if it exists,
     /// otherwise falls back to platform default
     pub fn config_path() -> Result<PathBuf> {
         FilesystemSource.global_config_path()
@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(config.worktree_root, "~/.worktrees");
         assert_eq!(config.default_category, "dev");
         assert_eq!(config.categories, vec!["dev".to_string()]);
-        assert_eq!(config.cache_dir, "~/.cache/gwt");
+        assert_eq!(config.cache_dir, "~/.cache/grove");
         assert!(config.sync.patterns.contains(&".env".to_string()));
         assert!(config.sync.patterns.contains(&".envrc".to_string()));
         // Integrations disabled by default

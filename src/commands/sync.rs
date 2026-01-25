@@ -1,7 +1,7 @@
 use anyhow::Result;
 use colored::Colorize;
 
-use crate::error::GwtError;
+use crate::error::GroveError;
 use crate::git::WorktreeManager;
 use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
 
@@ -13,7 +13,7 @@ pub fn sync(name: Option<&str>, dry_run: bool) -> Result<()> {
     let worktree = if let Some(name) = name {
         manager
             .get_worktree(name)?
-            .ok_or_else(|| GwtError::WorktreeNotFound {
+            .ok_or_else(|| GroveError::WorktreeNotFound {
                 name: name.to_string(),
             })?
     } else {
@@ -22,10 +22,14 @@ pub fn sync(name: Option<&str>, dry_run: bool) -> Result<()> {
         worktrees
             .into_iter()
             .find(|w| current_dir.starts_with(&w.path))
-            .ok_or(GwtError::NotInWorktree)?
+            .ok_or(GroveError::NotInWorktree)?
     };
 
-    let branch = worktree.branch.as_ref().ok_or(GwtError::NoBranch)?.clone();
+    let branch = worktree
+        .branch
+        .as_ref()
+        .ok_or(GroveError::NoBranch)?
+        .clone();
 
     // Get sync source ref
     let source_ref = manager
@@ -63,7 +67,7 @@ pub fn sync(name: Option<&str>, dry_run: bool) -> Result<()> {
     // Check for uncommitted changes
     let (uncommitted_added, uncommitted_removed) = manager.uncommitted_stats(&worktree.path);
     if uncommitted_added > 0 || uncommitted_removed > 0 {
-        Err(GwtError::UncommittedChanges)?;
+        Err(GroveError::UncommittedChanges)?;
     }
 
     // Fetch from origin first
