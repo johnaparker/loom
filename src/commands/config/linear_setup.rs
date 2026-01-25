@@ -55,12 +55,12 @@ pub fn enable(target: &ConfigTarget) -> Result<()> {
         team_prefix.cyan()
     );
 
-    // Step 4: Update grove config
+    // Step 4: Update loom config
     update_global_config(&api_key, &team_prefix)?;
     println!(
-        "{} Updated grove config at {}",
+        "{} Updated loom config at {}",
         "✓".green(),
-        target.grove_config_path.display()
+        target.loom_config_path.display()
     );
 
     println!();
@@ -96,9 +96,9 @@ fn enable_project_scope(target: &ConfigTarget) -> Result<()> {
     config.save(repo_root)?;
 
     println!(
-        "{} Updated grove config at {}",
+        "{} Updated loom config at {}",
         "✓".green(),
-        target.grove_config_path.display()
+        target.loom_config_path.display()
     );
 
     println!();

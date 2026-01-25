@@ -3,7 +3,7 @@ use colored::Colorize;
 use std::process::Command;
 
 use crate::config::Config;
-use crate::error::GroveError;
+use crate::error::LoomError;
 use crate::git::WorktreeManager;
 use crate::linear;
 
@@ -25,14 +25,14 @@ pub fn linear_cmd() -> Result<()> {
     let worktree = worktrees
         .into_iter()
         .find(|w| current_dir.starts_with(&w.path))
-        .ok_or(GroveError::NotInWorktree)?;
+        .ok_or(LoomError::NotInWorktree)?;
 
     // Read Linear metadata from cache
     let issue = linear::read_metadata(&cache_dir, &project_name, &worktree.name)?
-        .ok_or(GroveError::NoLinearIssue)?;
+        .ok_or(LoomError::NoLinearIssue)?;
 
     if issue.url.is_empty() {
-        Err(GroveError::NoLinearIssue)?;
+        Err(LoomError::NoLinearIssue)?;
     }
 
     println!(

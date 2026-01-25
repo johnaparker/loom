@@ -762,32 +762,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "grove"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "clap",
- "clap_complete",
- "colored",
- "crossterm",
- "dirs",
- "fs2",
- "git2",
- "nucleo",
- "predicates",
- "ratatui",
- "reqwest",
- "rpassword",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "toml",
- "urlencoding",
-]
-
-[[package]]
 name = "h2"
 version = "0.3.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1207,6 +1181,32 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+
+[[package]]
+name = "loom-tui"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "clap_complete",
+ "colored",
+ "crossterm",
+ "dirs",
+ "fs2",
+ "git2",
+ "nucleo",
+ "predicates",
+ "ratatui",
+ "reqwest",
+ "rpassword",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+ "urlencoding",
+]
 
 [[package]]
 name = "lru"

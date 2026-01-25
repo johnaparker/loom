@@ -4,10 +4,10 @@ use clap_complete::Shell;
 /// Scope for configuration changes
 #[derive(Clone, Copy, Debug, ValueEnum, Default)]
 pub enum ConfigScope {
-    /// User-wide settings (~/.config/grove/config.toml)
+    /// User-wide settings (~/.config/loom/config.toml)
     #[default]
     User,
-    /// Project-specific settings (.grove.toml in repo root)
+    /// Project-specific settings (.loom.toml in repo root)
     Project,
 }
 
@@ -70,7 +70,7 @@ pub enum ConfigCommands {
 }
 
 #[derive(Parser)]
-#[command(name = "grove")]
+#[command(name = "loom")]
 #[command(about = "Git worktree manager with tmux integration")]
 #[command(version)]
 pub struct Cli {
@@ -185,7 +185,7 @@ pub enum Commands {
         dry_run: bool,
     },
 
-    /// Configure grove integrations
+    /// Configure loom integrations
     #[command(visible_alias = "cfg")]
     Config {
         #[command(subcommand)]

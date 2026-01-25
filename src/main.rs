@@ -2,15 +2,15 @@ use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 
-use grove::cli::{Cli, Commands};
-use grove::commands;
-use grove::error::GroveError;
+use loom_tui::cli::{Cli, Commands};
+use loom_tui::commands;
+use loom_tui::error::LoomError;
 
 fn main() {
     if let Err(err) = run() {
-        // Check if the error is a GroveError for enhanced display
-        if let Some(grove_err) = err.downcast_ref::<GroveError>() {
-            eprintln!("{}", grove_err.display_with_suggestion());
+        // Check if the error is a LoomError for enhanced display
+        if let Some(loom_err) = err.downcast_ref::<LoomError>() {
+            eprintln!("{}", loom_err.display_with_suggestion());
         } else {
             eprintln!("{} {}", "Error:".red().bold(), err);
         }

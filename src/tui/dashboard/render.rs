@@ -366,7 +366,7 @@ impl Dashboard {
             return;
         }
 
-        let title = format!(" grove - {} ", self.project_name);
+        let title = format!(" loom - {} ", self.project_name);
         let quit_hint = "(q to quit)";
         let padding = area
             .width

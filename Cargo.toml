@@ -1,8 +1,12 @@
 [package]
-name = "grove"
+name = "loom-tui"
 version = "0.1.1"
 edition = "2024"
 description = "Git worktree manager with tmux integration"
+
+[[bin]]
+name = "loom"
+path = "src/main.rs"
 
 [dependencies]
 # CLI

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-grove (Git Worktree) is a **TUI-first** tool for managing git worktrees with deep Claude Code integration. Its primary purpose is to give developers a **centralized control center** for:
+loom (Git Worktree) is a **TUI-first** tool for managing git worktrees with deep Claude Code integration. Its primary purpose is to give developers a **centralized control center** for:
 
 1. **Managing multiple Claude agents** - Track working/waiting/idle states across worktrees, capture logs, surface permission requests
 2. **Worktree lifecycle** - Create, switch, merge, and destroy worktrees from a single dashboard
@@ -10,22 +10,22 @@ grove (Git Worktree) is a **TUI-first** tool for managing git worktrees with dee
 
 ### Design Philosophy
 
-- **TUI-first**: The dashboard (`grove`) is the primary interface. CLI commands exist for one-off operations and automated testing (TUI cannot be tested).
+- **TUI-first**: The dashboard (`loom`) is the primary interface. CLI commands exist for one-off operations and automated testing (TUI cannot be tested).
 - **Human in control**: Surface agent activity so developers can monitor, interrupt, or redirect multiple Claude sessions
 - **Trunk-based workflow**: All feature work happens in worktrees; main branch stays clean for merging
 
 ## Core Features
 
 ### Claude Code Integration (Primary)
-The killer feature. Via Claude Code hooks (`grove hook`):
+The killer feature. Via Claude Code hooks (`loom hook`):
 - **State tracking**: Working → WaitingPermission → Idle state machine per worktree
 - **Event capture**: Tool calls, permission requests, session start/stop
 - **Dashboard alerts**: Visual indicators for agents needing attention
 - **Log access**: Quick jump to Claude session from any worktree
 
 ### Worktree Management
-- Create worktrees linked to Linear issues (`grove new JOH-123`)
-- Merge to main with cleanup (`grove merge`)
+- Create worktrees linked to Linear issues (`loom new JOH-123`)
+- Merge to main with cleanup (`loom merge`)
 - Sync files from main (.env, .envrc, .claude/)
 
 ### External Integrations
@@ -38,7 +38,7 @@ The killer feature. Via Claude Code hooks (`grove hook`):
 ### Local Tool Integration
 - **tmux**: Create/switch sessions per worktree
 - **direnv**: Auto-allow .envrc in new worktrees
-- **nvim diffview**: Review changes vs main (`grove review` / `r` key)
+- **nvim diffview**: Review changes vs main (`loom review` / `r` key)
 
 ## Project Structure
 
@@ -46,33 +46,33 @@ The killer feature. Via Claude Code hooks (`grove hook`):
 src/
 ├── main.rs               # Entry point, CLI dispatch
 ├── lib.rs                # Library exports + backward-compat re-exports
-├── error.rs              # GroveError enum with user-friendly suggestions
+├── error.rs              # LoomError enum with user-friendly suggestions
 ├── output.rs             # Dry-run output helpers
 ├── cli/
 │   └── mod.rs            # Clap CLI definitions (Commands, Category enum)
 ├── commands/
 │   ├── mod.rs            # Command exports
-│   ├── new.rs            # grove new - create worktree + auto-switch
-│   ├── list.rs           # grove list - list worktrees by category
-│   ├── switch.rs         # grove switch [name] - TUI picker or fuzzy match
-│   ├── merge.rs          # grove merge - merge to main (supports --dry-run)
-│   ├── remove.rs         # grove remove [name] - TUI picker or fuzzy match (supports --dry-run)
+│   ├── new.rs            # loom new - create worktree + auto-switch
+│   ├── list.rs           # loom list - list worktrees by category
+│   ├── switch.rs         # loom switch [name] - TUI picker or fuzzy match
+│   ├── merge.rs          # loom merge - merge to main (supports --dry-run)
+│   ├── remove.rs         # loom remove [name] - TUI picker or fuzzy match (supports --dry-run)
 │   ├── status.rs         # interactive dashboard (default when no command)
-│   ├── main_cmd.rs       # grove main - switch to main
+│   ├── main_cmd.rs       # loom main - switch to main
 │   ├── hook.rs           # Claude Code hook integration
-│   └── completions.rs    # grove completions <shell> - generate shell completions
+│   └── completions.rs    # loom completions <shell> - generate shell completions
 ├── config/
 │   ├── mod.rs            # Combined config handling + ResolvedConfig
-│   ├── global.rs         # ~/.config/grove/config.toml
-│   ├── project.rs        # .grove.toml in repo root
-│   └── worktree.rs       # .grove.toml in worktree directory (overrides)
+│   ├── global.rs         # ~/.config/loom/config.toml
+│   ├── project.rs        # .loom.toml in repo root
+│   └── worktree.rs       # .loom.toml in worktree directory (overrides)
 ├── core/                 # Shared TUI/CLI utilities
 │   ├── mod.rs
 │   ├── fuzzy.rs          # FuzzyMatcher - unified fuzzy matching (nucleo)
 │   └── terminal.rs       # Terminal setup/teardown helpers
 ├── connectors/           # External service integrations
 │   ├── mod.rs
-│   ├── cache.rs          # Shared cache utilities (~/.cache/grove/)
+│   ├── cache.rs          # Shared cache utilities (~/.cache/loom/)
 │   ├── linear/           # Linear issue tracking
 │   │   ├── mod.rs        # Re-exports
 │   │   ├── types.rs      # LinearIssue, ResolvedInput
@@ -122,14 +122,14 @@ src/
 | ratatui + crossterm | Terminal UI for fuzzy picker |
 | nucleo | Fuzzy matching algorithm |
 | serde + toml | Configuration file handling |
-| anyhow + thiserror | Error handling (GroveError for user-friendly messages) |
+| anyhow + thiserror | Error handling (LoomError for user-friendly messages) |
 | colored | Colored terminal output |
 | dirs | Cross-platform directory paths |
 
 ## Coding Conventions
 
 - Use `anyhow::Result` for error handling in commands
-- Use `GroveError` (in `src/error.rs`) for user-facing errors with helpful suggestions
+- Use `LoomError` (in `src/error.rs`) for user-facing errors with helpful suggestions
 - Use `colored` for terminal output formatting
 - Commands follow pattern: open repo -> load config -> perform action -> update tmux
 - Git operations use `git2` where possible, fall back to CLI for complex operations
@@ -145,7 +145,7 @@ src/
   - `with_alternate_screen()` for terminal setup/teardown
 - **`connectors/`**: External service integrations (Linear, GitHub, Claude, tmux)
   - Each connector has its own subdirectory with types, API, and cache modules
-  - Shared cache utilities in `connectors/cache.rs` (platform cache dir via `dirs` crate: `~/Library/Caches/grove/` on macOS)
+  - Shared cache utilities in `connectors/cache.rs` (platform cache dir via `dirs` crate: `~/Library/Caches/loom/` on macOS)
   - Import via `crate::linear`, `crate::github`, etc. (re-exported in lib.rs)
 - **`tui/dashboard/`**: Split into focused modules (state, data, input, render)
 
@@ -155,7 +155,7 @@ When adding features that have both TUI and CLI interfaces:
 
 1. **Business logic in `core/` or `connectors/`** - Never put domain logic in `commands/` or `tui/`. Commands and TUI should only orchestrate.
 2. **Data types are shared** - Define types once (usually in connector's `types.rs`), use everywhere
-3. **CLI commands call the same functions as TUI** - If `grove remove` and the dashboard delete modal both remove worktrees, they should call the same underlying function
+3. **CLI commands call the same functions as TUI** - If `loom remove` and the dashboard delete modal both remove worktrees, they should call the same underlying function
 4. **TUI-specific code stays in `tui/`** - Rendering, input handling, and state management are TUI concerns
 5. **CLI-specific code stays in `commands/`** - Argument parsing, output formatting, and prompts are CLI concerns
 
@@ -186,7 +186,7 @@ Avoid these common mistakes:
 | Put connector-specific rendering in `dashboard/render.rs` | Create a widget in `tui/widgets/` |
 | Parse Linear/GitHub URLs manually | Use `linear::parser` or `github::url` modules |
 | Store state in global/static variables | Pass state through function parameters or store in Dashboard struct |
-| Add new cache files without using `connectors/cache.rs` helpers | Use `cache::grove_cache_dir()` and follow existing patterns |
+| Add new cache files without using `connectors/cache.rs` helpers | Use `cache::loom_cache_dir()` and follow existing patterns |
 | Mix CLI output formatting with business logic | Return data, let `commands/` handle formatting |
 
 ## Testing Approach
@@ -208,24 +208,24 @@ Current coverage: Unit tests for fuzzy matching, URL parsing, cache operations.
 
 ### Modifying config
 
-grove uses a three-level config hierarchy: **global** → **project** → **worktree**. Each level can override the previous.
+loom uses a three-level config hierarchy: **global** → **project** → **worktree**. Each level can override the previous.
 
 1. Update structs in `src/config/global.rs`, `src/config/project.rs`, or `src/config/worktree.rs`
 2. Add accessor methods to `Config` in `src/config/mod.rs`
 3. For TUI/dashboard code, update `ResolvedConfig` and its resolution logic in `Config::resolve()`
 
 **Config levels:**
-- `global.rs`: User-wide settings (`~/.config/grove/config.toml`)
-- `project.rs`: Per-repo settings (`.grove.toml` in repo root)
-- `worktree.rs`: Per-worktree overrides (`.grove.toml` in worktree directory)
+- `global.rs`: User-wide settings (`~/.config/loom/config.toml`)
+- `project.rs`: Per-repo settings (`.loom.toml` in repo root)
+- `worktree.rs`: Per-worktree overrides (`.loom.toml` in worktree directory)
 
 **Integration enable flags:** All integrations (Linear, GitHub, Diffview) are disabled by default. Use `enabled = true` in config to enable them. The TUI uses `ResolvedConfig` which merges all three levels.
 
 ### Adding a new error type
 
-1. Add variant to `GroveError` enum in `src/error.rs`
+1. Add variant to `LoomError` enum in `src/error.rs`
 2. Implement `suggestion()` match arm with helpful hint
-3. Use in commands: `return Err(GroveError::YourError { ... }.into())`
+3. Use in commands: `return Err(LoomError::YourError { ... }.into())`
 
 ### Adding a new connector
 

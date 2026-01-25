@@ -2,7 +2,7 @@ use colored::Colorize;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum GroveError {
+pub enum LoomError {
     #[error("Worktree '{name}' not found")]
     WorktreeNotFound { name: String },
 
@@ -97,97 +97,97 @@ pub enum GroveError {
     },
 }
 
-impl GroveError {
+impl LoomError {
     pub fn suggestion(&self) -> Option<String> {
         match self {
-            GroveError::WorktreeNotFound { .. } => {
-                Some("Run 'grove list' to see available worktrees".to_string())
+            LoomError::WorktreeNotFound { .. } => {
+                Some("Run 'loom list' to see available worktrees".to_string())
             }
-            GroveError::WorktreeAlreadyExists { name } => {
-                Some(format!("Use 'grove switch {}' to switch to it, or choose a different name", name))
+            LoomError::WorktreeAlreadyExists { name } => {
+                Some(format!("Use 'loom switch {}' to switch to it, or choose a different name", name))
             }
-            GroveError::CannotMergeMain => {
+            LoomError::CannotMergeMain => {
                 Some("You can only merge feature branches into main".to_string())
             }
-            GroveError::NoBranch => Some(
+            LoomError::NoBranch => Some(
                 "The worktree is in detached HEAD state. Check out a branch first.".to_string(),
             ),
-            GroveError::NoMatch { .. } => {
-                Some("Run 'grove list' to see available worktrees".to_string())
+            LoomError::NoMatch { .. } => {
+                Some("Run 'loom list' to see available worktrees".to_string())
             }
-            GroveError::NotGitRepo => {
+            LoomError::NotGitRepo => {
                 Some("Run this command from within a git repository".to_string())
             }
-            GroveError::NoMainBranch => Some(
+            LoomError::NoMainBranch => Some(
                 "Create a 'main' or 'master' branch, or check that you have fetched from remote"
                     .to_string(),
             ),
-            GroveError::GitCommandFailed { stderr, .. } => {
+            LoomError::GitCommandFailed { stderr, .. } => {
                 if !stderr.is_empty() {
                     Some(stderr.trim().to_string())
                 } else {
                     None
                 }
             }
-            GroveError::ConfigError { path, .. } => Some(format!("Check config file at: {}", path)),
-            GroveError::NotInWorktree => {
+            LoomError::ConfigError { path, .. } => Some(format!("Check config file at: {}", path)),
+            LoomError::NotInWorktree => {
                 Some("Run this command from within a worktree, or provide a worktree name".to_string())
             }
-            GroveError::UncommittedChanges => {
+            LoomError::UncommittedChanges => {
                 Some("Commit or stash your changes before syncing".to_string())
             }
-            GroveError::LinearIssueNotFound { .. } => {
+            LoomError::LinearIssueNotFound { .. } => {
                 Some("Check the issue ID and try again, or provide the full branch name".to_string())
             }
-            GroveError::LinearApiKeyRequired { .. } => {
-                Some("Configure linear.api_key in ~/.config/grove/config.toml, or provide the full branch name".to_string())
+            LoomError::LinearApiKeyRequired { .. } => {
+                Some("Configure linear.api_key in ~/.config/loom/config.toml, or provide the full branch name".to_string())
             }
-            GroveError::LinearApiError { .. } => {
+            LoomError::LinearApiError { .. } => {
                 Some("Check your Linear API key and network connection".to_string())
             }
-            GroveError::NoLinearIssue => {
+            LoomError::NoLinearIssue => {
                 Some("This worktree was not created from a Linear issue ID".to_string())
             }
-            GroveError::GitHubCliNotFound => {
+            LoomError::GitHubCliNotFound => {
                 Some("Install the GitHub CLI: https://cli.github.com/".to_string())
             }
-            GroveError::GitHubNotAuthenticated => {
+            LoomError::GitHubNotAuthenticated => {
                 Some("Run 'gh auth login' to authenticate with GitHub".to_string())
             }
-            GroveError::GitHubApiError { .. } => {
+            LoomError::GitHubApiError { .. } => {
                 Some("Check your network connection and GitHub authentication".to_string())
             }
-            GroveError::NoGitHubRemote => {
+            LoomError::NoGitHubRemote => {
                 Some("Ensure the repository has a GitHub remote (origin)".to_string())
             }
-            GroveError::NoGitHubPR => {
+            LoomError::NoGitHubPR => {
                 Some("Create a PR first with 'gh pr create' or push the branch".to_string())
             }
-            GroveError::PushRejected => {
+            LoomError::PushRejected => {
                 Some("Pull remote changes first with 'P' or 'git pull'".to_string())
             }
-            GroveError::NoTrackingBranch { .. } => {
+            LoomError::NoTrackingBranch { .. } => {
                 Some("Push first with 'p' to create a remote tracking branch".to_string())
             }
-            GroveError::CannotReviewMain => {
+            LoomError::CannotReviewMain => {
                 Some("Switch to a feature worktree first - main has no changes to compare".to_string())
             }
-            GroveError::DryRunRequiresName { command } => {
-                Some(format!("Usage: grove {} <name> --dry-run", command))
+            LoomError::DryRunRequiresName { command } => {
+                Some(format!("Usage: loom {} <name> --dry-run", command))
             }
-            GroveError::MergeNotAllowedInPullWorkflow => {
+            LoomError::MergeNotAllowedInPullWorkflow => {
                 Some("In pull workflow, merge via GitHub PR instead. Use 'gh pr create' to open a PR.".to_string())
             }
-            GroveError::InvalidCategory { valid, .. } => {
+            LoomError::InvalidCategory { valid, .. } => {
                 Some(format!("Valid categories: {}", valid.join(", ")))
             }
-            GroveError::PruneNotAllowedInPushWorkflow => {
-                Some("Prune relies on GitHub PR status. Switch to pull workflow or use 'grove remove' to manually remove worktrees.".to_string())
+            LoomError::PruneNotAllowedInPushWorkflow => {
+                Some("Prune relies on GitHub PR status. Switch to pull workflow or use 'loom remove' to manually remove worktrees.".to_string())
             }
-            GroveError::ClaudeNotInstalled => {
+            LoomError::ClaudeNotInstalled => {
                 Some("Install Claude Code: https://claude.ai/claude-code".to_string())
             }
-            GroveError::NotAtRepoRoot { repo_root, .. } => {
+            LoomError::NotAtRepoRoot { repo_root, .. } => {
                 Some(format!("Run from repository root: {}", repo_root.display()))
             }
         }

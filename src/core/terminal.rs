@@ -37,7 +37,7 @@ impl Drop for AlternateScreenGuard {
 /// # Example
 ///
 /// ```ignore
-/// use grove::core::with_alternate_screen;
+/// use loom_tui::core::with_alternate_screen;
 ///
 /// with_alternate_screen(|terminal| {
 ///     terminal.draw(|f| {
@@ -79,7 +79,7 @@ where
 /// # Example
 ///
 /// ```ignore
-/// use grove::core::terminal::setup_terminal;
+/// use loom_tui::core::terminal::setup_terminal;
 ///
 /// let (mut terminal, _guard) = setup_terminal()?;
 /// // Use terminal...

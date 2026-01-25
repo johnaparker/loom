@@ -3,7 +3,7 @@ use colored::Colorize;
 
 use super::ui;
 use crate::config::Config;
-use crate::error::GroveError;
+use crate::error::LoomError;
 use crate::git::WorktreeManager;
 use crate::linear;
 use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
@@ -15,7 +15,7 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
 
     // Merge to local main is only available in push workflow
     if config.is_pull_workflow() {
-        return Err(GroveError::MergeNotAllowedInPullWorkflow.into());
+        return Err(LoomError::MergeNotAllowedInPullWorkflow.into());
     }
 
     let project_name = config.project_name(&manager.project_name()?);
@@ -24,19 +24,15 @@ pub fn merge(name: &str, force: bool, dry_run: bool) -> Result<()> {
     // Find the worktree
     let worktree = manager
         .get_worktree(name)?
-        .ok_or_else(|| GroveError::WorktreeNotFound {
+        .ok_or_else(|| LoomError::WorktreeNotFound {
             name: name.to_string(),
         })?;
 
     if worktree.is_main {
-        Err(GroveError::CannotMergeMain)?;
+        Err(LoomError::CannotMergeMain)?;
     }
 
-    let branch = worktree
-        .branch
-        .as_ref()
-        .ok_or(GroveError::NoBranch)?
-        .clone();
+    let branch = worktree.branch.as_ref().ok_or(LoomError::NoBranch)?.clone();
 
     let main_branch = manager.main_branch_name()?;
 

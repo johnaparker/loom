@@ -36,7 +36,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use super::types::{LinearIssue, LinearTeam};
-use crate::error::GroveError;
+use crate::error::LoomError;
 
 /// API timeout for Linear requests (5 seconds)
 const API_TIMEOUT: Duration = Duration::from_secs(5);
@@ -77,7 +77,7 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
         .send()?;
 
     if !response.status().is_success() {
-        Err(GroveError::LinearApiError {
+        Err(LoomError::LinearApiError {
             message: format!("API returned status {}", response.status()),
         })?;
     }
@@ -88,7 +88,7 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
     if let Some(errors) = body.get("errors")
         && errors.as_array().and_then(|arr| arr.first()).is_some()
     {
-        Err(GroveError::LinearIssueNotFound {
+        Err(LoomError::LinearIssueNotFound {
             issue_id: issue_id.to_string(),
         })?;
     }
@@ -96,12 +96,12 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
     let issue_data = body
         .get("data")
         .and_then(|d| d.get("issue"))
-        .ok_or_else(|| GroveError::LinearIssueNotFound {
+        .ok_or_else(|| LoomError::LinearIssueNotFound {
             issue_id: issue_id.to_string(),
         })?;
 
     if issue_data.is_null() {
-        Err(GroveError::LinearIssueNotFound {
+        Err(LoomError::LinearIssueNotFound {
             issue_id: issue_id.to_string(),
         })?;
     }
@@ -109,7 +109,7 @@ pub fn get_issue(api_key: &str, issue_id: &str) -> Result<LinearIssue> {
     let branch_name = issue_data
         .get("branchName")
         .and_then(|b| b.as_str())
-        .ok_or_else(|| GroveError::LinearApiError {
+        .ok_or_else(|| LoomError::LinearApiError {
             message: "Issue has no branch name".to_string(),
         })?;
 
@@ -189,7 +189,7 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         .send()?;
 
     if !response.status().is_success() {
-        Err(GroveError::LinearApiError {
+        Err(LoomError::LinearApiError {
             message: format!("API returned status {}", response.status()),
         })?;
     }
@@ -204,7 +204,7 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
             .get("message")
             .and_then(|m| m.as_str())
             .unwrap_or("Unknown error");
-        Err(GroveError::LinearApiError {
+        Err(LoomError::LinearApiError {
             message: msg.to_string(),
         })?;
     }
@@ -212,12 +212,12 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
     let issue_data = body
         .get("data")
         .and_then(|d| d.get("issue"))
-        .ok_or_else(|| GroveError::LinearIssueNotFound {
+        .ok_or_else(|| LoomError::LinearIssueNotFound {
             issue_id: issue_id.to_string(),
         })?;
 
     if issue_data.is_null() {
-        Err(GroveError::LinearIssueNotFound {
+        Err(LoomError::LinearIssueNotFound {
             issue_id: issue_id.to_string(),
         })?;
     }
@@ -226,7 +226,7 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
     let issue_uuid = issue_data
         .get("id")
         .and_then(|i| i.as_str())
-        .ok_or_else(|| GroveError::LinearApiError {
+        .ok_or_else(|| LoomError::LinearApiError {
             message: "Issue has no UUID".to_string(),
         })?;
 
@@ -236,7 +236,7 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         .and_then(|t| t.get("states"))
         .and_then(|s| s.get("nodes"))
         .and_then(|n| n.as_array())
-        .ok_or_else(|| GroveError::LinearApiError {
+        .ok_or_else(|| LoomError::LinearApiError {
             message: "Could not get team workflow states".to_string(),
         })?;
 
@@ -259,14 +259,14 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
                     .is_some_and(|t| t == state_type)
             })
         })
-        .ok_or_else(|| GroveError::LinearApiError {
+        .ok_or_else(|| LoomError::LinearApiError {
             message: format!("No workflow state with type '{}' found", state_type),
         })?;
 
     let state_id = target_state
         .get("id")
         .and_then(|i| i.as_str())
-        .ok_or_else(|| GroveError::LinearApiError {
+        .ok_or_else(|| LoomError::LinearApiError {
             message: "State has no ID".to_string(),
         })?;
 
@@ -293,7 +293,7 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         .send()?;
 
     if !update_response.status().is_success() {
-        Err(GroveError::LinearApiError {
+        Err(LoomError::LinearApiError {
             message: format!("API returned status {}", update_response.status()),
         })?;
     }
@@ -308,7 +308,7 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
             .get("message")
             .and_then(|m| m.as_str())
             .unwrap_or("Unknown error");
-        Err(GroveError::LinearApiError {
+        Err(LoomError::LinearApiError {
             message: msg.to_string(),
         })?;
     }
@@ -322,7 +322,7 @@ pub fn update_issue_status(api_key: &str, issue_id: &str, state_type: &str) -> R
         .unwrap_or(false);
 
     if !success {
-        Err(GroveError::LinearApiError {
+        Err(LoomError::LinearApiError {
             message: "Issue update failed".to_string(),
         })?;
     }
@@ -362,7 +362,7 @@ pub fn fetch_teams(api_key: &str) -> Result<Vec<LinearTeam>> {
         .send()?;
 
     if !response.status().is_success() {
-        Err(GroveError::LinearApiError {
+        Err(LoomError::LinearApiError {
             message: format!("API returned status {}", response.status()),
         })?;
     }
@@ -377,7 +377,7 @@ pub fn fetch_teams(api_key: &str) -> Result<Vec<LinearTeam>> {
             .get("message")
             .and_then(|m| m.as_str())
             .unwrap_or("Unknown error");
-        Err(GroveError::LinearApiError {
+        Err(LoomError::LinearApiError {
             message: msg.to_string(),
         })?;
     }
@@ -387,7 +387,7 @@ pub fn fetch_teams(api_key: &str) -> Result<Vec<LinearTeam>> {
         .and_then(|d| d.get("teams"))
         .and_then(|t| t.get("nodes"))
         .and_then(|n| n.as_array())
-        .ok_or_else(|| GroveError::LinearApiError {
+        .ok_or_else(|| LoomError::LinearApiError {
             message: "Could not parse teams response".to_string(),
         })?;
 

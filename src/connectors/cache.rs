@@ -238,21 +238,21 @@ mod tests {
 
     #[test]
     fn test_worktree_dir() {
-        let base = Path::new("/tmp/grove-cache");
+        let base = Path::new("/tmp/loom-cache");
         let path = worktree_dir(base, "my-project", "my-worktree");
         assert_eq!(
             path,
-            PathBuf::from("/tmp/grove-cache/my-project/my-worktree")
+            PathBuf::from("/tmp/loom-cache/my-project/my-worktree")
         );
     }
 
     #[test]
     fn test_file_path() {
-        let base = Path::new("/tmp/grove-cache");
+        let base = Path::new("/tmp/loom-cache");
         let path = file_path(base, "my-project", "my-worktree", "test.json");
         assert_eq!(
             path,
-            PathBuf::from("/tmp/grove-cache/my-project/my-worktree/test.json")
+            PathBuf::from("/tmp/loom-cache/my-project/my-worktree/test.json")
         );
     }
 

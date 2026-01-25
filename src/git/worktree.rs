@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use super::repository::{Git2Provider, RepositoryProvider};
-use crate::error::GroveError;
+use crate::error::LoomError;
 
 /// Result of a push operation
 #[derive(Debug, Clone)]
@@ -76,10 +76,8 @@ impl WorktreeManager {
 
     /// Open with a custom repository provider (for testing).
     pub fn open_with_provider<P: RepositoryProvider>(path: &Path, provider: &P) -> Result<Self> {
-        let repo = provider
-            .discover(path)
-            .map_err(|_| GroveError::NotGitRepo)?;
-        let workdir = repo.workdir().ok_or(GroveError::NotGitRepo)?;
+        let repo = provider.discover(path).map_err(|_| LoomError::NotGitRepo)?;
+        let workdir = repo.workdir().ok_or(LoomError::NotGitRepo)?;
 
         // Check if we're in a worktree by looking for the common git dir
         // git rev-parse --git-common-dir returns the path to the main .git directory
@@ -90,7 +88,7 @@ impl WorktreeManager {
             .context("Failed to run git rev-parse")?;
 
         if !output.status.success() {
-            Err(GroveError::NotGitRepo)?;
+            Err(LoomError::NotGitRepo)?;
         }
 
         let common_dir = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
@@ -108,7 +106,7 @@ impl WorktreeManager {
         // Re-open repository from the main repo root to ensure consistent behavior
         let repo = provider
             .open(&repo_root)
-            .map_err(|_| GroveError::NotGitRepo)?;
+            .map_err(|_| LoomError::NotGitRepo)?;
 
         Ok(Self { repo, repo_root })
     }
@@ -147,7 +145,7 @@ impl WorktreeManager {
                 return Ok(name.strip_prefix("origin/").unwrap().to_string());
             }
         }
-        Err(GroveError::NoMainBranch)?
+        Err(LoomError::NoMainBranch)?
     }
 
     /// List all worktrees for this repository
@@ -227,7 +225,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: "git fetch origin".to_string(),
                 stderr,
             })?;
@@ -305,7 +303,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: "git worktree add".to_string(),
                 stderr,
             })?;
@@ -347,7 +345,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: "git worktree add".to_string(),
                 stderr,
             })?;
@@ -394,7 +392,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: "git worktree remove".to_string(),
                 stderr,
             })?;
@@ -422,7 +420,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: format!("git checkout {}", main_branch),
                 stderr,
             })?;
@@ -443,7 +441,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: format!("git merge {}", branch),
                 stderr,
             })?;
@@ -463,7 +461,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: format!("git branch {} {}", flag, branch),
                 stderr,
             })?;
@@ -963,7 +961,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: format!("git merge {}", source_ref),
                 stderr,
             })?;
@@ -999,7 +997,7 @@ impl WorktreeManager {
             {
                 Ok(PushResult::Rejected { reason: stderr })
             } else {
-                Err(GroveError::GitCommandFailed {
+                Err(LoomError::GitCommandFailed {
                     command: "git push".to_string(),
                     stderr,
                 })?
@@ -1016,7 +1014,7 @@ impl WorktreeManager {
                 Ok(PushResult::CreatedRemoteBranch)
             } else {
                 let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                Err(GroveError::GitCommandFailed {
+                Err(LoomError::GitCommandFailed {
                     command: format!("git push -u origin {}", branch),
                     stderr,
                 })?
@@ -1028,7 +1026,7 @@ impl WorktreeManager {
     pub fn pull_from_remote(&self, path: &Path, branch: &str) -> Result<()> {
         // Check if tracking branch exists
         if self.get_tracking_branch(path, branch).is_none() {
-            Err(GroveError::NoTrackingBranch {
+            Err(LoomError::NoTrackingBranch {
                 branch: branch.to_string(),
             })?;
         }
@@ -1041,7 +1039,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: "git pull".to_string(),
                 stderr,
             })?;
@@ -1062,7 +1060,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: format!("git push origin {}", main_branch),
                 stderr,
             })?;
@@ -1084,7 +1082,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: format!("git checkout {}", main_branch),
                 stderr,
             })?;
@@ -1099,7 +1097,7 @@ impl WorktreeManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            Err(GroveError::GitCommandFailed {
+            Err(LoomError::GitCommandFailed {
                 command: format!("git pull origin {}", main_branch),
                 stderr,
             })?;

@@ -1,7 +1,7 @@
 //! Core shared utilities for TUI and CLI.
 //!
 //! This module contains reusable components that are shared between
-//! the terminal UI (TUI) and command-line interface (CLI) parts of grove.
+//! the terminal UI (TUI) and command-line interface (CLI) parts of loom.
 
 pub mod fuzzy;
 pub mod terminal;

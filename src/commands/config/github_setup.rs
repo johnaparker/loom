@@ -18,12 +18,12 @@ pub fn enable(target: &ConfigTarget) -> Result<()> {
         "✓".green()
     );
 
-    // Step 2: Update grove config
-    update_grove_config(target)?;
+    // Step 2: Update loom config
+    update_loom_config(target)?;
     println!(
-        "{} Updated grove config at {}",
+        "{} Updated loom config at {}",
         "✓".green(),
-        target.grove_config_path.display()
+        target.loom_config_path.display()
     );
 
     println!();
@@ -40,8 +40,8 @@ pub fn enable(target: &ConfigTarget) -> Result<()> {
     Ok(())
 }
 
-/// Update grove configuration with GitHub settings.
-fn update_grove_config(target: &ConfigTarget) -> Result<()> {
+/// Update loom configuration with GitHub settings.
+fn update_loom_config(target: &ConfigTarget) -> Result<()> {
     if target.is_project_scope {
         update_project_config(target)
     } else {

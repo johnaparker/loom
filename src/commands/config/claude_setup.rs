@@ -10,7 +10,7 @@ use std::process::Command;
 use super::ConfigTarget;
 use crate::commands::ui::confirm_default_yes;
 use crate::config::{ClaudeOverride, GlobalConfig, ProjectConfig};
-use crate::error::GroveError;
+use crate::error::LoomError;
 
 /// Enable Claude Code integration.
 pub fn enable(target: &ConfigTarget) -> Result<()> {
@@ -21,7 +21,7 @@ pub fn enable(target: &ConfigTarget) -> Result<()> {
     // Step 2: Configure hooks in Claude settings.json
     configure_hooks(target)?;
     println!(
-        "{} Configured grove hooks in {}",
+        "{} Configured loom hooks in {}",
         "✓".green(),
         target.claude_settings_path.display()
     );
@@ -29,12 +29,12 @@ pub fn enable(target: &ConfigTarget) -> Result<()> {
     // Step 3: Ask about sandbox mode
     let enable_sandbox = confirm_default_yes("Enable sandbox mode with auto-allow bash?")?;
 
-    // Step 4: Update grove config
-    update_grove_config(target, enable_sandbox)?;
+    // Step 4: Update loom config
+    update_loom_config(target, enable_sandbox)?;
     println!(
-        "{} Updated grove config at {}",
+        "{} Updated loom config at {}",
         "✓".green(),
-        target.grove_config_path.display()
+        target.loom_config_path.display()
     );
 
     println!();
@@ -60,11 +60,11 @@ fn check_claude_installed() -> Result<()> {
 
     match output {
         Ok(o) if o.status.success() => Ok(()),
-        _ => Err(GroveError::ClaudeNotInstalled.into()),
+        _ => Err(LoomError::ClaudeNotInstalled.into()),
     }
 }
 
-/// Configure grove hooks in Claude settings.json.
+/// Configure loom hooks in Claude settings.json.
 fn configure_hooks(target: &ConfigTarget) -> Result<()> {
     // Read existing settings or create new object
     let mut settings: serde_json::Value = if target.claude_settings_path.exists() {
@@ -76,13 +76,13 @@ fn configure_hooks(target: &ConfigTarget) -> Result<()> {
 
     // Define the hooks we need to add
     let hook_events = [
-        ("PreToolUse", "grove hook tool-use"),
-        ("PostToolUse", "grove hook tool-result"),
-        ("UserPromptSubmit", "grove hook user-prompt"),
-        ("Stop", "grove hook stop"),
-        ("Notification", "grove hook notification"),
-        ("SessionStart", "grove hook session-start"),
-        ("SessionEnd", "grove hook session-end"),
+        ("PreToolUse", "loom hook tool-use"),
+        ("PostToolUse", "loom hook tool-result"),
+        ("UserPromptSubmit", "loom hook user-prompt"),
+        ("Stop", "loom hook stop"),
+        ("Notification", "loom hook notification"),
+        ("SessionStart", "loom hook session-start"),
+        ("SessionEnd", "loom hook session-end"),
     ];
 
     // Ensure hooks object exists
@@ -95,7 +95,7 @@ fn configure_hooks(target: &ConfigTarget) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Invalid hooks structure in Claude settings"))?;
 
     for (event, command) in hook_events {
-        add_grove_hook(hooks, event, command);
+        add_loom_hook(hooks, event, command);
     }
 
     // Write the updated settings
@@ -109,13 +109,13 @@ fn configure_hooks(target: &ConfigTarget) -> Result<()> {
     Ok(())
 }
 
-/// Add a grove hook to an event if not already present.
-fn add_grove_hook(
+/// Add a loom hook to an event if not already present.
+fn add_loom_hook(
     hooks: &mut serde_json::Map<String, serde_json::Value>,
     event: &str,
     command: &str,
 ) {
-    let grove_hook = serde_json::json!({
+    let loom_hook = serde_json::json!({
         "type": "command",
         "command": command
     });
@@ -125,36 +125,36 @@ fn add_grove_hook(
         .entry(event.to_string())
         .or_insert_with(|| serde_json::json!([]));
 
-    // If it's an array, check if grove hook already exists
+    // If it's an array, check if loom hook already exists
     if let Some(arr) = event_hooks.as_array_mut() {
-        let has_grove_hook = arr.iter().any(|h| {
+        let has_loom_hook = arr.iter().any(|h| {
             // Check if this is a matcher with hooks array
             if let Some(inner_hooks) = h.get("hooks").and_then(|h| h.as_array()) {
                 inner_hooks.iter().any(|inner| {
                     inner
                         .get("command")
                         .and_then(|c| c.as_str())
-                        .is_some_and(|c| c.starts_with("grove hook"))
+                        .is_some_and(|c| c.starts_with("loom hook"))
                 })
             } else {
                 // Direct hook object
                 h.get("command")
                     .and_then(|c| c.as_str())
-                    .is_some_and(|c| c.starts_with("grove hook"))
+                    .is_some_and(|c| c.starts_with("loom hook"))
             }
         });
 
-        if !has_grove_hook {
+        if !has_loom_hook {
             // Wrap in matcher format (standard Claude hook format)
             arr.push(serde_json::json!({
-                "hooks": [grove_hook]
+                "hooks": [loom_hook]
             }));
         }
     }
 }
 
-/// Update grove configuration with Claude settings.
-fn update_grove_config(target: &ConfigTarget, enable_sandbox: bool) -> Result<()> {
+/// Update loom configuration with Claude settings.
+fn update_loom_config(target: &ConfigTarget, enable_sandbox: bool) -> Result<()> {
     if target.is_project_scope {
         update_project_config(target, enable_sandbox)
     } else {

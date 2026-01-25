@@ -1,14 +1,14 @@
-[![CI](https://github.com/johnaparker/grove/actions/workflows/ci.yml/badge.svg)](https://github.com/johnaparker/grove/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/johnaparker/grove?v=1)](https://github.com/johnaparker/grove/releases/latest)
+[![CI](https://github.com/johnaparker/loom-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/johnaparker/loom-tui/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/johnaparker/loom-tui?v=1)](https://github.com/johnaparker/loom-tui/releases/latest)
 
-# Grove
+# Loom
 
-Grove is a TUI control center for managing git worktrees in tmux with Claude Code integration.
+Loom is a TUI control center for managing git worktrees in tmux with Claude Code integration.
 Monitor multiple Claude agents, optionally track Linear issues and GitHub PRs, all from a single dashboard.
 
-![grove demo](assets/grove.gif)
+![loom demo](assets/loom.gif)
 
-If you work on multiple features simultaneously using git worktrees, `grove` gives you:
+If you work on multiple features simultaneously using git worktrees, `loom` gives you:
 
 - **Claude agent monitoring** - See which agents are working, waiting for permission, or idle across all your worktrees
 - **Worktree lifecycle** - Create, switch, merge, and remove worktrees without leaving the dashboard
@@ -18,17 +18,17 @@ The dashboard is the primary interface. CLI commands exist for quick one-off ope
 
 ## Setup
 
-Grove minimally requires:
+Loom minimally requires:
 - git
 - tmux
 
 ### Installation
 
 ```bash
-curl -fsSL https://github.com/johnaparker/grove/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/johnaparker/loom-tui/releases/latest/download/install.sh | bash
 ```
 
-This installs grove to `~/.local/bin`. Add it to your PATH if not already:
+This installs loom to `~/.local/bin`. Add it to your PATH if not already:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -45,17 +45,17 @@ cargo install --path .
 Enable Claude agent tracking with:
 
 ```bash
-grove config enable claude
+loom config enable claude
 ```
 
-This configures grove hooks in Claude's settings and enables state tracking (working/waiting/idle) per worktree. You'll be prompted about sandbox mode for new worktrees.
+This configures loom hooks in Claude's settings and enables state tracking (working/waiting/idle) per worktree. You'll be prompted about sandbox mode for new worktrees.
 
 ### GitHub Integration
 
 Requires the [GitHub CLI](https://cli.github.com/). Enable with:
 
 ```bash
-grove config enable github
+loom config enable github
 ```
 
 This verifies `gh` is installed and authenticated, then enables PR status, check results, and review comments in the dashboard.
@@ -65,16 +65,16 @@ This verifies `gh` is installed and authenticated, then enables PR status, check
 Enable with:
 
 ```bash
-grove config enable linear
+loom config enable linear
 ```
 
-You'll be prompted for your API key (get from Linear → Settings → API) and shown available teams to select your issue prefix. Grove then links worktrees to Linear issues automatically when branch names contain issue IDs (e.g., `user/lin-123-feature`).
+You'll be prompted for your API key (get from Linear → Settings → API) and shown available teams to select your issue prefix. Loom then links worktrees to Linear issues automatically when branch names contain issue IDs (e.g., `user/lin-123-feature`).
 
 ### Configuration
 
-grove uses a three-level config hierarchy: **global** → **project** → **worktree**. Each level can override the previous.
+loom uses a three-level config hierarchy: **global** → **project** → **worktree**. Each level can override the previous.
 
-**Global config:** `~/.config/grove/config.toml`
+**Global config:** `~/.config/loom/config.toml`
 
 ```toml
 # Root directory for all worktrees (default: ~/.worktrees)
@@ -87,8 +87,8 @@ categories = ["dev", "review", "demo"]
 # Default category for new worktrees (used when -c not specified)
 default_category = "dev"
 
-# Cache directory for connector data (default: ~/.cache/grove)
-cache_dir = "~/.cache/grove"
+# Cache directory for connector data (default: ~/.cache/loom)
+cache_dir = "~/.cache/loom"
 
 # Workflow mode: "push" (local-first) or "pull" (PR-based)
 # - push: merge directly to main, new worktrees branch off main
@@ -122,7 +122,7 @@ api_key = "lin_api_..."
 # e.g., "JOH" matches branches like "john/joh-123-feature"
 team_prefix = "JOH"
 
-# Auto-update Linear issue status on grove new/merge
+# Auto-update Linear issue status on loom new/merge
 auto_update_status = true
 
 [github]
@@ -150,7 +150,7 @@ branch = ""   # Icon before branch names
 
 ## Workflow Modes
 
-Grove supports two workflow modes, configured via `workflow` in your config:
+Loom supports two workflow modes, configured via `workflow` in your config:
 
 ### Push workflow (default)
 
@@ -158,11 +158,11 @@ For local-first development where you merge directly to main. New worktrees bran
 
 ### Pull workflow
 
-For PR-based development where merging happens on GitHub. New worktrees branch from origin/main (auto-fetched). When work is complete, push to origin and open a PR. After the PR is merged on GitHub, use prune to clean up worktrees with merged PRs. Grove auto-pulls when switching to a branch that's behind origin.
+For PR-based development where merging happens on GitHub. New worktrees branch from origin/main (auto-fetched). When work is complete, push to origin and open a PR. After the PR is merged on GitHub, use prune to clean up worktrees with merged PRs. Loom auto-pulls when switching to a branch that's behind origin.
 
 ## Dashboard
 
-Run `grove` to open the interactive dashboard. This is the primary interface for managing worktrees.
+Run `loom` to open the interactive dashboard. This is the primary interface for managing worktrees.
 
 ### Keyboard Shortcuts
 
@@ -190,24 +190,24 @@ All commands support `--help` for detailed usage.
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `grove` | | Open interactive dashboard |
-| `grove new <branch>` | `n` | Create new worktree |
-| `grove switch [name]` | `s` | Switch worktree (fuzzy picker if no name) |
-| `grove list` | `l`, `ls` | List all worktrees |
-| `grove merge <name>` | `m` | Merge worktree to main (push workflow) |
-| `grove remove [name]` | `r`, `rm` | Remove worktree |
-| `grove sync [name]` | `sy` | Sync worktree with origin/main |
-| `grove prune` | `p` | Delete worktrees with merged PRs (pull workflow) |
-| `grove review` | `rev` | Open diff review in nvim |
-| `grove main` | `ma` | Switch to main worktree |
-| `grove linear` | `li` | Open Linear issue for current worktree |
-| `grove github` | `gh` | Open GitHub PR for current worktree |
-| `grove config enable <feature>` | `cfg` | Enable an integration (claude, github, linear) |
-| `grove config disable <feature>` | | Disable an integration |
-| `grove config set-workflow <mode>` | | Set workflow mode (push or pull) |
-| `grove config categories` | | Manage worktree categories interactively |
-| `grove config sync-patterns` | | Manage sync patterns interactively |
-| `grove completions <shell>` | | Generate shell completions |
+| `loom` | | Open interactive dashboard |
+| `loom new <branch>` | `n` | Create new worktree |
+| `loom switch [name]` | `s` | Switch worktree (fuzzy picker if no name) |
+| `loom list` | `l`, `ls` | List all worktrees |
+| `loom merge <name>` | `m` | Merge worktree to main (push workflow) |
+| `loom remove [name]` | `r`, `rm` | Remove worktree |
+| `loom sync [name]` | `sy` | Sync worktree with origin/main |
+| `loom prune` | `p` | Delete worktrees with merged PRs (pull workflow) |
+| `loom review` | `rev` | Open diff review in nvim |
+| `loom main` | `ma` | Switch to main worktree |
+| `loom linear` | `li` | Open Linear issue for current worktree |
+| `loom github` | `gh` | Open GitHub PR for current worktree |
+| `loom config enable <feature>` | `cfg` | Enable an integration (claude, github, linear) |
+| `loom config disable <feature>` | | Disable an integration |
+| `loom config set-workflow <mode>` | | Set workflow mode (push or pull) |
+| `loom config categories` | | Manage worktree categories interactively |
+| `loom config sync-patterns` | | Manage sync patterns interactively |
+| `loom completions <shell>` | | Generate shell completions |
 
 ### Common Flags
 

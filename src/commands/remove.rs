@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use super::ui;
 use crate::config::Config;
 use crate::core::FuzzyMatcher;
-use crate::error::GroveError;
+use crate::error::LoomError;
 use crate::git::{WorktreeInfo, WorktreeManager};
 use crate::linear;
 use crate::output::{dry_run_action, dry_run_footer, dry_run_header};
@@ -68,7 +68,7 @@ pub fn remove(name: Option<&str>, force: bool, dry_run: bool) -> Result<()> {
     } else {
         // Show picker (skip in dry run mode - require name for dry run)
         if dry_run {
-            Err(GroveError::DryRunRequiresName {
+            Err(LoomError::DryRunRequiresName {
                 command: "remove".to_string(),
             })?;
         }
@@ -208,7 +208,7 @@ fn fuzzy_match_worktree(worktrees: &[WorktreeInfo], query: &str) -> Result<Workt
 
     match best_idx {
         Some(idx) => Ok(worktrees[idx].clone()),
-        None => Err(GroveError::NoMatch {
+        None => Err(LoomError::NoMatch {
             query: query.to_string(),
         })?,
     }

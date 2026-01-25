@@ -1,4 +1,4 @@
-//! External service connectors for grove.
+//! External service connectors for loom.
 //!
 //! This module contains integrations with external services:
 //! - `linear` - Linear issue tracking integration

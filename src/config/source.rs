@@ -37,11 +37,11 @@ impl ConfigSource for FilesystemSource {
     }
 
     fn global_config_path(&self) -> Result<PathBuf> {
-        // Always prefer XDG-style path (~/.config/grove/config.toml)
+        // Always prefer XDG-style path (~/.config/loom/config.toml)
         // This is consistent across platforms and avoids macOS using ~/Library/Application Support
         let home =
             dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-        Ok(home.join(".config").join("grove").join("config.toml"))
+        Ok(home.join(".config").join("loom").join("config.toml"))
     }
 }
 
@@ -73,7 +73,7 @@ impl ConfigSource for MemorySource {
         }
 
         // Default: if no custom global path set, assume any config.toml is global
-        if path.ends_with("grove/config.toml") || path.ends_with("grove\\config.toml") {
+        if path.ends_with("loom/config.toml") || path.ends_with("loom\\config.toml") {
             return Ok(self.global_config.clone());
         }
 
@@ -95,7 +95,7 @@ impl ConfigSource for MemorySource {
         }
 
         // Check if it's the global config
-        if (path.ends_with("grove/config.toml") || path.ends_with("grove\\config.toml"))
+        if (path.ends_with("loom/config.toml") || path.ends_with("loom\\config.toml"))
             && self.global_config.is_some()
         {
             return true;
@@ -109,7 +109,7 @@ impl ConfigSource for MemorySource {
             Ok(path.clone())
         } else {
             // Return a fake path for testing
-            Ok(PathBuf::from("/test/.config/grove/config.toml"))
+            Ok(PathBuf::from("/test/.config/loom/config.toml"))
         }
     }
 }
@@ -144,7 +144,7 @@ mod tests {
     fn test_memory_source_project_config() {
         let mut project_configs = std::collections::HashMap::new();
         project_configs.insert(
-            PathBuf::from("/repo/.grove.toml"),
+            PathBuf::from("/repo/.loom.toml"),
             r#"project_name = "test""#.to_string(),
         );
 
@@ -153,7 +153,7 @@ mod tests {
             ..Default::default()
         };
 
-        let content = source.read_config(Path::new("/repo/.grove.toml")).unwrap();
+        let content = source.read_config(Path::new("/repo/.loom.toml")).unwrap();
         assert!(content.is_some());
         assert!(content.unwrap().contains("project_name"));
     }

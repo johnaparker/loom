@@ -46,12 +46,12 @@ impl TestRepo {
         // Rename branch to main (git might default to master)
         run_git(&repo_dir, &["branch", "-M", "main"]);
 
-        // Create grove config file
-        // The config is looked up at {HOME}/.config/grove/config.toml
+        // Create loom config file
+        // The config is looked up at {HOME}/.config/loom/config.toml
         let config_path = config_dir
             .path()
             .join(".config")
-            .join("grove")
+            .join("loom")
             .join("config.toml");
         fs::create_dir_all(config_path.parent().unwrap()).expect("Failed to create config dir");
 
@@ -181,10 +181,10 @@ patterns = []
         worktrees
     }
 
-    /// Run grove command in this test repo with the test config
+    /// Run loom command in this test repo with the test config
     #[allow(deprecated)]
-    pub fn run_grove(&self, args: &[&str]) -> assert_cmd::assert::Assert {
-        let mut cmd = assert_cmd::Command::cargo_bin("grove").expect("Failed to find grove binary");
+    pub fn run_loom(&self, args: &[&str]) -> assert_cmd::assert::Assert {
+        let mut cmd = assert_cmd::Command::cargo_bin("loom").expect("Failed to find loom binary");
         cmd.current_dir(self.repo_dir.path())
             .env("XDG_CONFIG_HOME", self.config_dir.path())
             .env("HOME", self.config_dir.path())
@@ -192,15 +192,15 @@ patterns = []
         cmd.assert()
     }
 
-    /// Run grove command and return output as string
-    pub fn run_grove_output(&self, args: &[&str]) -> String {
-        let output = Command::new(env!("CARGO_BIN_EXE_grove"))
+    /// Run loom command and return output as string
+    pub fn run_loom_output(&self, args: &[&str]) -> String {
+        let output = Command::new(env!("CARGO_BIN_EXE_loom"))
             .current_dir(self.repo_dir.path())
             .env("XDG_CONFIG_HOME", self.config_dir.path())
             .env("HOME", self.config_dir.path())
             .args(args)
             .output()
-            .expect("Failed to run grove");
+            .expect("Failed to run loom");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

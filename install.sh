@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# Grove installer script
-# Usage: curl -fsSL https://github.com/johnaparker/grove/releases/latest/download/install.sh | bash
+# Loom installer script
+# Usage: curl -fsSL https://github.com/johnaparker/loom-tui/releases/latest/download/install.sh | bash
 
 VERSION="0.1.0"  # Updated by release workflow
-INSTALL_DIR="${GROVE_INSTALL_DIR:-$HOME/.local/bin}"
-REPO="johnaparker/grove"
+INSTALL_DIR="${LOOM_INSTALL_DIR:-$HOME/.local/bin}"
+REPO="johnaparker/loom-tui"
 
 # Detect platform
 detect_platform() {
@@ -40,10 +40,10 @@ main() {
     local platform target_file url
 
     platform="$(detect_platform)"
-    target_file="grove-${VERSION}-${platform}.tar.gz"
+    target_file="loom-${VERSION}-${platform}.tar.gz"
     url="https://github.com/${REPO}/releases/download/v${VERSION}/${target_file}"
 
-    echo "Installing grove v${VERSION} for ${platform}..."
+    echo "Installing loom v${VERSION} for ${platform}..."
 
     # Create install directory
     mkdir -p "$INSTALL_DIR"
@@ -53,21 +53,21 @@ main() {
     curl -fsSL "$url" | tar -xz -C "$INSTALL_DIR"
 
     # Make executable
-    chmod +x "${INSTALL_DIR}/grove"
+    chmod +x "${INSTALL_DIR}/loom"
 
     echo ""
-    echo "grove installed to ${INSTALL_DIR}/grove"
+    echo "loom installed to ${INSTALL_DIR}/loom"
 
     # Check if install dir is in PATH
     if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
         echo ""
-        echo "Add grove to your PATH by adding this to your shell config:"
+        echo "Add loom to your PATH by adding this to your shell config:"
         echo ""
         echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
         echo ""
     else
         echo ""
-        echo "Run 'grove --help' to get started."
+        echo "Run 'loom --help' to get started."
     fi
 }
 

@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use super::types::{ChecksStatus, GitHubPR, PRComment};
 use super::url::get_create_pr_url;
-use crate::error::GroveError;
+use crate::error::LoomError;
 
 /// Cached result of gh CLI availability check (true = available, false = not available/not authenticated)
 static GH_CLI_AVAILABLE: OnceLock<bool> = OnceLock::new();
@@ -30,20 +30,20 @@ fn check_gh_cli_impl() -> Result<()> {
     let output = Command::new("gh")
         .args(["--version"])
         .output()
-        .map_err(|_| GroveError::GitHubCliNotFound)?;
+        .map_err(|_| LoomError::GitHubCliNotFound)?;
 
     if !output.status.success() {
-        Err(GroveError::GitHubCliNotFound)?;
+        Err(LoomError::GitHubCliNotFound)?;
     }
 
     // Check if gh is authenticated
     let output = Command::new("gh")
         .args(["auth", "status"])
         .output()
-        .map_err(|_| GroveError::GitHubCliNotFound)?;
+        .map_err(|_| LoomError::GitHubCliNotFound)?;
 
     if !output.status.success() {
-        Err(GroveError::GitHubNotAuthenticated)?;
+        Err(LoomError::GitHubNotAuthenticated)?;
     }
 
     Ok(())
@@ -65,20 +65,20 @@ pub fn get_pr_branch(repo_path: &Path, pr_number: u32) -> Result<String> {
         ])
         .current_dir(repo_path)
         .output()
-        .map_err(|e| GroveError::GitHubApiError {
+        .map_err(|e| LoomError::GitHubApiError {
             message: e.to_string(),
         })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(GroveError::GitHubApiError {
+        Err(LoomError::GitHubApiError {
             message: stderr.to_string(),
         })?;
     }
 
     let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if branch.is_empty() {
-        Err(GroveError::GitHubApiError {
+        Err(LoomError::GitHubApiError {
             message: format!("PR #{} not found or has no branch", pr_number),
         })?;
     }
@@ -116,7 +116,7 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         ])
         .current_dir(repo_path)
         .output()
-        .map_err(|e| GroveError::GitHubApiError {
+        .map_err(|e| LoomError::GitHubApiError {
             message: e.to_string(),
         })?;
 
@@ -126,14 +126,14 @@ pub fn get_pr_for_branch(repo_path: &Path, branch: &str) -> Result<Option<GitHub
         if stderr.contains("no pull requests found") || stderr.contains("Could not resolve") {
             return Ok(None);
         }
-        Err(GroveError::GitHubApiError {
+        Err(LoomError::GitHubApiError {
             message: stderr.to_string(),
         })?;
     }
 
     let json_str = String::from_utf8_lossy(&output.stdout);
     let json: serde_json::Value =
-        serde_json::from_str(&json_str).map_err(|e| GroveError::GitHubApiError {
+        serde_json::from_str(&json_str).map_err(|e| LoomError::GitHubApiError {
             message: format!("Failed to parse gh output: {}", e),
         })?;
 
@@ -264,18 +264,18 @@ pub fn get_repo_info(repo_path: &Path) -> Result<(String, String)> {
         ])
         .current_dir(repo_path)
         .output()
-        .map_err(|e| GroveError::GitHubApiError {
+        .map_err(|e| LoomError::GitHubApiError {
             message: e.to_string(),
         })?;
 
     if !output.status.success() {
-        Err(GroveError::NoGitHubRemote)?;
+        Err(LoomError::NoGitHubRemote)?;
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parts: Vec<&str> = stdout.trim().split('\n').collect();
     if parts.len() != 2 {
-        Err(GroveError::NoGitHubRemote)?;
+        Err(LoomError::NoGitHubRemote)?;
     }
 
     Ok((parts[0].to_string(), parts[1].to_string()))
