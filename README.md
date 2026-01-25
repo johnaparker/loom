@@ -206,6 +206,9 @@ All commands support `--help` for detailed usage.
 | `grove github` | `gh` | Open GitHub PR for current worktree |
 | `grove config enable <feature>` | `cfg` | Enable an integration (claude, github, linear) |
 | `grove config disable <feature>` | | Disable an integration |
+| `grove config set-workflow <mode>` | | Set workflow mode (push or pull) |
+| `grove config categories` | | Manage worktree categories interactively |
+| `grove config sync-patterns` | | Manage sync patterns interactively |
 | `grove completions <shell>` | | Generate shell completions |
 
 ### Common Flags

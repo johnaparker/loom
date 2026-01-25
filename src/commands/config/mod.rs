@@ -3,11 +3,14 @@
 //! Provides `grove config enable/disable <feature>` commands to simplify
 //! integration setup for Claude, GitHub, and Linear.
 
+mod categories;
 mod claude_setup;
 mod disable;
 mod enable;
 mod github_setup;
 mod linear_setup;
+mod sync_patterns;
+mod workflow;
 
 use anyhow::Result;
 use std::path::PathBuf;
@@ -87,5 +90,8 @@ pub fn run(command: ConfigCommands) -> Result<()> {
     match command {
         ConfigCommands::Enable { feature, scope } => enable::run(feature, scope),
         ConfigCommands::Disable { feature, scope } => disable::run(feature, scope),
+        ConfigCommands::SetWorkflow { workflow, scope } => workflow::run(workflow, scope),
+        ConfigCommands::Categories => categories::run(),
+        ConfigCommands::SyncPatterns { scope } => sync_patterns::run(scope),
     }
 }
