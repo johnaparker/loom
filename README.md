@@ -44,52 +44,33 @@ cargo install --path .
 
 ### Claude Code Integration
 
-Add grove hooks to your Claude Code settings (`~/.claude/settings.json`):
+Enable Claude agent tracking with:
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [{"hooks": [{"type": "command", "command": "grove hook tool-use"}]}],
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "grove hook user-prompt"}]}],
-    "Stop": [{"hooks": [{"type": "command", "command": "grove hook stop"}]}],
-    "Notification": [{"hooks": [{"type": "command", "command": "grove hook notification"}]}],
-    "SessionStart": [{"hooks": [{"type": "command", "command": "grove hook session-start"}]}],
-    "SessionEnd": [{"hooks": [{"type": "command", "command": "grove hook session-end"}]}]
-  }
-}
+```bash
+grove config enable claude
 ```
 
-This enables grove to track Claude agent state (working/waiting/idle) per worktree.
+This configures grove hooks in Claude's settings and enables state tracking (working/waiting/idle) per worktree. You'll be prompted about sandbox mode for new worktrees.
 
 ### GitHub Integration
 
-Install the [GitHub CLI](https://cli.github.com/) and authenticate:
+Requires the [GitHub CLI](https://cli.github.com/). Enable with:
 
 ```bash
-gh auth login
+grove config enable github
 ```
 
-Then enable GitHub in your grove config:
-
-```toml
-[github]
-enabled = true
-```
-
-Grove uses `gh` to display PR status, check results, and review comments in the dashboard.
+This verifies `gh` is installed and authenticated, then enables PR status, check results, and review comments in the dashboard.
 
 ### Linear Integration
 
-Get an API key from Linear (Settings → API → Personal API keys), then add it to your grove config:
+Enable with:
 
-```toml
-[linear]
-enabled = true
-api_key = "lin_api_..."
-team_prefix = "LIN"  # Your team's issue prefix
+```bash
+grove config enable linear
 ```
 
-Grove links worktrees to Linear issues automatically when branch names contain issue IDs (e.g., `user/lin-123-feature`).
+You'll be prompted for your API key (get from Linear → Settings → API) and shown available teams to select your issue prefix. Grove then links worktrees to Linear issues automatically when branch names contain issue IDs (e.g., `user/lin-123-feature`).
 
 ### Configuration
 
@@ -223,6 +204,8 @@ All commands support `--help` for detailed usage.
 | `grove main` | `ma` | Switch to main worktree |
 | `grove linear` | `li` | Open Linear issue for current worktree |
 | `grove github` | `gh` | Open GitHub PR for current worktree |
+| `grove config enable <feature>` | `cfg` | Enable an integration (claude, github, linear) |
+| `grove config disable <feature>` | | Disable an integration |
 | `grove completions <shell>` | | Generate shell completions |
 
 ### Common Flags

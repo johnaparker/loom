@@ -86,6 +86,15 @@ pub enum GroveError {
 
     #[error("Prune is not available in push workflow")]
     PruneNotAllowedInPushWorkflow,
+
+    #[error("Claude Code is not installed")]
+    ClaudeNotInstalled,
+
+    #[error("Not at repository root")]
+    NotAtRepoRoot {
+        cwd: std::path::PathBuf,
+        repo_root: std::path::PathBuf,
+    },
 }
 
 impl GroveError {
@@ -174,6 +183,12 @@ impl GroveError {
             }
             GroveError::PruneNotAllowedInPushWorkflow => {
                 Some("Prune relies on GitHub PR status. Switch to pull workflow or use 'grove remove' to manually remove worktrees.".to_string())
+            }
+            GroveError::ClaudeNotInstalled => {
+                Some("Install Claude Code: https://claude.ai/claude-code".to_string())
+            }
+            GroveError::NotAtRepoRoot { repo_root, .. } => {
+                Some(format!("Run from repository root: {}", repo_root.display()))
             }
         }
     }

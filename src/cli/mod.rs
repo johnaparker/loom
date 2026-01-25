@@ -1,5 +1,47 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+
+/// Scope for configuration changes
+#[derive(Clone, Copy, Debug, ValueEnum, Default)]
+pub enum ConfigScope {
+    /// User-wide settings (~/.config/grove/config.toml)
+    #[default]
+    User,
+    /// Project-specific settings (.grove.toml in repo root)
+    Project,
+}
+
+/// Features that can be enabled/disabled
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum ConfigFeature {
+    /// Claude Code integration (hooks for state tracking)
+    Claude,
+    /// GitHub integration (PR status, checks)
+    Github,
+    /// Linear integration (issue linking)
+    Linear,
+}
+
+/// Config subcommands for enabling/disabling features
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Enable an integration
+    Enable {
+        /// The feature to enable
+        feature: ConfigFeature,
+        /// Configuration scope
+        #[arg(long, short, default_value = "user")]
+        scope: ConfigScope,
+    },
+    /// Disable an integration
+    Disable {
+        /// The feature to disable
+        feature: ConfigFeature,
+        /// Configuration scope
+        #[arg(long, short, default_value = "user")]
+        scope: ConfigScope,
+    },
+}
 
 #[derive(Parser)]
 #[command(name = "grove")]
@@ -119,5 +161,12 @@ pub enum Commands {
         /// Preview what would happen without making changes
         #[arg(long)]
         dry_run: bool,
+    },
+
+    /// Configure grove integrations
+    #[command(visible_alias = "cfg")]
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
     },
 }
