@@ -131,7 +131,7 @@ patterns = [".env", ".envrc", ".claude/"]
 enabled = true
 
 # Create new worktrees with Claude sandbox mode enabled
-sandbox = false
+sandbox = true
 
 # Auto-approve sandboxed bash commands (only applies when sandbox = true)
 sandbox_auto_allow_bash = true
@@ -173,3 +173,65 @@ branch = ""   # Icon before branch names
 ```
 
 **Note:** All integrations (Linear, GitHub, Diffview) are **disabled by default**. You must explicitly set `enabled = true` to use them.
+
+## Workflow Modes
+
+Grove supports two workflow modes, configured via `workflow` in your config:
+
+### Push workflow (default)
+
+For local-first development where you merge directly to main. New worktrees branch from your local main. When work is complete, merge the branch into main locally and clean up the worktree. This is ideal for solo projects or when you have direct push access to main.
+
+### Pull workflow
+
+For PR-based development where merging happens on GitHub. New worktrees branch from origin/main (auto-fetched). When work is complete, push to origin and open a PR. After the PR is merged on GitHub, use prune to clean up worktrees with merged PRs. Grove auto-pulls when switching to a branch that's behind origin.
+
+## Dashboard
+
+Run `grove status` to open the interactive dashboard. This is the primary interface for managing worktrees.
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `↑`/`k` | Move selection up |
+| `↓`/`j` | Move selection down |
+| `Enter` | Switch to selected worktree |
+| `/` | Search/filter worktrees |
+| `Tab` | Cycle category filter (when >2 categories) |
+| `n` | Create new worktree |
+| `x` | Delete selected worktree |
+| `m` | Merge to main (push workflow only) |
+| `s` | Sync with remote |
+| `d` | Open diff review in nvim |
+| `c` | Open Claude Code session |
+| `l` | Open Linear issue |
+| `g` | Open GitHub PR |
+| `P` | Prune merged PRs (pull workflow only) |
+| `q`/`Esc` | Quit |
+
+## CLI Commands
+
+All commands support `--help` for detailed usage.
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `grove status` | `st` | Open interactive dashboard |
+| `grove new <branch>` | `n` | Create new worktree |
+| `grove switch [name]` | `s` | Switch worktree (fuzzy picker if no name) |
+| `grove list` | `l`, `ls` | List all worktrees |
+| `grove merge <name>` | `m` | Merge worktree to main (push workflow) |
+| `grove remove [name]` | `r`, `rm` | Remove worktree |
+| `grove sync [name]` | `sy` | Sync worktree with origin/main |
+| `grove prune` | `p` | Delete worktrees with merged PRs (pull workflow) |
+| `grove review` | `rev` | Open diff review in nvim |
+| `grove main` | `ma` | Switch to main worktree |
+| `grove linear` | `li` | Open Linear issue for current worktree |
+| `grove github` | `gh` | Open GitHub PR for current worktree |
+| `grove completions <shell>` | | Generate shell completions |
+
+### Common Flags
+
+- `--dry-run`: Preview changes without executing (merge, remove, sync, prune)
+- `-f, --force`: Force operation even with uncommitted changes
+- `-c, --category`: Specify worktree category (new)
