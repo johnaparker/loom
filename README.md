@@ -68,7 +68,7 @@ Enable with:
 loom config enable linear
 ```
 
-You'll be prompted for your API key (get from Linear → Settings → API) and shown available teams to select your issue prefix. Loom then links worktrees to Linear issues automatically when branch names contain issue IDs (e.g., `user/lin-123-feature`).
+You'll be prompted for your API key (get from Linear → Settings → API) and shown available teams to select your issue prefix. You'll also be offered to install a Linear skill for Claude Code that teaches it how to work with your Linear issues. Loom then links worktrees to Linear issues automatically when branch names contain issue IDs (e.g., `user/lin-123-feature`).
 
 ### Configuration
 

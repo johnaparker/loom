@@ -2,11 +2,14 @@
 //!
 //! Handles enabling Linear issue tracking integration.
 
+use std::fs;
+use std::path::PathBuf;
+
 use anyhow::Result;
 use colored::Colorize;
 
 use super::ConfigTarget;
-use crate::commands::ui::{prompt_secret, prompt_string};
+use crate::commands::ui::{confirm, prompt_secret, prompt_string};
 use crate::config::{GlobalConfig, IntegrationOverride, ProjectConfig};
 use crate::linear::{LinearTeam, fetch_teams};
 
@@ -63,6 +66,10 @@ pub fn enable(target: &ConfigTarget) -> Result<()> {
         target.loom_config_path.display()
     );
 
+    // Step 5: Offer to install Linear skill for Claude Code
+    println!();
+    install_linear_skill_prompt(target, &team_prefix)?;
+
     println!();
     println!(
         "{} Linear integration enabled at {} scope",
@@ -100,6 +107,18 @@ fn enable_project_scope(target: &ConfigTarget) -> Result<()> {
         "✓".green(),
         target.loom_config_path.display()
     );
+
+    // Get team prefix from global config for skill installation
+    let global_config = GlobalConfig::load()?;
+    let team_prefix = global_config
+        .linear
+        .team_prefix
+        .clone()
+        .unwrap_or_else(|| "PREFIX".to_string());
+
+    // Offer to install Linear skill for Claude Code
+    println!();
+    install_linear_skill_prompt(target, &team_prefix)?;
 
     println!();
     println!(
@@ -163,4 +182,83 @@ fn update_global_config(api_key: &str, team_prefix: &str) -> Result<()> {
     config.linear.auto_update_status = true;
     config.save()?;
     Ok(())
+}
+
+/// Prompt user to install the Linear skill for Claude Code.
+fn install_linear_skill_prompt(target: &ConfigTarget, team_prefix: &str) -> Result<()> {
+    if confirm("Install Linear skill for Claude Code?")? {
+        install_linear_skill(target, team_prefix)?;
+    }
+    Ok(())
+}
+
+/// Install the Linear skill for Claude Code.
+fn install_linear_skill(target: &ConfigTarget, team_prefix: &str) -> Result<()> {
+    let skill_path = get_skill_path(target)?;
+
+    // Create parent directories if needed
+    if let Some(parent) = skill_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // Write skill content
+    let content = generate_skill_content(team_prefix);
+    fs::write(&skill_path, content)?;
+
+    println!(
+        "{} Installed Linear skill at {}",
+        "✓".green(),
+        skill_path.display()
+    );
+
+    Ok(())
+}
+
+/// Get the path for the Linear skill file based on scope.
+fn get_skill_path(target: &ConfigTarget) -> Result<PathBuf> {
+    if target.is_project_scope {
+        // Project scope: <repo_root>/.claude/skills/loom-linear/SKILL.md
+        let repo_root = target
+            .repo_root
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Project scope requires a repository root"))?;
+        Ok(repo_root.join(".claude/skills/loom-linear/SKILL.md"))
+    } else {
+        // User scope: ~/.claude/skills/loom-linear/SKILL.md
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+        Ok(home.join(".claude/skills/loom-linear/SKILL.md"))
+    }
+}
+
+/// Generate the Linear skill content with the team prefix interpolated.
+fn generate_skill_content(team_prefix: &str) -> String {
+    format!(
+        r#"---
+name: loom-linear
+description: When asked about Linear issues, tasks, or projects, or when {prefix}-<number> is mentioned
+---
+
+# Linear
+
+Linear is project management software for tracking issues and tasks. Issues move through a Kanban-style board and each has an ID prefixed with "{prefix}-" (e.g., "{prefix}-163").
+
+Use the Linear MCP server tools to interact with Linear.
+
+## Working on an issue
+
+1. Review the issue description using `get_issue`, along with any user input
+2. Explore the codebase to understand the context
+3. Ask clarifying questions if requirements are unclear or multiple approaches exist
+4. Implement the solution
+
+## Other common tasks
+
+- **Find issues**: Use `list_issues` with filters (assignee, project, label, state)
+- **Create issues**: Use `create_issue` with title, description, and team
+- **Update issues**: Use `update_issue` to change status, assignee, labels, etc.
+- **Projects**: Use `list_projects` and `get_project` for project-level context
+"#,
+        prefix = team_prefix
+    )
 }
