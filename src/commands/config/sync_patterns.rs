@@ -33,7 +33,7 @@ fn run_user_scope() -> Result<()> {
         println!("Current patterns:");
         display_numbered_list(&config.sync.patterns, None);
 
-        match interactive_list_menu(&config.sync.patterns, None, false)? {
+        match interactive_list_menu(&config.sync.patterns, false)? {
             MenuAction::Add(pattern) => {
                 if config.sync.patterns.contains(&pattern) {
                     println!("{} Pattern '{}' already exists", "✗".red(), pattern);
@@ -64,16 +64,7 @@ fn run_project_scope(target: &ConfigTarget) -> Result<()> {
         .as_ref()
         .expect("project scope should have repo_root");
 
-    // Load existing config or create new one
-    let mut config = ProjectConfig::load(None, repo_root)?.unwrap_or_else(|| ProjectConfig {
-        project_name: None,
-        sync: Default::default(),
-        git: Default::default(),
-        linear: None,
-        github: None,
-        diffview: None,
-        claude: None,
-    });
+    let mut config = ProjectConfig::load_or_default(repo_root)?;
 
     println!();
     println!("{}", "Sync Patterns (project scope)".bold());
@@ -92,7 +83,7 @@ fn run_project_scope(target: &ConfigTarget) -> Result<()> {
             display_numbered_list(&config.sync.patterns, None);
         }
 
-        match interactive_list_menu(&config.sync.patterns, None, false)? {
+        match interactive_list_menu(&config.sync.patterns, false)? {
             MenuAction::Add(pattern) => {
                 if config.sync.patterns.contains(&pattern) {
                     println!("{} Pattern '{}' already exists", "✗".red(), pattern);
@@ -102,12 +93,8 @@ fn run_project_scope(target: &ConfigTarget) -> Result<()> {
                 println!("{} Added pattern '{}'", "✓".green(), pattern.cyan());
             }
             MenuAction::Delete(idx) => {
-                if idx < config.sync.patterns.len() {
-                    let removed = config.sync.patterns.remove(idx);
-                    println!("{} Removed pattern '{}'", "✓".green(), removed.cyan());
-                } else {
-                    println!("{} Invalid index", "✗".red());
-                }
+                let removed = config.sync.patterns.remove(idx);
+                println!("{} Removed pattern '{}'", "✓".green(), removed.cyan());
             }
             MenuAction::SetDefault(_) => unreachable!(),
             MenuAction::Done => break,

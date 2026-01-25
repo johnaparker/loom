@@ -5,7 +5,7 @@ use colored::Colorize;
 
 use super::ConfigTarget;
 use crate::cli::{ConfigFeature, ConfigScope};
-use crate::config::{GlobalConfig, ProjectConfig, ProjectGitConfig, ProjectSyncConfig};
+use crate::config::{GlobalConfig, ProjectConfig};
 
 /// Run the disable command for a feature.
 pub fn run(feature: ConfigFeature, scope: ConfigScope) -> Result<()> {
@@ -20,7 +20,7 @@ pub fn run(feature: ConfigFeature, scope: ConfigScope) -> Result<()> {
 
 fn disable_claude(target: &ConfigTarget) -> Result<()> {
     if target.is_project_scope {
-        disable_project_feature(target, "claude", |config| {
+        disable_project_feature(target, |config| {
             config.claude = Some(crate::config::ClaudeOverride {
                 enabled: Some(false),
                 sandbox: None,
@@ -48,7 +48,7 @@ fn disable_claude(target: &ConfigTarget) -> Result<()> {
 
 fn disable_github(target: &ConfigTarget) -> Result<()> {
     if target.is_project_scope {
-        disable_project_feature(target, "github", |config| {
+        disable_project_feature(target, |config| {
             config.github = Some(crate::config::IntegrationOverride {
                 enabled: Some(false),
             });
@@ -70,7 +70,7 @@ fn disable_github(target: &ConfigTarget) -> Result<()> {
 
 fn disable_linear(target: &ConfigTarget) -> Result<()> {
     if target.is_project_scope {
-        disable_project_feature(target, "linear", |config| {
+        disable_project_feature(target, |config| {
             config.linear = Some(crate::config::IntegrationOverride {
                 enabled: Some(false),
             });
@@ -98,7 +98,7 @@ fn disable_linear(target: &ConfigTarget) -> Result<()> {
 }
 
 /// Helper to update project config with a feature modification.
-fn disable_project_feature<F>(target: &ConfigTarget, _feature: &str, modify: F) -> Result<()>
+fn disable_project_feature<F>(target: &ConfigTarget, modify: F) -> Result<()>
 where
     F: FnOnce(&mut ProjectConfig),
 {
@@ -107,17 +107,7 @@ where
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Project scope requires a repository root"))?;
 
-    // Load existing project config or create new one
-    let mut config = ProjectConfig::load(None, repo_root)?.unwrap_or_else(|| ProjectConfig {
-        project_name: None,
-        sync: ProjectSyncConfig::default(),
-        git: ProjectGitConfig::default(),
-        linear: None,
-        github: None,
-        diffview: None,
-        claude: None,
-    });
-
+    let mut config = ProjectConfig::load_or_default(repo_root)?;
     modify(&mut config);
     config.save(repo_root)?;
 

@@ -7,7 +7,7 @@ use super::global::SyncWorkflow;
 use super::{ClaudeOverride, IntegrationOverride};
 
 /// Project-specific configuration stored at .grove.toml in repo root
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProjectConfig {
     pub project_name: Option<String>,
     #[serde(default)]
@@ -74,6 +74,11 @@ impl ProjectConfig {
         let content = toml::to_string_pretty(self)?;
         fs::write(&path, content)?;
         Ok(())
+    }
+
+    /// Load project config from repo root, or return default if not found.
+    pub fn load_or_default(repo_root: &Path) -> Result<Self> {
+        Ok(Self::load(None, repo_root)?.unwrap_or_default())
     }
 }
 

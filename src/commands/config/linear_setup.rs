@@ -7,9 +7,7 @@ use colored::Colorize;
 
 use super::ConfigTarget;
 use crate::commands::ui::{prompt_secret, prompt_string};
-use crate::config::{
-    GlobalConfig, IntegrationOverride, ProjectConfig, ProjectGitConfig, ProjectSyncConfig,
-};
+use crate::config::{GlobalConfig, IntegrationOverride, ProjectConfig};
 use crate::linear::{LinearTeam, fetch_teams};
 
 /// Enable Linear integration.
@@ -21,9 +19,9 @@ pub fn enable(target: &ConfigTarget) -> Result<()> {
 
     // Step 1: Check if API key is already configured
     let existing_config = GlobalConfig::load()?;
-    let api_key = if existing_config.linear.api_key.is_some() {
+    let api_key = if let Some(key) = &existing_config.linear.api_key {
         println!("{} Using existing Linear API key", "✓".green());
-        existing_config.linear.api_key.clone().unwrap()
+        key.clone()
     } else {
         // Prompt for API key
         println!(
@@ -90,17 +88,7 @@ fn enable_project_scope(target: &ConfigTarget) -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Project scope requires a repository root"))?;
 
-    // Load existing project config or create new one
-    let mut config = ProjectConfig::load(None, repo_root)?.unwrap_or_else(|| ProjectConfig {
-        project_name: None,
-        sync: ProjectSyncConfig::default(),
-        git: ProjectGitConfig::default(),
-        linear: None,
-        github: None,
-        diffview: None,
-        claude: None,
-    });
-
+    let mut config = ProjectConfig::load_or_default(repo_root)?;
     config.linear = Some(IntegrationOverride {
         enabled: Some(true),
     });

@@ -30,7 +30,7 @@ pub fn run() -> Result<()> {
         println!("Current categories:");
         display_numbered_list(&config.categories, default_idx);
 
-        match interactive_list_menu(&config.categories, default_idx, true)? {
+        match interactive_list_menu(&config.categories, true)? {
             MenuAction::Add(name) => {
                 if config.categories.len() >= MAX_CATEGORIES {
                     println!(

@@ -9,9 +9,7 @@ use std::process::Command;
 
 use super::ConfigTarget;
 use crate::commands::ui::confirm_default_yes;
-use crate::config::{
-    ClaudeOverride, GlobalConfig, ProjectConfig, ProjectGitConfig, ProjectSyncConfig,
-};
+use crate::config::{ClaudeOverride, GlobalConfig, ProjectConfig};
 use crate::error::GroveError;
 
 /// Enable Claude Code integration.
@@ -181,23 +179,13 @@ fn update_project_config(target: &ConfigTarget, enable_sandbox: bool) -> Result<
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Project scope requires a repository root"))?;
 
-    // Load existing project config or create new one
-    let mut config = ProjectConfig::load(None, repo_root)?.unwrap_or_else(|| ProjectConfig {
-        project_name: None,
-        sync: ProjectSyncConfig::default(),
-        git: ProjectGitConfig::default(),
-        linear: None,
-        github: None,
-        diffview: None,
-        claude: None,
-    });
-
+    let mut config = ProjectConfig::load_or_default(repo_root)?;
     config.claude = Some(ClaudeOverride {
         enabled: Some(true),
         sandbox: Some(enable_sandbox),
         sandbox_auto_allow_bash: if enable_sandbox { Some(true) } else { None },
     });
-
     config.save(repo_root)?;
+
     Ok(())
 }

@@ -188,12 +188,8 @@ fn prompt_menu_action(items: &[String], allow_set_default: bool) -> Result<MenuA
 
 /// Run an interactive menu for managing a list of items.
 ///
-/// Shows numbered list with available actions and handles user input.
+/// Shows available actions and handles user input.
 /// Returns the action the user selected.
-pub fn interactive_list_menu(
-    items: &[String],
-    _default_idx: Option<usize>,
-    allow_set_default: bool,
-) -> Result<MenuAction> {
+pub fn interactive_list_menu(items: &[String], allow_set_default: bool) -> Result<MenuAction> {
     prompt_menu_action(items, allow_set_default)
 }

@@ -6,9 +6,7 @@ use anyhow::Result;
 use colored::Colorize;
 
 use super::ConfigTarget;
-use crate::config::{
-    GlobalConfig, IntegrationOverride, ProjectConfig, ProjectGitConfig, ProjectSyncConfig,
-};
+use crate::config::{GlobalConfig, IntegrationOverride, ProjectConfig};
 use crate::github::check_gh_cli;
 
 /// Enable GitHub integration.
@@ -64,21 +62,11 @@ fn update_project_config(target: &ConfigTarget) -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Project scope requires a repository root"))?;
 
-    // Load existing project config or create new one
-    let mut config = ProjectConfig::load(None, repo_root)?.unwrap_or_else(|| ProjectConfig {
-        project_name: None,
-        sync: ProjectSyncConfig::default(),
-        git: ProjectGitConfig::default(),
-        linear: None,
-        github: None,
-        diffview: None,
-        claude: None,
-    });
-
+    let mut config = ProjectConfig::load_or_default(repo_root)?;
     config.github = Some(IntegrationOverride {
         enabled: Some(true),
     });
-
     config.save(repo_root)?;
+
     Ok(())
 }

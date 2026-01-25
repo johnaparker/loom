@@ -50,17 +50,7 @@ fn set_project_workflow(target: &ConfigTarget, workflow: SyncWorkflow) -> Result
         .as_ref()
         .expect("project scope should have repo_root");
 
-    // Load existing config or create new one
-    let mut config = ProjectConfig::load(None, repo_root)?.unwrap_or_else(|| ProjectConfig {
-        project_name: None,
-        sync: Default::default(),
-        git: Default::default(),
-        linear: None,
-        github: None,
-        diffview: None,
-        claude: None,
-    });
-
+    let mut config = ProjectConfig::load_or_default(repo_root)?;
     config.git.workflow = Some(workflow);
     config.save(repo_root)?;
 
