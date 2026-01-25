@@ -1,5 +1,5 @@
-[![CI](https://github.com/johnaparker/loom-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/johnaparker/loom-tui/actions/workflows/ci.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/johnaparker/loom-tui?v=1)](https://github.com/johnaparker/loom-tui/releases/latest)
+[![CI](https://github.com/johnaparker/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/johnaparker/loom/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/johnaparker/loom?v=1)](https://github.com/johnaparker/loom/releases/latest)
 
 # Loom
 
@@ -25,7 +25,7 @@ Loom minimally requires:
 ### Installation
 
 ```bash
-curl -fsSL https://github.com/johnaparker/loom-tui/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/johnaparker/loom/releases/latest/download/install.sh | bash
 ```
 
 This installs loom to `~/.local/bin`. Add it to your PATH if not already:
