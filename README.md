@@ -1,5 +1,5 @@
 [![CI](https://github.com/johnaparker/grove/actions/workflows/ci.yml/badge.svg)](https://github.com/johnaparker/grove/actions/workflows/ci.yml)
-![GitHub Release](https://img.shields.io/github/v/release/johnaparker/grove)
+[![GitHub Release](https://img.shields.io/github/v/release/johnaparker/grove?v=1)](https://github.com/johnaparker/grove/releases/latest)
 
 # grove - Git Worktree Manager
 
