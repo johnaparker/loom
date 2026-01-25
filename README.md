@@ -128,7 +128,7 @@ workflow = "push"
 patterns = [".env", ".envrc", ".claude/"]
 
 [claude]
-# Enable Claude Code integration (default: false)
+# Enable Claude Code integration (default: true)
 # When disabled, Claude state tracking is inactive
 enabled = true
 
