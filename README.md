@@ -32,6 +32,18 @@ Optional integrations:
 ### Installation
 
 ```bash
+curl -fsSL https://github.com/johnaparker/grove/releases/latest/download/install.sh | bash
+```
+
+This installs grove to `~/.local/bin`. Add it to your PATH if not already:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### Building from source
+
+```bash
 cargo install --path .
 ```
 
