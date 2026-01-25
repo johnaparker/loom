@@ -1,9 +1,9 @@
 [![CI](https://github.com/johnaparker/grove/actions/workflows/ci.yml/badge.svg)](https://github.com/johnaparker/grove/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/johnaparker/grove?v=1)](https://github.com/johnaparker/grove/releases/latest)
 
-# grove - Git Worktree Manager
+# Grove
 
-A TUI control center for managing git worktrees in tmux with Claude Code integration.
+Grove is a TUI control center for managing git worktrees in tmux with Claude Code integration.
 Monitor multiple Claude agents, optionally track Linear issues and GitHub PRs, all from a single dashboard.
 
 ## What is this?
