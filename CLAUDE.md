@@ -344,6 +344,30 @@ When creating Linear issues for this project, use:
 
 The project name can be used directly - no need to look up UUIDs.
 
+### Releasing a new version
+
+To release a new version:
+
+1. Update version in `Cargo.toml`
+2. Commit and push to main
+3. Trigger the release workflow:
+
+```bash
+gh workflow run release.yml -f version=0.3.0
+```
+
+The workflow will:
+- Validate the version matches `Cargo.toml`
+- Build binaries for macOS (aarch64) and Linux (x86_64)
+- Create a git tag
+- Create a GitHub release with auto-generated notes and artifacts
+
+To watch the release progress:
+
+```bash
+gh run watch
+```
+
 ### Running alignment review
 
 Run `/align` to perform an AI-powered review of your branch's changes vs main:

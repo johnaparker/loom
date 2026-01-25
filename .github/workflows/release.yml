@@ -87,12 +87,33 @@ jobs:
           git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
           git push origin "v${{ inputs.version }}"
 
+      - name: Generate release notes from commits
+        id: notes
+        run: |
+          # Find the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, including all commits"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "Generating notes from $PREV_TAG to v${{ inputs.version }}"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
+          fi
+
+          # Write to file to preserve newlines
+          echo "## What's Changed" > notes.md
+          echo "" >> notes.md
+          echo "$COMMITS" >> notes.md
+          echo "" >> notes.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...v${{ inputs.version }}" >> notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
           name: v${{ inputs.version }}
-          generate_release_notes: true
+          body_path: notes.md
           files: |
             install.sh
             artifacts/grove-aarch64-apple-darwin/*
