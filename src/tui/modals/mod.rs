@@ -2,11 +2,13 @@ mod action_result;
 mod delete_confirm;
 pub mod merge_confirm;
 mod new_worktree;
+mod prune_confirm;
 
 pub use action_result::ActionResultModal;
 pub use delete_confirm::DeleteConfirmModal;
 pub use merge_confirm::{MergeConfirmModal, MergeConflictInfo};
 pub use new_worktree::NewWorktreeModal;
+pub use prune_confirm::{PruneConfirmModal, PruneWorktreeInfo};
 
 use crossterm::event::KeyEvent;
 use ratatui::prelude::*;
@@ -31,6 +33,8 @@ pub enum ModalAction {
     ShowResult { success: bool, message: String },
     /// Dismiss result and return to normal mode
     DismissResult,
+    /// Prune all merged worktrees
+    Prune,
 }
 
 /// Trait for modal dialogs

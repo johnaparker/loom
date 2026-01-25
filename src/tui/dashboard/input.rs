@@ -16,6 +16,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::tui::modals::{
     ActionResultModal, DeleteConfirmModal, MergeConfirmModal, Modal, ModalAction, NewWorktreeModal,
+    PruneConfirmModal,
 };
 
 use super::Dashboard;
@@ -66,6 +67,15 @@ impl Dashboard {
                 }
             }
             DashboardMode::ActionResult(modal) => {
+                if let Some(action) =
+                    modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers))
+                {
+                    self.handle_modal_action(action)
+                } else {
+                    None
+                }
+            }
+            DashboardMode::ConfirmPrune(modal) => {
                 if let Some(action) =
                     modal.handle_key(crossterm::event::KeyEvent::new(code, modifiers))
                 {
@@ -136,6 +146,16 @@ impl Dashboard {
             ModalAction::DismissResult => {
                 self.mode = DashboardMode::Normal;
                 Some(DashboardResult::Refresh)
+            }
+            ModalAction::Prune => {
+                if let DashboardMode::ConfirmPrune(modal) = &self.mode {
+                    let worktrees = modal.worktrees().to_vec();
+                    self.mode = DashboardMode::Normal;
+                    Some(DashboardResult::Prune { worktrees })
+                } else {
+                    self.mode = DashboardMode::Normal;
+                    None
+                }
             }
         }
     }
@@ -262,6 +282,25 @@ impl Dashboard {
                 {
                     return Some(DashboardResult::GitHub { worktree });
                 }
+                None
+            }
+            KeyCode::Char('P') => {
+                // Prune - delete worktrees with merged PRs (pull workflow only)
+                if !self.is_pull_workflow() {
+                    self.status_message =
+                        Some((false, "Prune not available in push workflow".to_string()));
+                    return None;
+                }
+                if !self.config().github.enabled {
+                    self.status_message = Some((false, "GitHub integration disabled".to_string()));
+                    return None;
+                }
+                let merged = self.find_merged_worktrees();
+                if merged.is_empty() {
+                    self.status_message = Some((true, "No worktrees with merged PRs".to_string()));
+                    return None;
+                }
+                self.mode = DashboardMode::ConfirmPrune(PruneConfirmModal::new(merged));
                 None
             }
             _ => None,

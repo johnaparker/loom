@@ -83,6 +83,9 @@ pub enum GwtError {
         category: String,
         valid: Vec<String>,
     },
+
+    #[error("Prune is not available in push workflow")]
+    PruneNotAllowedInPushWorkflow,
 }
 
 impl GwtError {
@@ -168,6 +171,9 @@ impl GwtError {
             }
             GwtError::InvalidCategory { valid, .. } => {
                 Some(format!("Valid categories: {}", valid.join(", ")))
+            }
+            GwtError::PruneNotAllowedInPushWorkflow => {
+                Some("Prune relies on GitHub PR status. Switch to pull workflow or use 'gwt remove' to manually remove worktrees.".to_string())
             }
         }
     }

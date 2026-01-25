@@ -108,4 +108,16 @@ pub enum Commands {
         /// Event type: user-prompt, stop, notification, session-start, session-end, tool-use, tool-result
         event: String,
     },
+
+    /// Prune worktrees with merged PRs (pull workflow only)
+    #[command(visible_alias = "p")]
+    Prune {
+        /// Force removal even if there are uncommitted changes
+        #[arg(short, long)]
+        force: bool,
+
+        /// Preview what would happen without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
 }

@@ -78,6 +78,9 @@ impl Dashboard {
             DashboardMode::ActionResult(modal) => {
                 render_modal_overlay(modal, f.area(), f.buffer_mut());
             }
+            DashboardMode::ConfirmPrune(modal) => {
+                render_modal_overlay(modal, f.area(), f.buffer_mut());
+            }
             _ => {}
         }
     }
@@ -1577,6 +1580,14 @@ impl Dashboard {
                     spans.extend(vec![
                         Span::styled("g", Style::default().fg(Color::Cyan)),
                         Span::styled(": github  ", Style::default().fg(Color::DarkGray)),
+                    ]);
+                }
+
+                // Show P: prune only in pull workflow with GitHub enabled
+                if self.is_pull_workflow() && self.config.github.enabled {
+                    spans.extend(vec![
+                        Span::styled("P", Style::default().fg(Color::Cyan)),
+                        Span::styled(": prune  ", Style::default().fg(Color::DarkGray)),
                     ]);
                 }
 

@@ -781,6 +781,11 @@ impl Dashboard {
         &self.config
     }
 
+    /// Get all worktrees (for prune operation)
+    pub fn worktrees(&self) -> &[WorktreeStats] {
+        &self.worktrees
+    }
+
     /// Get enabled panels in clockwise order from worktrees.
     /// Order: Worktrees → Claude → Linear → GitHub → Commits
     /// Worktrees and Commits are always shown; others depend on config.
@@ -989,5 +994,34 @@ impl Dashboard {
         // Reset selection and scroll
         self.worktree_scroll_offset = 0;
         self.selected = 0;
+    }
+
+    /// Find worktrees that have merged PRs (for prune operation).
+    /// Uses cached GitHub PR states to avoid API calls.
+    pub(crate) fn find_merged_worktrees(&self) -> Vec<crate::tui::modals::PruneWorktreeInfo> {
+        let mut merged = Vec::new();
+
+        for wt in &self.worktrees {
+            // Skip main worktree
+            if wt.info.is_main {
+                continue;
+            }
+
+            // Check cached PR state
+            if let Some(CachedPRState::Found(pr)) = self.github_prs.get(&wt.info.name)
+                && pr.state == "MERGED"
+            {
+                merged.push(crate::tui::modals::PruneWorktreeInfo {
+                    name: wt.info.name.clone(),
+                    pr_number: pr.number,
+                    pr_title: pr.title.clone(),
+                    has_uncommitted: wt.has_uncommitted_changes(),
+                    uncommitted_added: wt.uncommitted_added,
+                    uncommitted_removed: wt.uncommitted_removed,
+                });
+            }
+        }
+
+        merged
     }
 }

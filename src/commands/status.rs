@@ -357,6 +357,46 @@ fn run_dashboard_loop(
             DashboardResult::Refresh => {
                 dashboard.trigger_stats_refresh();
             }
+            DashboardResult::Prune { worktrees } => {
+                let mut deleted = 0;
+                let total = worktrees.len();
+
+                for wt_info in &worktrees {
+                    // Find the worktree stats by name
+                    let wt_stats = dashboard
+                        .worktrees()
+                        .iter()
+                        .find(|w| w.info.name == wt_info.name);
+
+                    if let Some(wt) = wt_stats {
+                        let use_force = wt_info.has_uncommitted;
+                        let result = operations::delete_worktree(
+                            manager,
+                            cache_dir,
+                            project_name,
+                            &wt.info.name,
+                            &wt.info.path,
+                            wt.info.branch.as_deref(),
+                            true, // Always delete branch for merged PRs
+                            use_force,
+                        );
+
+                        if result.is_ok() {
+                            deleted += 1;
+                        }
+                    }
+                }
+
+                if deleted == total {
+                    dashboard.show_result(true, format!("Pruned {} worktree(s)", deleted));
+                } else {
+                    dashboard.show_result(
+                        false,
+                        format!("Pruned {} of {} worktree(s)", deleted, total),
+                    );
+                }
+                dashboard.trigger_stats_refresh();
+            }
         }
     }
 }
