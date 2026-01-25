@@ -3,6 +3,7 @@ name = "loom-tui"
 version = "0.1.0"
 edition = "2024"
 description = "Git worktree manager with tmux integration"
+license = "MIT"
 
 [[bin]]
 name = "loom"
