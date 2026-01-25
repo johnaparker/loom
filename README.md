@@ -20,16 +20,9 @@ The dashboard is the primary interface. CLI commands exist for quick one-off ope
 
 ## Setup
 
-Grove requires:
+Grove minimally requires:
 - git
 - tmux
-
-With these, you can create and manage worktrees, switching between dedicated tmux sessions for each.
-
-Optional integrations:
-- **Claude Code**: Track live agent status across all worktrees via hooks
-- **Linear**: Display issue details and auto-assign context to new Claude sessions
-- **GitHub**: Show PR status, checks, and review comments
 
 ### Installation
 
