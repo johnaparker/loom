@@ -1,5 +1,6 @@
 [![CI](https://github.com/johnaparker/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/johnaparker/loom/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/johnaparker/loom?v=1)](https://github.com/johnaparker/loom/releases/latest)
+[![Crates.io](https://img.shields.io/crates/v/loom-tui.svg)](https://crates.io/crates/loom-tui)
 
 # Loom
 
@@ -24,6 +25,8 @@ Loom minimally requires:
 
 ### Installation
 
+**Via install script:**
+
 ```bash
 curl -fsSL https://github.com/johnaparker/loom/releases/latest/download/install.sh | bash
 ```
@@ -34,10 +37,10 @@ This installs loom to `~/.local/bin`. Add it to your PATH if not already:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### Building from source
+**Via cargo:**
 
 ```bash
-cargo install --path .
+cargo install loom-tui
 ```
 
 ### Claude Code Integration
