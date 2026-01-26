@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Loom installer script
-# Usage: curl -fsSL https://github.com/johnaparker/loom-tui/releases/latest/download/install.sh | bash
+# Usage: curl -fsSL https://github.com/johnaparker/loom/releases/latest/download/install.sh | bash
 
 VERSION="0.1.0"  # Updated by release workflow
 INSTALL_DIR="${LOOM_INSTALL_DIR:-$HOME/.local/bin}"
-REPO="johnaparker/loom-tui"
+REPO="johnaparker/loom"
 
 # Detect platform
 detect_platform() {
