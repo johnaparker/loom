@@ -4,9 +4,6 @@
 
 # Loom
 
-Loom is a TUI control center for managing git worktrees in tmux with Claude Code integration.
-Monitor multiple Claude agents, optionally track Linear issues and GitHub PRs, all from a single dashboard.
-
 ![loom demo](assets/loom.gif)
 
 If you work on multiple features simultaneously using git worktrees, `loom` gives you:
