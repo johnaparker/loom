@@ -339,10 +339,10 @@ For background tasks that run periodically (e.g., git fetch, API polling):
 ### Linear project management
 
 When creating Linear issues for this project, use:
-- **Team**: `john.parker.personal`
-- **Project**: `Git Worktree Tool`
+- **Team**: `<your-linear-team>`
+- **Project**: `<your-project-name>`
 
-The project name can be used directly - no need to look up UUIDs.
+Configure your team and project names - no need to look up UUIDs.
 
 ### Releasing a new version
 
