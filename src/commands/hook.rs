@@ -25,11 +25,16 @@ pub fn hook(event: &str) -> Result<()> {
     let cwd = json["cwd"].as_str().unwrap_or(".");
     let session_id = json["session_id"].as_str().unwrap_or("unknown");
 
+    // Determine project and worktree from cwd.
+    // The hook only does useful work when invoked from within a git repo, since
+    // loom's entire domain is git worktrees. Outside a git repo there is nothing
+    // to track, so silently no-op rather than surfacing an error in Claude Code.
+    let Some((project, worktree)) = resolve_project_worktree(cwd)? else {
+        return Ok(());
+    };
+
     // Get cache directory from config
     let cache_dir = get_cache_dir()?;
-
-    // Determine project and worktree from cwd
-    let (project, worktree) = resolve_project_worktree(cwd)?;
 
     // Handle the event based on type
     match event {
@@ -493,17 +498,25 @@ fn truncate_str(s: &str, max_len: usize) -> String {
     }
 }
 
-/// Resolve project name and worktree name from the current working directory
-fn resolve_project_worktree(cwd: &str) -> Result<(String, String)> {
+/// Resolve project name and worktree name from the current working directory.
+///
+/// Returns `Ok(None)` when `cwd` is not inside a git repository — the hook
+/// treats that as a no-op rather than an error.
+fn resolve_project_worktree(cwd: &str) -> Result<Option<(String, String)>> {
     let path = Path::new(cwd);
 
-    // Try to find the git repository root
-    let repo = git2::Repository::discover(path).context("Not in a git repository")?;
+    // Try to find the git repository root. Not being in a git repo is expected
+    // (e.g. Claude Code launched from $HOME), so return None instead of an error.
+    let repo = match git2::Repository::discover(path) {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
 
-    // Get the worktree root (commondir for worktrees, workdir for main)
-    let worktree_root = repo
-        .workdir()
-        .context("Cannot determine worktree directory")?;
+    // Get the worktree root (commondir for worktrees, workdir for main).
+    // A bare repo has no workdir; treat it the same as "not a worktree".
+    let Some(worktree_root) = repo.workdir() else {
+        return Ok(None);
+    };
 
     // Check if this is a worktree (path contains "worktrees")
     let is_worktree = repo.path().to_string_lossy().contains("worktrees");
@@ -546,5 +559,5 @@ fn resolve_project_worktree(cwd: &str) -> Result<(String, String)> {
         "unknown".to_string()
     };
 
-    Ok((project_name, worktree_name))
+    Ok(Some((project_name, worktree_name)))
 }
